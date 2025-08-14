@@ -144,6 +144,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 			id: string;
 			title: string;
 			author: string;
+			admin: string | null;
 			ccliNumber: number;
 			copyright: string;
 			notes: string;
@@ -155,6 +156,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 			id: song.id,
 			title: song.attributes.title,
 			author: song.attributes.author,
+			admin: song.attributes.admin,
 			ccliNumber: song.attributes.ccli_number,
 			copyright: song.attributes.copyright,
 			notes: song.attributes.notes,

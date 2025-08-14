@@ -6,6 +6,7 @@ interface SongCopyrightProps {
     title: string;
     author: string;
     copyright: string;
+    admin?: string | null;
     showContainer?: boolean;
     showCopyButton?: boolean;
 }
@@ -14,6 +15,7 @@ export function formatCopyrightText(song: {
     title: string;
     author: string;
     copyright: string;
+    admin?: string | null;
 }): string {
     // First split by comma to check if there are three authors
     const commaAuthors = song.author.split(",").map((a) => a.trim());
@@ -43,8 +45,18 @@ export function formatCopyrightText(song: {
     if (!copyrightLine.endsWith(".")) {
         copyrightLine += ".";
     }
+
     if (copyrightLine.toLowerCase() !== "public domain.") {
         copyrightLine = `© ${copyrightLine}`;
+    }
+
+    // Add admin information if available
+    if (song.admin && song.admin.trim()) {
+        copyrightLine += ` Admin. by ${song.admin}`;
+    }
+
+    if (!copyrightLine.endsWith(".")) {
+        copyrightLine += ".";
     }
 
     return `"${song.title}" ${authorLine}.\n${copyrightLine}\nUsed by permission. CCLI Streaming License 1564484.`;
@@ -54,11 +66,17 @@ export default function SongCopyright({
     title,
     author,
     copyright,
+    admin,
     showContainer = true,
     showCopyButton = false,
 }: SongCopyrightProps): React.ReactElement {
     const [showCopyTooltip, setShowCopyTooltip] = useState(false);
-    const copyrightText = formatCopyrightText({ title, author, copyright });
+    const copyrightText = formatCopyrightText({
+        title,
+        author,
+        copyright,
+        admin,
+    });
 
     const handleCopy = () => {
         navigator.clipboard.writeText(copyrightText).then(
@@ -92,7 +110,7 @@ export default function SongCopyright({
                     <div className="relative flex-shrink-0">
                         <button
                             onClick={handleCopy}
-                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100 transition-colors bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100 transition-colors bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
                         >
                             <svg
                                 xmlns="http://www.w3.org/2000/svg"

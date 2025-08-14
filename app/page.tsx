@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import ServiceTypeFetcher from "./components/ServiceTypeFetcher";
 import PlansTable from "./components/PlansTable";
 import PlanItems from "./components/PlanItems";
-import SongDetails from "./components/SongDetails";
+import SongDetails, { SongDetailsType } from "./components/SongDetails";
 
-type View = "service-selection" | "plans-table" | "plan-items" | "item-details";
+type View = "plans-table" | "plan-items" | "item-details";
 
 interface Plan {
     id: string;
@@ -18,6 +17,10 @@ interface Plan {
     sortDate: string;
     createdAt: string;
     updatedAt: string;
+    serviceType: {
+        id: string;
+        name: string;
+    };
 }
 
 interface PlanItem {
@@ -33,62 +36,26 @@ interface PlanItem {
     updatedAt: string;
 }
 
-interface SongDetails {
-    id: string;
-    title: string;
-    author: string;
-    ccliNumber: number;
-    copyright: string;
-    notes: string;
-    themes: string;
-    createdAt: string;
-    updatedAt: string;
-    planningCenterUrl: string;
-}
-
 export default function Home() {
-    const [currentView, setCurrentView] = useState<View>("service-selection");
-    const [selectedServiceType, setSelectedServiceType] = useState<
-        string | null
-    >(null);
-    const [selectedServiceTypeId, setSelectedServiceTypeId] = useState<
-        string | null
-    >(null);
+    const [currentView, setCurrentView] = useState<View>("plans-table");
     const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
     const [selectedItem, setSelectedItem] = useState<PlanItem | null>(null);
     const [selectedSongDetails, setSelectedSongDetails] = useState<
-        SongDetails | undefined
+        SongDetailsType | undefined
     >(undefined);
 
-    const handleServiceSelect = (
-        serviceType: string,
-        serviceTypeId: string
-    ): void => {
-        setSelectedServiceType(serviceType);
-        setSelectedServiceTypeId(serviceTypeId);
-        setCurrentView("plans-table");
-    };
-
-    const handlePlanSelect = (plan: Plan): void => {
+    const handlePlanSelect = (plan: Plan, serviceTypeId: string): void => {
         setSelectedPlan(plan);
         setCurrentView("plan-items");
     };
 
     const handleItemSelect = (
         item: PlanItem,
-        songDetails?: SongDetails
+        songDetails?: SongDetailsType
     ): void => {
         setSelectedItem(item);
         setSelectedSongDetails(songDetails);
         setCurrentView("item-details");
-    };
-
-    const goBackToServiceSelection = (): void => {
-        setCurrentView("service-selection");
-        setSelectedServiceType(null);
-        setSelectedServiceTypeId(null);
-        setSelectedPlan(null);
-        setSelectedItem(null);
     };
 
     const goBackToPlansTable = (): void => {
@@ -100,30 +67,22 @@ export default function Home() {
     const goBackToPlanItems = (): void => {
         setCurrentView("plan-items");
         setSelectedItem(null);
+        setSelectedSongDetails(undefined);
     };
 
     const renderCurrentView = (): React.ReactElement => {
         switch (currentView) {
-            case "service-selection":
-                return (
-                    <ServiceTypeFetcher onPlanSelect={handleServiceSelect} />
-                );
-
             case "plans-table":
-                return (
-                    <PlansTable
-                        serviceType={selectedServiceType!}
-                        serviceTypeId={selectedServiceTypeId!}
-                        onPlanSelect={handlePlanSelect}
-                        onBack={goBackToServiceSelection}
-                    />
-                );
+                return <PlansTable onPlanSelect={handlePlanSelect} />;
 
             case "plan-items":
+                if (!selectedPlan)
+                    return <PlansTable onPlanSelect={handlePlanSelect} />;
                 return (
                     <PlanItems
-                        plan={selectedPlan!}
-                        serviceTypeId={selectedServiceTypeId!}
+                        plan={selectedPlan}
+                        serviceTypeId={selectedPlan.serviceType.id}
+                        serviceTypeName={selectedPlan.serviceType.name}
                         onBack={goBackToPlansTable}
                         onItemSelect={handleItemSelect}
                     />
@@ -139,9 +98,7 @@ export default function Home() {
                 );
 
             default:
-                return (
-                    <ServiceTypeFetcher onPlanSelect={handleServiceSelect} />
-                );
+                return <PlansTable onPlanSelect={handlePlanSelect} />;
         }
     };
 
@@ -149,19 +106,18 @@ export default function Home() {
         <div className="font-sans min-h-screen flex flex-col">
             <main className="flex-1 flex flex-col items-center p-8">
                 {/* Always show the title */}
-                <div className="text-center mb-12 w-full">
-                    <h1 className="text-4xl sm:text-5xl font-bold mb-4">
+                <div className="text-center mb-12 w-full cursor-pointer">
+                    <h1
+                        className="text-4xl sm:text-5xl font-bold mb-4"
+                        onClick={goBackToPlansTable}
+                    >
                         Service Integrator
                     </h1>
-                    {/* Only show subtitle on first step */}
-                    {currentView === "service-selection" && (
-                        <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-                            A web app that integrates with Planning
-                            Center&apos;s public Services API to aggregate data
-                            and generate song copyright data in the format you
-                            want.
-                        </p>
-                    )}
+                    <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+                        Integrates with Planning Center&apos;s public Services
+                        API to aggregate data and generate copyright information
+                        for songs
+                    </p>
                 </div>
 
                 {/* Content area with consistent positioning */}
