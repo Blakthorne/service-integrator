@@ -9,7 +9,7 @@ interface ServiceTypeAttributes {
 	updated_at: string;
 }
 
-interface ServiceTypeData {
+export interface ServiceTypeData {
 	type: string;
 	id: string;
 	attributes: ServiceTypeAttributes;

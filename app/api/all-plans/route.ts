@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { ServiceTypeData } from "../service-types/route";
+import { PlanData } from "../plans/route";
 
 interface Plan {
     id: string;
@@ -16,7 +18,7 @@ interface Plan {
     };
 }
 
-export async function GET(request: Request) {
+export async function GET() {
     try {
         // Get credentials from environment variables
 		const planningCenterId: string | undefined = process.env.PLANNING_CENTER_ID;
@@ -51,7 +53,7 @@ export async function GET(request: Request) {
         const serviceTypes = serviceTypesData.data;
 
         // Fetch plans for each service type in parallel
-        const plansPromises = serviceTypes.map(async (serviceType: any) => {
+        const plansPromises = serviceTypes.map(async (serviceType: ServiceTypeData) => {
             const plansResponse = await fetch(
                 `https://api.planningcenteronline.com/services/v2/service_types/${serviceType.id}/plans?order=-sort_date&per_page=500`,
                 {
@@ -70,7 +72,7 @@ export async function GET(request: Request) {
             }
 
             const plansData = await plansResponse.json();
-            return plansData.data.map((plan: any) => ({
+            return plansData.data.map((plan: PlanData) => ({
                 id: plan.id,
                 dates: plan.attributes.dates,
                 shortDates: plan.attributes.short_dates,

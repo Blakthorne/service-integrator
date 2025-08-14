@@ -28,10 +28,11 @@ interface PlanAttributes {
 	updated_at: string;
 }
 
-interface PlanData {
+export interface PlanData {
 	type: string;
 	id: string;
 	attributes: PlanAttributes;
+	links: Record<string, unknown>;
 }
 
 interface PlansResponse {

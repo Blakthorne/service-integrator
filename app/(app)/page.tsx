@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import PlansTable from "./components/PlansTable";
-import PlanItems from "./components/PlanItems";
-import SongDetails, { SongDetailsType } from "./components/SongDetails";
+import PlansTable from "../components/PlansTable";
+import PlanItems from "../components/PlanItems";
+import SongDetails, { SongDetailsType } from "../components/SongDetails";
 
 type View = "plans-table" | "plan-items" | "item-details";
 
@@ -44,7 +44,7 @@ export default function Home() {
         SongDetailsType | undefined
     >(undefined);
 
-    const handlePlanSelect = (plan: Plan, serviceTypeId: string): void => {
+    const handlePlanSelect = (plan: Plan): void => {
         setSelectedPlan(plan);
         setCurrentView("plan-items");
     };
@@ -104,7 +104,7 @@ export default function Home() {
 
     return (
         <div className="font-sans min-h-screen flex flex-col">
-            <main className="flex-1 flex flex-col items-center p-8">
+            <main className="flex-1 flex flex-col items-center">
                 {/* Always show the title */}
                 <div className="text-center mb-12 w-full cursor-pointer">
                     <h1
