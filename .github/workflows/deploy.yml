@@ -31,7 +31,7 @@ jobs:
                   username: ${{ secrets.USERNAME }}
                   key: ${{ secrets.SSH_PRIVATE_KEY }}
                   script: |
-                      cd /service-integrator   # Set your app location here
+                      cd ~/service-integrator   # Set your app location here
                       git pull origin main
                       npm ci
                       npm run build
