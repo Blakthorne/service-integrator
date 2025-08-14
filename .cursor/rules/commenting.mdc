@@ -1,0 +1,8 @@
+---
+description: Commenting style guidelines
+globs:
+alwaysApply: true
+---
+
+-   Create comments on their own lines above the code instead of appending at the end of code lines
+-   Start each comment with a capital letter like it's a sentence

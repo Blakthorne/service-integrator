@@ -1,0 +1,7 @@
+---
+description: Tab rules
+globs:
+alwaysApply: true
+---
+
+-   Always use a single tab character for indentation
