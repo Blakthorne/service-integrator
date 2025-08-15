@@ -24,15 +24,20 @@ jobs:
             - name: Build app
               run: npm run build
 
-            - name: Deploy to Lightsail via SSH
-              uses: appleboy/ssh-action@master
+            - name: Deploy to Lightsail
+              uses: easingthemes/ssh-deploy@main
               with:
-                  host: ${{ secrets.HOST }}
-                  username: ${{ secrets.USERNAME }}
-                  key: ${{ secrets.SSH_PRIVATE_KEY }}
-                  script: |
-                      cd ~/service-integrator   # Set your app location here
-                      git pull origin main
+                  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+                  REMOTE_HOST: ${{ secrets.HOST }}
+                  REMOTE_USER: ${{ secrets.USERNAME }}
+                  TARGET: ~/service-integrator
+                  EXCLUDE: "node_modules/, .git/, .env.local"
+                  SCRIPT_BEFORE: |
+                      whoami
+                      echo "Starting deployment..."
+                  SCRIPT_AFTER: |
+                      cd ~/service-integrator
+                      echo "Installing dependencies..."
                       npm ci
-                      npm run build
-                      pm2 reload ecosystem.config.js  # Or your pm2 process/restart command
+                      echo "Starting/restarting PM2..."
+                      pm2 restart service-integrator || pm2 start npm --name "service-integrator" -- start
