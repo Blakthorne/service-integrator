@@ -35,4 +35,4 @@ jobs:
                       git pull origin main
                       npm ci
                       npm run build
-                      pm2 reload ecosystem.config.js  # Or your pm2 process/restart command
+                      pm2 restart service-integrator
