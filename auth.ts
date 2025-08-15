@@ -3,10 +3,9 @@ import Google from "next-auth/providers/google"
 
 // Whitelist of allowed email addresses
 const ALLOWED_EMAILS = [
-    // Add your whitelisted email addresses here
     process.env.ALLOWED_EMAIL_1,
     process.env.ALLOWED_EMAIL_2,
-    // Add more as needed
+    process.env.ALLOWED_EMAIL_3,
 ].filter(Boolean) as string[]
 
 export const { 
@@ -17,8 +16,8 @@ export const {
 } = NextAuth({
     providers: [
         Google({
-            clientId: process.env.GOOGLE_CLIENT_ID!,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+            clientId: process.env.AUTH_GOOGLE_ID!,
+            clientSecret: process.env.AUTH_GOOGLE_SECRET!,
         })
     ],
     callbacks: {
