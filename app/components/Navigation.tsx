@@ -17,7 +17,7 @@ export default function Navigation() {
                         <form
                             action={async () => {
                                 "use server";
-                                await signOut({ redirectTo: "/" });
+                                await signOut();
                             }}
                         >
                             <button
