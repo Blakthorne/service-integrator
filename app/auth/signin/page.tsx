@@ -28,7 +28,8 @@ export default async function SignIn() {
                     <div className="space-y-6">
                         <div>
                             <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-6">
-                                Sign in with your Google account to continue
+                                Sign in with an authorized Google account to
+                                continue
                             </p>
                             <form
                                 className="space-y-3"

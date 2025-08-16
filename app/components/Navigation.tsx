@@ -1,6 +1,4 @@
-"use client";
-
-import { signOut } from "next-auth/react";
+import { signOut } from "@/auth";
 import React from "react";
 
 export default function Navigation() {
@@ -16,9 +14,13 @@ export default function Navigation() {
                         </div>
                     </div>
                     <div className="flex items-center">
-                        <div>
+                        <form
+                            action={async () => {
+                                "use server";
+                                await signOut();
+                            }}
+                        >
                             <button
-                                onClick={() => signOut({ callbackUrl: "/" })}
                                 type="submit"
                                 className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer whitespace-pre"
                             >
@@ -38,7 +40,7 @@ export default function Navigation() {
                                 </svg>
                                 Sign Out
                             </button>
-                        </div>
+                        </form>
                     </div>
                 </div>
             </div>
