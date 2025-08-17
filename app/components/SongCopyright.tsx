@@ -41,7 +41,7 @@ export function formatCopyrightText(song: {
     }
 
     // Format copyright line with conditional © symbol
-    let copyrightLine = song.copyright.trim();
+    let copyrightLine = song.copyright && song.copyright.trim();
     if (!copyrightLine.endsWith(".")) {
         copyrightLine += ".";
     }
