@@ -10,7 +10,7 @@ export default async function SignIn() {
     }
 
     return (
-        <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900">
+        <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900 mx-2">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="text-center">
                     <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
@@ -24,7 +24,7 @@ export default async function SignIn() {
             </div>
 
             <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-                <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow rounded-lg sm:px-10 mx-4">
+                <div className="bg-white dark:bg-gray-800 py-8 px-4 shadow rounded-lg sm:px-10">
                     <div className="space-y-6">
                         <div>
                             <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-6">

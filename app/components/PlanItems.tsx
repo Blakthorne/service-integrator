@@ -205,7 +205,10 @@ export default function PlanItems({
                             </span>
                         </div>
                         <a
-                            href={plan.planningCenterUrl}
+                            href={
+                                "https://services.planningcenteronline.com/plans/" +
+                                plan.id
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-full px-4 py-2 bg-gray-500 text-white text-center rounded-lg hover:bg-gray-600 transition-colors"
