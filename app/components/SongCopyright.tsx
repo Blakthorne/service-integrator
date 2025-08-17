@@ -42,21 +42,26 @@ export function formatCopyrightText(song: {
 
     // Format copyright line with conditional © symbol
     let copyrightLine = song.copyright && song.copyright.trim();
-    if (!copyrightLine.endsWith(".")) {
-        copyrightLine += ".";
-    }
 
-    if (copyrightLine.toLowerCase() !== "public domain.") {
-        copyrightLine = `© ${copyrightLine}`;
-    }
+    if (copyrightLine == null || copyrightLine === undefined) {
+        copyrightLine = "Public Domain.";
+    } else {
+        if (!copyrightLine.endsWith(".")) {
+            copyrightLine += ".";
+        }
 
-    // Add admin information if available
-    if (song.admin && song.admin.trim()) {
-        copyrightLine += ` Admin. by ${song.admin}`;
-    }
+        if (copyrightLine.toLowerCase() !== "public domain.") {
+            copyrightLine = `© ${copyrightLine}`;
+        }
 
-    if (!copyrightLine.endsWith(".")) {
-        copyrightLine += ".";
+        // Add admin information if available
+        if (song.admin && song.admin.trim()) {
+            copyrightLine += ` Admin. by ${song.admin}`;
+        }
+
+        if (!copyrightLine.endsWith(".")) {
+            copyrightLine += ".";
+        }
     }
 
     return `"${song.title}" ${authorLine}.\n${copyrightLine}\nUsed by permission. CCLI Streaming License 1564484.`;
