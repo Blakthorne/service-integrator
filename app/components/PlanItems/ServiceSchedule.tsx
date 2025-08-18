@@ -57,7 +57,7 @@ export default function ServiceSchedule({
                 );
                 setItems(updatedItems);
             },
-            [item.id, setItems]
+            [item.id]
         );
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -217,7 +217,7 @@ export default function ServiceSchedule({
                                     );
                                     if (!selectedVersion) return item.title;
 
-                                    let parts: string = [
+                                    const parts: string = [
                                         selectedVersion.rejoice_hymns_number !==
                                         "-1"
                                             ? `R-${selectedVersion.rejoice_hymns_number}`
