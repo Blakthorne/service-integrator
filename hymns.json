@@ -1,0 +1,5588 @@
+[
+    {
+        "song_title": "A Charge to Keep I Have",
+        "tune_name": "BOYLSTON",
+        "great_hymns_of_the_faith": 317,
+        "rejoice_hymns": 396
+    },
+    {
+        "song_title": "A Child of the King",
+        "tune_name": "BINGHAMTON",
+        "great_hymns_of_the_faith": 279,
+        "rejoice_hymns": 186
+    },
+    {
+        "song_title": "A Christian Home",
+        "tune_name": "FINLANDIA",
+        "great_hymns_of_the_faith": 525,
+        "rejoice_hymns": 634
+    },
+    {
+        "song_title": "A Flag to Follow",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 391,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "A Glorious Church",
+        "tune_name": "A GLORIOUS CHURCH",
+        "great_hymns_of_the_faith": 184,
+        "rejoice_hymns": 576
+    },
+    {
+        "song_title": "A Mighty Fortress Is Our God",
+        "tune_name": "EIN' FESTE BURG",
+        "great_hymns_of_the_faith": 36,
+        "rejoice_hymns": 172
+    },
+    {
+        "song_title": "A New Name in Glory",
+        "tune_name": "A NEW NAME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 623
+    },
+    {
+        "song_title": "A Passion for Souls",
+        "tune_name": "BIOLA",
+        "great_hymns_of_the_faith": 306,
+        "rejoice_hymns": 641
+    },
+    {
+        "song_title": "A Passion for Thee",
+        "tune_name": "JANZ TUNE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 412
+    },
+    {
+        "song_title": "A Shelter in the Time of Storm",
+        "tune_name": "SHELTER",
+        "great_hymns_of_the_faith": 263,
+        "rejoice_hymns": 171
+    },
+    {
+        "song_title": "A Student's Prayer",
+        "tune_name": "ELLESDIE",
+        "great_hymns_of_the_faith": 324,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "A Tender Heart",
+        "tune_name": "HAMBLEN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 424
+    },
+    {
+        "song_title": "Abba, Father",
+        "tune_name": "ABBA, FATHER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 42
+    },
+    {
+        "song_title": "Abba, Father",
+        "tune_name": "PRITCHARD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 7
+    },
+    {
+        "song_title": "Abide with Me",
+        "tune_name": "EVENTIDE",
+        "great_hymns_of_the_faith": 75,
+        "rejoice_hymns": 175
+    },
+    {
+        "song_title": "According to Thy Gracious Word",
+        "tune_name": "MANOAH",
+        "great_hymns_of_the_faith": 192,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Across the Lands",
+        "tune_name": "ACROSS THE LANDS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 15
+    },
+    {
+        "song_title": "After",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 501,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Alas! and Did My Savior Bleed?",
+        "tune_name": "AVON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 280
+    },
+    {
+        "song_title": "Alas! and Did My Savior Bleed?",
+        "tune_name": "MARTYRDOM",
+        "great_hymns_of_the_faith": 110,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "All Creatures of Our God and King",
+        "tune_name": "LASST UNS ERFREUEN",
+        "great_hymns_of_the_faith": 31,
+        "rejoice_hymns": 36
+    },
+    {
+        "song_title": "All for Jesus",
+        "tune_name": "CONSTANCY",
+        "great_hymns_of_the_faith": 386,
+        "rejoice_hymns": 417
+    },
+    {
+        "song_title": "All Glory to Jesus",
+        "tune_name": "RIDGEMOOR",
+        "great_hymns_of_the_faith": 47,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "All Glory, Laud, and Honor",
+        "tune_name": "ST. THEODULPH",
+        "great_hymns_of_the_faith": 108,
+        "rejoice_hymns": 17
+    },
+    {
+        "song_title": "All Hail King Jesus",
+        "tune_name": "KING JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 44
+    },
+    {
+        "song_title": "All Hail the Power",
+        "tune_name": "MILES LANE",
+        "great_hymns_of_the_faith": 43,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "All Hail the Power of Jesus' Name",
+        "tune_name": "CORONATION",
+        "great_hymns_of_the_faith": 42,
+        "rejoice_hymns": 46
+    },
+    {
+        "song_title": "All Hail the Power of Jesus' Name",
+        "tune_name": "DIADEM",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 45
+    },
+    {
+        "song_title": "All I Need",
+        "tune_name": "ALL I NEED",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 414
+    },
+    {
+        "song_title": "All People That on Earth Do Dwell",
+        "tune_name": "OLD HUNDREDTH",
+        "great_hymns_of_the_faith": 8,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "All That Thrills My Soul",
+        "tune_name": "HARRIS",
+        "great_hymns_of_the_faith": 463,
+        "rejoice_hymns": 525
+    },
+    {
+        "song_title": "All the Way",
+        "tune_name": "LINELLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 134
+    },
+    {
+        "song_title": "All the Way My Savior Leads Me",
+        "tune_name": "ALL THE WAY",
+        "great_hymns_of_the_faith": 296,
+        "rejoice_hymns": 136
+    },
+    {
+        "song_title": "All Things Come of Thee",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 537,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "All Things Work Out for Good",
+        "tune_name": "ORTONVILLE",
+        "great_hymns_of_the_faith": 267,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "All Your Anxiety",
+        "tune_name": "ALL YOUR ANXIETY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 162
+    },
+    {
+        "song_title": "Alleluia",
+        "tune_name": "ALLELUIA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 160
+    },
+    {
+        "song_title": "Alleluia! Alleluia!",
+        "tune_name": "HYMN TO JOY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 51
+    },
+    {
+        "song_title": "Almighty Father",
+        "tune_name": "ALMIGHTY FATHER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 61
+    },
+    {
+        "song_title": "Almighty Father, Hear Our Prayer",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 536,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Almighty, Unchangeable God",
+        "tune_name": "ALMIGHTY UNCHANGEABLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 3
+    },
+    {
+        "song_title": "Almost Persuaded",
+        "tune_name": "ALMOST PERSUADED",
+        "great_hymns_of_the_faith": 251,
+        "rejoice_hymns": 493
+    },
+    {
+        "song_title": "Always the Same",
+        "tune_name": "MURR",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 118
+    },
+    {
+        "song_title": "Am I a Soldier of the Cross?",
+        "tune_name": "ARLINGTON",
+        "great_hymns_of_the_faith": 414,
+        "rejoice_hymns": 664
+    },
+    {
+        "song_title": "Amazing Grace",
+        "tune_name": "NEW BRITAIN",
+        "great_hymns_of_the_faith": 236,
+        "rejoice_hymns": 130
+    },
+    {
+        "song_title": "America the Beautiful",
+        "tune_name": "MATERNA",
+        "great_hymns_of_the_faith": 531,
+        "rejoice_hymns": 699
+    },
+    {
+        "song_title": "America the Beautiful (Descant - last stanza only)",
+        "tune_name": "",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 700
+    },
+    {
+        "song_title": "Ancient of Days",
+        "tune_name": "ANCIENT OF DAYS",
+        "great_hymns_of_the_faith": 22,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "And Can It Be?",
+        "tune_name": "SAGINA",
+        "great_hymns_of_the_faith": 44,
+        "rejoice_hymns": 111
+    },
+    {
+        "song_title": "Angels We Have Heard on High",
+        "tune_name": "GLORIA",
+        "great_hymns_of_the_faith": 89,
+        "rejoice_hymns": 225
+    },
+    {
+        "song_title": "Angels, from the Realms of Glory",
+        "tune_name": "REGENT SQUARE",
+        "great_hymns_of_the_faith": 99,
+        "rejoice_hymns": 206
+    },
+    {
+        "song_title": "Another Year Is Dawning",
+        "tune_name": "AURELIA",
+        "great_hymns_of_the_faith": 520,
+        "rejoice_hymns": 238
+    },
+    {
+        "song_title": "Anywhere with Jesus",
+        "tune_name": "OLGA",
+        "great_hymns_of_the_faith": 422,
+        "rejoice_hymns": 415
+    },
+    {
+        "song_title": "Are Ye Able?",
+        "tune_name": "BEACON HILL",
+        "great_hymns_of_the_faith": 365,
+        "rejoice_hymns": 410
+    },
+    {
+        "song_title": "Are You Washed in the Blood?",
+        "tune_name": "WASHED IN THE BLOOD",
+        "great_hymns_of_the_faith": 208,
+        "rejoice_hymns": 297
+    },
+    {
+        "song_title": "Arise, My Soul, Arise",
+        "tune_name": "LENOX",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 666
+    },
+    {
+        "song_title": "Arise, My Soul, Arise!",
+        "tune_name": "TOWNER",
+        "great_hymns_of_the_faith": 223,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Around the Corner, Around the World",
+        "tune_name": "CRAWFORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 644
+    },
+    {
+        "song_title": "Art Thou Weary?",
+        "tune_name": "STEPHANOS (Baker)",
+        "great_hymns_of_the_faith": 239,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "As the Deer",
+        "tune_name": "AS THE DEER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 409
+    },
+    {
+        "song_title": "As with Gladness Men of Old",
+        "tune_name": "DIX",
+        "great_hymns_of_the_faith": 96,
+        "rejoice_hymns": 224
+    },
+    {
+        "song_title": "Ask Ye What Great Thing I Know",
+        "tune_name": "HENDON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 376
+    },
+    {
+        "song_title": "At Calvary",
+        "tune_name": "CALVARY",
+        "great_hymns_of_the_faith": 477,
+        "rejoice_hymns": 278
+    },
+    {
+        "song_title": "At the Cross",
+        "tune_name": "HUDSON",
+        "great_hymns_of_the_faith": 129,
+        "rejoice_hymns": 296
+    },
+    {
+        "song_title": "At the Name of Jesus",
+        "tune_name": "BERRY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 56
+    },
+    {
+        "song_title": "At the Name of Jesus",
+        "tune_name": "BLAKE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 55
+    },
+    {
+        "song_title": "Away in a Manger",
+        "tune_name": "CRADLE SONG",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 233
+    },
+    {
+        "song_title": "Away in a Manger",
+        "tune_name": "MUELLER",
+        "great_hymns_of_the_faith": 86,
+        "rejoice_hymns": 232
+    },
+    {
+        "song_title": "Battle Hymn of the Republic",
+        "tune_name": "BATTLE HYMN",
+        "great_hymns_of_the_faith": 530,
+        "rejoice_hymns": 701
+    },
+    {
+        "song_title": "Be an Example",
+        "tune_name": "ZICHTERMAN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 401
+    },
+    {
+        "song_title": "Be Still and Know",
+        "tune_name": "BE STILL AND KNOW",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 97
+    },
+    {
+        "song_title": "Be Still, My Soul",
+        "tune_name": "FINLANDIA",
+        "great_hymns_of_the_faith": 290,
+        "rejoice_hymns": 528
+    },
+    {
+        "song_title": "Be Strong in the Lord",
+        "tune_name": "STRENGTH",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 670
+    },
+    {
+        "song_title": "Be This My Joy Today",
+        "tune_name": "BRATTLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 535
+    },
+    {
+        "song_title": "Be Thou Exalted",
+        "tune_name": "BE THOU EXALTED",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 57
+    },
+    {
+        "song_title": "Be Thou My Vision",
+        "tune_name": "SLANE",
+        "great_hymns_of_the_faith": 334,
+        "rejoice_hymns": 143
+    },
+    {
+        "song_title": "Beautiful Hands",
+        "tune_name": "CHRISTIANE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 332
+    },
+    {
+        "song_title": "Because He Lives",
+        "tune_name": "RESURRECTION",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 387
+    },
+    {
+        "song_title": "Before the Throne of God Above",
+        "tune_name": "BEFORE THE THRONE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 599
+    },
+    {
+        "song_title": "Begin, My Tongue, Some Heavenly Theme",
+        "tune_name": "MANOAH",
+        "great_hymns_of_the_faith": 5,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Behold the Babe of Bethlehem",
+        "tune_name": "BETHLEHEM",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 193
+    },
+    {
+        "song_title": "Behold the Glories of the Lamb",
+        "tune_name": "CREDITON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 626
+    },
+    {
+        "song_title": "Behold, What Manner of Love",
+        "tune_name": "MANNER OF LOVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 107
+    },
+    {
+        "song_title": "Beneath the Cross of Jesus",
+        "tune_name": "BENEATH THE CROSS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 285
+    },
+    {
+        "song_title": "Beneath the Cross of Jesus",
+        "tune_name": "ST. CHRISTOPHER",
+        "great_hymns_of_the_faith": 309,
+        "rejoice_hymns": 284
+    },
+    {
+        "song_title": "Benediction",
+        "tune_name": "WITNESS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 569
+    },
+    {
+        "song_title": "Beulah Land",
+        "tune_name": "CARL",
+        "great_hymns_of_the_faith": 515,
+        "rejoice_hymns": 632
+    },
+    {
+        "song_title": "Beyond the Sunset",
+        "tune_name": "SUNSET",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 597
+    },
+    {
+        "song_title": "Bless the Lord",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 30,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Bless the Lord, O My Soul",
+        "tune_name": "JOY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 65
+    },
+    {
+        "song_title": "Blessed Assurance",
+        "tune_name": "ASSURANCE",
+        "great_hymns_of_the_faith": 255,
+        "rejoice_hymns": 381
+    },
+    {
+        "song_title": "Blessed Be the Fountain",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 196,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Blessed Be the Name",
+        "tune_name": "BLESSED NAME",
+        "great_hymns_of_the_faith": 32,
+        "rejoice_hymns": 38
+    },
+    {
+        "song_title": "Blessed Calvary",
+        "tune_name": "BLESSED CALVARY",
+        "great_hymns_of_the_faith": 121,
+        "rejoice_hymns": 320
+    },
+    {
+        "song_title": "Blessed Day of Rest and Cheer",
+        "tune_name": "SABBATSDAG",
+        "great_hymns_of_the_faith": 71,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Blessed Quietness",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 159,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Blessed Redeemer",
+        "tune_name": "REDEEMER",
+        "great_hymns_of_the_faith": 112,
+        "rejoice_hymns": 294
+    },
+    {
+        "song_title": "Blest Be the Tie That Binds",
+        "tune_name": "DENNIS",
+        "great_hymns_of_the_faith": 187,
+        "rejoice_hymns": 570
+    },
+    {
+        "song_title": "Born in a Manger",
+        "tune_name": "KLIEWER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 197
+    },
+    {
+        "song_title": "Born to Die",
+        "tune_name": "NELSON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 223
+    },
+    {
+        "song_title": "Bow the Knee",
+        "tune_name": "BEN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 13
+    },
+    {
+        "song_title": "Break Forth, O Beauteous Heavenly Light",
+        "tune_name": "ERMUNTRE DICH MEIN SCHWACHER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 213
+    },
+    {
+        "song_title": "Break Thou the Bread of Life",
+        "tune_name": "BREAD OF LIFE",
+        "great_hymns_of_the_faith": 176,
+        "rejoice_hymns": 334
+    },
+    {
+        "song_title": "Breathe on Me, Breath of God",
+        "tune_name": "TRENTHAM",
+        "great_hymns_of_the_faith": 164,
+        "rejoice_hymns": 522
+    },
+    {
+        "song_title": "Brethren, We Have Met to Worship",
+        "tune_name": "HOLY MANNA",
+        "great_hymns_of_the_faith": 15,
+        "rejoice_hymns": 577
+    },
+    {
+        "song_title": "Bring Them In",
+        "tune_name": "BRING THEM IN",
+        "great_hymns_of_the_faith": 436,
+        "rejoice_hymns": 642
+    },
+    {
+        "song_title": "Bringing In the Sheaves",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 420,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Burdens Are Lifted at Calvary",
+        "tune_name": "BURDENS LIFTED",
+        "great_hymns_of_the_faith": 218,
+        "rejoice_hymns": 305
+    },
+    {
+        "song_title": "By the Gentle Waters",
+        "tune_name": "GENTLE WATERS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 170
+    },
+    {
+        "song_title": "Calvary Covers It All",
+        "tune_name": "CALVARY COVERS IT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 295
+    },
+    {
+        "song_title": "Calvary's Blood",
+        "tune_name": "PILGRIM",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 281
+    },
+    {
+        "song_title": "Channels Only",
+        "tune_name": "CHANNELS",
+        "great_hymns_of_the_faith": 160,
+        "rejoice_hymns": 521
+    },
+    {
+        "song_title": "Children of the Heavenly Father",
+        "tune_name": "TRYGGARE KAN INGEN VARA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 177
+    },
+    {
+        "song_title": "Christ Arose",
+        "tune_name": "CHRIST AROSE!",
+        "great_hymns_of_the_faith": 138,
+        "rejoice_hymns": 325
+    },
+    {
+        "song_title": "Christ Is All I Need",
+        "tune_name": "CHRIST IS ALL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 403
+    },
+    {
+        "song_title": "Christ Is Coming",
+        "tune_name": "BLYTH",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 583
+    },
+    {
+        "song_title": "Christ Is Made the Sure Foundation",
+        "tune_name": "REGENT SQUARE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 581
+    },
+    {
+        "song_title": "Christ Is Risen from the Dead",
+        "tune_name": "FAIR OAKS",
+        "great_hymns_of_the_faith": 136,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Christ Liveth in Me",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 466,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Christ Receiveth Sinful Men",
+        "tune_name": "NEUMEISTER",
+        "great_hymns_of_the_faith": 199,
+        "rejoice_hymns": 340
+    },
+    {
+        "song_title": "Christ Returneth",
+        "tune_name": "CHRIST RETURNETH",
+        "great_hymns_of_the_faith": 156,
+        "rejoice_hymns": 584
+    },
+    {
+        "song_title": "Christ the Lord Is Risen Today",
+        "tune_name": "EASTER HYMN",
+        "great_hymns_of_the_faith": 137,
+        "rejoice_hymns": 323
+    },
+    {
+        "song_title": "Christmas Bell",
+        "tune_name": "CHRISTMAS BELL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 200
+    },
+    {
+        "song_title": "Cleanse Me",
+        "tune_name": "MAORI",
+        "great_hymns_of_the_faith": 166,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Close to Thee",
+        "tune_name": "CLOSE TO THEE",
+        "great_hymns_of_the_faith": 328,
+        "rejoice_hymns": 408
+    },
+    {
+        "song_title": "Come to the Cross",
+        "tune_name": "FARRELL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 304
+    },
+    {
+        "song_title": "Come to the Savior",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 254,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Come to the Table",
+        "tune_name": "COME TO THE TABLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 330
+    },
+    {
+        "song_title": "Come, All Christians, Be Committed",
+        "tune_name": "BEACH SPRING",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 397
+    },
+    {
+        "song_title": "Come, Christians, Join to Sing",
+        "tune_name": "MADRID",
+        "great_hymns_of_the_faith": 55,
+        "rejoice_hymns": 2
+    },
+    {
+        "song_title": "Come, Holy Spirit, Dove Divine",
+        "tune_name": "MARYTON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 523
+    },
+    {
+        "song_title": "Come, Holy Spirit, Heavenly Dove",
+        "tune_name": "ST. AGNES",
+        "great_hymns_of_the_faith": 158,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Come, Thou Almighty King",
+        "tune_name": "ITALIAN HYMN",
+        "great_hymns_of_the_faith": 6,
+        "rejoice_hymns": 9
+    },
+    {
+        "song_title": "Come, Thou Fount of Every Blessing",
+        "tune_name": "NETTLETON",
+        "great_hymns_of_the_faith": 17,
+        "rejoice_hymns": 553
+    },
+    {
+        "song_title": "Come, Thou Fount of Every Blessing",
+        "tune_name": "WARRENTON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 554
+    },
+    {
+        "song_title": "Come, Thou Long-Expected Jesus",
+        "tune_name": "HYFRYDOL",
+        "great_hymns_of_the_faith": 84,
+        "rejoice_hymns": 209
+    },
+    {
+        "song_title": "Come, We That Love the Lord",
+        "tune_name": "ST. THOMAS",
+        "great_hymns_of_the_faith": 23,
+        "rejoice_hymns": 436
+    },
+    {
+        "song_title": "Come, Ye Disconsolate",
+        "tune_name": "CONSOLATOR",
+        "great_hymns_of_the_faith": 286,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Come, Ye Sinners, Poor and Needy",
+        "tune_name": "RESTORATION",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 338
+    },
+    {
+        "song_title": "Come, Ye Thankful People, Come",
+        "tune_name": "ST. GEORGE'S WINDSOR",
+        "great_hymns_of_the_faith": 526,
+        "rejoice_hymns": 556
+    },
+    {
+        "song_title": "Complete in Thee",
+        "tune_name": "NYCE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 349
+    },
+    {
+        "song_title": "Confession",
+        "tune_name": "SEIDEL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 482
+    },
+    {
+        "song_title": "Constantly Abiding",
+        "tune_name": "CONSTANTLY ABIDING",
+        "great_hymns_of_the_faith": 478,
+        "rejoice_hymns": 390
+    },
+    {
+        "song_title": "Count Me",
+        "tune_name": "COUNT ME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 422
+    },
+    {
+        "song_title": "Count Your Blessings",
+        "tune_name": "BLESSINGS",
+        "great_hymns_of_the_faith": 370,
+        "rejoice_hymns": 564
+    },
+    {
+        "song_title": "Create in Me a Clean Heart",
+        "tune_name": "DAVIDSONG",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 479
+    },
+    {
+        "song_title": "Cross of Jesus, Cross of Sorrow",
+        "tune_name": "CROSS OF JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 307
+    },
+    {
+        "song_title": "Crown Him King of Kings",
+        "tune_name": "ROBERT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 31
+    },
+    {
+        "song_title": "Crown Him with Many Crowns",
+        "tune_name": "DIADEMATA",
+        "great_hymns_of_the_faith": 62,
+        "rejoice_hymns": 32
+    },
+    {
+        "song_title": "Dare to Be a Daniel",
+        "tune_name": "COURAGE",
+        "great_hymns_of_the_faith": 363,
+        "rejoice_hymns": 668
+    },
+    {
+        "song_title": "Dare to Stand",
+        "tune_name": "THORNTON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 673
+    },
+    {
+        "song_title": "Day by Day",
+        "tune_name": "BLOTT EN DAG",
+        "great_hymns_of_the_faith": 299,
+        "rejoice_hymns": 144
+    },
+    {
+        "song_title": "Day Is Dying in the West",
+        "tune_name": "CHAUTAUQUA",
+        "great_hymns_of_the_faith": 78,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Dear Lord and Father of Mankind",
+        "tune_name": "REST",
+        "great_hymns_of_the_faith": 358,
+        "rejoice_hymns": 470
+    },
+    {
+        "song_title": "Deeper and Deeper",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 315,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Depth of Mercy",
+        "tune_name": "ALETTA",
+        "great_hymns_of_the_faith": 233,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Do You Really Want Revival?",
+        "tune_name": "REVIVAL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 637
+    },
+    {
+        "song_title": "Does Jesus Care?",
+        "tune_name": "MY SAVIOR CARES",
+        "great_hymns_of_the_faith": 289,
+        "rejoice_hymns": 157
+    },
+    {
+        "song_title": "Doxology",
+        "tune_name": "OLD HUNDREDTH",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 14
+    },
+    {
+        "song_title": "Dwelling in Beulah Land",
+        "tune_name": "BEULAH LAND",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 616
+    },
+    {
+        "song_title": "Emmanuel",
+        "tune_name": "EMMANUEL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 237
+    },
+    {
+        "song_title": "Eternal Father, Strong to Save",
+        "tune_name": "MELITA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 518
+    },
+    {
+        "song_title": "Even Me",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 168,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Every Day with Jesus",
+        "tune_name": "EVERY DAY WITH JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 254
+    },
+    {
+        "song_title": "Face to Face",
+        "tune_name": "FACE TO FACE",
+        "great_hymns_of_the_faith": 511,
+        "rejoice_hymns": 600
+    },
+    {
+        "song_title": "Fade, Fade, Each Earthly Joy",
+        "tune_name": "LUNDIE",
+        "great_hymns_of_the_faith": 266,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Fairest Lord Jesus",
+        "tune_name": "CRUSADER'S HYMN",
+        "great_hymns_of_the_faith": 50,
+        "rejoice_hymns": 255
+    },
+    {
+        "song_title": "Faith Is the Victory",
+        "tune_name": "SANKEY",
+        "great_hymns_of_the_faith": 402,
+        "rejoice_hymns": 377
+    },
+    {
+        "song_title": "Faith of Our Fathers",
+        "tune_name": "ST. CATHERINE",
+        "great_hymns_of_the_faith": 183,
+        "rejoice_hymns": 379
+    },
+    {
+        "song_title": "Faithful Men",
+        "tune_name": "WAYNE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 393
+    },
+    {
+        "song_title": "Father, I Adore You (A Round)",
+        "tune_name": "MARANATHA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 6
+    },
+    {
+        "song_title": "Father, Lead Me",
+        "tune_name": "MELINDA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 137
+    },
+    {
+        "song_title": "Fight the Good Fight",
+        "tune_name": "PENTECOST",
+        "great_hymns_of_the_faith": 379,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Fill All My Vision",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 330,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Fill Me Now",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 162,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Fill My Cup, Lord",
+        "tune_name": "FILL MY CUP",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 459
+    },
+    {
+        "song_title": "Finally Home",
+        "tune_name": "FINALLY HOME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 601
+    },
+    {
+        "song_title": "Follow On",
+        "tune_name": "FOLLOW ON",
+        "great_hymns_of_the_faith": 398,
+        "rejoice_hymns": 452
+    },
+    {
+        "song_title": "Follow, I Will Follow Thee",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 383,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Footsteps of Jesus",
+        "tune_name": "FOOTSTEPS",
+        "great_hymns_of_the_faith": 438,
+        "rejoice_hymns": 262
+    },
+    {
+        "song_title": "For All the Saints",
+        "tune_name": "SINE NOMINE",
+        "great_hymns_of_the_faith": 508,
+        "rejoice_hymns": 605
+    },
+    {
+        "song_title": "For God So Loved the World",
+        "tune_name": "GOD'S LOVE",
+        "great_hymns_of_the_faith": 154,
+        "rejoice_hymns": 112
+    },
+    {
+        "song_title": "For Me to Live Is Christ",
+        "tune_name": "WHITE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 458
+    },
+    {
+        "song_title": "For the Beauty of the Earth",
+        "tune_name": "DIX",
+        "great_hymns_of_the_faith": 54,
+        "rejoice_hymns": 559
+    },
+    {
+        "song_title": "For the Sake of His Name",
+        "tune_name": "MISSIONS MANDATE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 402
+    },
+    {
+        "song_title": "Fountain of Grace",
+        "tune_name": "FOUNTAIN OF GRACE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 124
+    },
+    {
+        "song_title": "From Every Stormy Wind That Blows",
+        "tune_name": "RETREAT",
+        "great_hymns_of_the_faith": 355,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "From Greenland's Icy Mountains",
+        "tune_name": "MISSIONARY HYMN",
+        "great_hymns_of_the_faith": 433,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "From My Heart",
+        "tune_name": "HAYLEE JOY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 274
+    },
+    {
+        "song_title": "Gentle Jesus, Meek and Mild",
+        "tune_name": "GENTLE JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 695
+    },
+    {
+        "song_title": "Gentle Mary Laid Her Child",
+        "tune_name": "WENIGER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 214
+    },
+    {
+        "song_title": "Give Me Jesus",
+        "tune_name": "GIVE ME JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 270
+    },
+    {
+        "song_title": "Give Me Thy Heart",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 366,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Give of Your Best to the Master",
+        "tune_name": "PINKSTON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 416
+    },
+    {
+        "song_title": "Give of Your Best to the Master",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 369,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Give Out the Good News",
+        "tune_name": "FOXX",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 645
+    },
+    {
+        "song_title": "Give Thanks",
+        "tune_name": "GIVE THANKS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 560
+    },
+    {
+        "song_title": "Give What I Cannot Keep",
+        "tune_name": "JIM ELLIOT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 649
+    },
+    {
+        "song_title": "Glorify Thy Name",
+        "tune_name": "GLORIFY THY NAME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 16
+    },
+    {
+        "song_title": "Glorious Is Thy Name",
+        "tune_name": "GLORIOUS NAME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 8
+    },
+    {
+        "song_title": "Glorious Things of Thee Are Spoken",
+        "tune_name": "AUSTRIAN HYMN",
+        "great_hymns_of_the_faith": 185,
+        "rejoice_hymns": 4
+    },
+    {
+        "song_title": "Glory Be to the Father",
+        "tune_name": "GLORIA PATRI (GREATOREX)",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 572
+    },
+    {
+        "song_title": "Glory Be to the Father",
+        "tune_name": "GLORIA PATRI (MEINEKE)",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 573
+    },
+    {
+        "song_title": "Glory to His Name",
+        "tune_name": "GLORY TO HIS NAME",
+        "great_hymns_of_the_faith": 489,
+        "rejoice_hymns": 303
+    },
+    {
+        "song_title": "Glory, Hallelujah",
+        "tune_name": "BURNE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 534
+    },
+    {
+        "song_title": "Go Tell It on the Mountain",
+        "tune_name": "GO TELL IT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 205
+    },
+    {
+        "song_title": "Go Tell the Untold Millions",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 421,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Go Ye into All the World",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 427,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "God Be With You",
+        "tune_name": "FAREWELL",
+        "great_hymns_of_the_faith": 82,
+        "rejoice_hymns": 574
+    },
+    {
+        "song_title": "God Can Do Anything",
+        "tune_name": "GOD CAN DO ANYTHING",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 121
+    },
+    {
+        "song_title": "God Has Spoken by His Prophets",
+        "tune_name": "BEECHER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 183
+    },
+    {
+        "song_title": "God Incarnate, Jesus Came",
+        "tune_name": "DOUGLAS",
+        "great_hymns_of_the_faith": 130,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "God Is Holy",
+        "tune_name": "LEUVINA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 83
+    },
+    {
+        "song_title": "God Is So Good",
+        "tune_name": "GOD IS SO GOOD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 563
+    },
+    {
+        "song_title": "God Leads Us Along",
+        "tune_name": "GOD LEADS US",
+        "great_hymns_of_the_faith": 298,
+        "rejoice_hymns": 148
+    },
+    {
+        "song_title": "God Makes No Mistakes",
+        "tune_name": "GOD MAKES NO MISTAKES",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 681
+    },
+    {
+        "song_title": "God of Everlasting Glory",
+        "tune_name": "BRETON ROAD",
+        "great_hymns_of_the_faith": 14,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "God of Our Fathers",
+        "tune_name": "NATIONAL HYMN",
+        "great_hymns_of_the_faith": 532,
+        "rejoice_hymns": 697
+    },
+    {
+        "song_title": "God of Our Youth",
+        "tune_name": "BURNING TREE",
+        "great_hymns_of_the_faith": 335,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "God of the Ages",
+        "tune_name": "BUNESSAN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 86
+    },
+    {
+        "song_title": "God Rest Ye Merry Gentlemen",
+        "tune_name": "GOD REST YE MERRY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 195
+    },
+    {
+        "song_title": "God Sees the Heart",
+        "tune_name": "PINNER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 88
+    },
+    {
+        "song_title": "God Will Take Care of You",
+        "tune_name": "GOD CARES",
+        "great_hymns_of_the_faith": 297,
+        "rejoice_hymns": 158
+    },
+    {
+        "song_title": "God, Give Us Christian Homes",
+        "tune_name": "CHRISTIAN HOME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 633
+    },
+    {
+        "song_title": "God's Final Call",
+        "tune_name": "FINAL CALL",
+        "great_hymns_of_the_faith": 250,
+        "rejoice_hymns": 480
+    },
+    {
+        "song_title": "God's Perfect Lamb",
+        "tune_name": "FREMONT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 260
+    },
+    {
+        "song_title": "God's Refining Fire",
+        "tune_name": "VENEZIA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 686
+    },
+    {
+        "song_title": "God's Word Shall Stand Forever",
+        "tune_name": "ENDURING WORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 180
+    },
+    {
+        "song_title": "Golden Harps Are Sounding",
+        "tune_name": "HERMAS",
+        "great_hymns_of_the_faith": 139,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Good Christian Men, Rejoice",
+        "tune_name": "IN DULCI JUBILO",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 203
+    },
+    {
+        "song_title": "Good Shepherd, Take This Little Child",
+        "tune_name": "AMY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 688
+    },
+    {
+        "song_title": "Got Any Rivers?",
+        "tune_name": "GOD'S POWER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 677
+    },
+    {
+        "song_title": "Grace",
+        "tune_name": "MARY GILLESPIE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 126
+    },
+    {
+        "song_title": "Grace Alone",
+        "tune_name": "GRACE ALONE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 128
+    },
+    {
+        "song_title": "Grace Greater than Our Sin",
+        "tune_name": "MOODY",
+        "great_hymns_of_the_faith": 209,
+        "rejoice_hymns": 122
+    },
+    {
+        "song_title": "Grace Is Flowing",
+        "tune_name": "GUSTAFSON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 123
+    },
+    {
+        "song_title": "Grace! 'Tis a Charming Sound",
+        "tune_name": "SILVER STREET",
+        "great_hymns_of_the_faith": 219,
+        "rejoice_hymns": 129
+    },
+    {
+        "song_title": "Gracious Savior, Who Didst Honor",
+        "tune_name": "NELSON",
+        "great_hymns_of_the_faith": 524,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Great and Mighty",
+        "tune_name": "HUTCHESON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 12
+    },
+    {
+        "song_title": "Great God of Wonders",
+        "tune_name": "WONDERS",
+        "great_hymns_of_the_faith": 12,
+        "rejoice_hymns": 96
+    },
+    {
+        "song_title": "Great God, We Sing That Mighty Hand",
+        "tune_name": "ST. CRISPIN",
+        "great_hymns_of_the_faith": 519,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Great Is Thy Faithfulness",
+        "tune_name": "FAITHFULNESS",
+        "great_hymns_of_the_faith": 40,
+        "rejoice_hymns": 119
+    },
+    {
+        "song_title": "Guide Me, O Thou Great Jehovah",
+        "tune_name": "CWM RHONDDA",
+        "great_hymns_of_the_faith": 291,
+        "rejoice_hymns": 161
+    },
+    {
+        "song_title": "Hail to the Brightness",
+        "tune_name": "WESLEY",
+        "great_hymns_of_the_faith": 434,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Hail, Thou Once-Despised Jesus!",
+        "tune_name": "AUTUMN",
+        "great_hymns_of_the_faith": 145,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Hallelujah for the Cross!",
+        "tune_name": "HALLELUJAH",
+        "great_hymns_of_the_faith": 211,
+        "rejoice_hymns": 318
+    },
+    {
+        "song_title": "Hallelujah! We Shall Rise",
+        "tune_name": "WE SHALL RISE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 625
+    },
+    {
+        "song_title": "Hallelujah! What a Savior",
+        "tune_name": "MAN OF SORROWS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 286
+    },
+    {
+        "song_title": "Hallelujah, 'Tis Done!",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 197,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Hallelujah, What a Savior!",
+        "tune_name": "MAN OF SORROWS",
+        "great_hymns_of_the_faith": 127,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Happy the Home When God Is There",
+        "tune_name": "BEATITUDO",
+        "great_hymns_of_the_faith": 523,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Hark! Ten Thousands Harps and Voices",
+        "tune_name": "HARWELL",
+        "great_hymns_of_the_faith": 144,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Hark! the Herald Angels Sing",
+        "tune_name": "MENDELSSOHN",
+        "great_hymns_of_the_faith": 93,
+        "rejoice_hymns": 227
+    },
+    {
+        "song_title": "Hark! The Herald Angels Sing (Descant - last stanza only)",
+        "tune_name": "MENDELSSOHN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 228
+    },
+    {
+        "song_title": "Have I Done My Best for Jesus?",
+        "tune_name": "MY BEST",
+        "great_hymns_of_the_faith": 368,
+        "rejoice_hymns": 406
+    },
+    {
+        "song_title": "Have Thine Own Way, Lord",
+        "tune_name": "ADELAIDE",
+        "great_hymns_of_the_faith": 388,
+        "rejoice_hymns": 494
+    },
+    {
+        "song_title": "Have You Any Room for Jesus?",
+        "tune_name": "ANY ROOM",
+        "great_hymns_of_the_faith": 241,
+        "rejoice_hymns": 477
+    },
+    {
+        "song_title": "He Cares for You",
+        "tune_name": "JON RANDALL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 156
+    },
+    {
+        "song_title": "He Died for Me",
+        "tune_name": "HE DIED FOR ME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 288
+    },
+    {
+        "song_title": "He Giveth More Grace",
+        "tune_name": "HE GIVETH MORE PEACE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 125
+    },
+    {
+        "song_title": "He Hideth My Soul",
+        "tune_name": "KIRKPATRICK",
+        "great_hymns_of_the_faith": 258,
+        "rejoice_hymns": 141
+    },
+    {
+        "song_title": "He Included Me",
+        "tune_name": "SEWELL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 355
+    },
+    {
+        "song_title": "He Is Able",
+        "tune_name": "HE IS ABLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 675
+    },
+    {
+        "song_title": "He Is Able to Deliver Thee",
+        "tune_name": "DELIVERANCE",
+        "great_hymns_of_the_faith": 201,
+        "rejoice_hymns": 163
+    },
+    {
+        "song_title": "He Is Born",
+        "tune_name": "IL EST NÉ",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 207
+    },
+    {
+        "song_title": "He Is Coming Again",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 155,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "He Is Jehovah",
+        "tune_name": "HE IS JEHOVAH",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 159
+    },
+    {
+        "song_title": "He Is King",
+        "tune_name": "CHRISTIANSON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 21
+    },
+    {
+        "song_title": "He Is Lord",
+        "tune_name": "HE IS LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 87
+    },
+    {
+        "song_title": "He Is My Strength",
+        "tune_name": "CERTAINTY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 166
+    },
+    {
+        "song_title": "He Is So Precious to Me",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 456,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "He Keeps Me Singing",
+        "tune_name": "SWEETEST NAME",
+        "great_hymns_of_the_faith": 453,
+        "rejoice_hymns": 541
+    },
+    {
+        "song_title": "He Knoweth the Way",
+        "tune_name": "GERMAN'S TIME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 168
+    },
+    {
+        "song_title": "He Leadeth Me",
+        "tune_name": "HE LEADETH ME",
+        "great_hymns_of_the_faith": 295,
+        "rejoice_hymns": 149
+    },
+    {
+        "song_title": "He Lifted Me",
+        "tune_name": "HE LIFTED ME",
+        "great_hymns_of_the_faith": 459,
+        "rejoice_hymns": 150
+    },
+    {
+        "song_title": "He Lives",
+        "tune_name": "ACKLEY",
+        "great_hymns_of_the_faith": 132,
+        "rejoice_hymns": 327
+    },
+    {
+        "song_title": "He Owns the Cattle on a Thousand Hills",
+        "tune_name": "HE OWNS THE CATTLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 702
+    },
+    {
+        "song_title": "He Ransomed Me",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 448,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "He Rose Triumphantly",
+        "tune_name": "HE ROSE TRIUMPHANTLY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 322
+    },
+    {
+        "song_title": "He the Pearly Gates Will Open",
+        "tune_name": "PEARLY GATES",
+        "great_hymns_of_the_faith": 513,
+        "rejoice_hymns": 608
+    },
+    {
+        "song_title": "He Was Wounded for Our Transgressions",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 117,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Hear Our Prayer, O Lord",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 535,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Heaven Came Down",
+        "tune_name": "HEAVEN CAME DOWN",
+        "great_hymns_of_the_faith": 473,
+        "rejoice_hymns": 366
+    },
+    {
+        "song_title": "Heavenly Joy Is Ringing",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 491,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Heavenly Sunlight",
+        "tune_name": "SUNLIGHT",
+        "great_hymns_of_the_faith": 472,
+        "rejoice_hymns": 532
+    },
+    {
+        "song_title": "Here Am I, Lord",
+        "tune_name": "KENDALL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 638
+    },
+    {
+        "song_title": "Here Am I, Send Me",
+        "tune_name": "SALLY TOWNSEND",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 639
+    },
+    {
+        "song_title": "Here I Am, Lord",
+        "tune_name": "HERE I AM, LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 640
+    },
+    {
+        "song_title": "Here Is Love",
+        "tune_name": "HERE IS LOVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 113
+    },
+    {
+        "song_title": "Here, O My Lord, I See Thee Face to Face",
+        "tune_name": "MORECAMBE",
+        "great_hymns_of_the_faith": 191,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "He's a Wonderful Savior to Me",
+        "tune_name": "WONDERFUL SAVIOR",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 445
+    },
+    {
+        "song_title": "Hiding in Thee",
+        "tune_name": "HIDING IN THEE",
+        "great_hymns_of_the_faith": 282,
+        "rejoice_hymns": 151
+    },
+    {
+        "song_title": "Higher Ground",
+        "tune_name": "CLEMENTS",
+        "great_hymns_of_the_faith": 308,
+        "rejoice_hymns": 454
+    },
+    {
+        "song_title": "Higher Ground",
+        "tune_name": "HIGHER GROUND",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 421
+    },
+    {
+        "song_title": "His Eye Is on the Sparrow",
+        "tune_name": "SPARROW",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 164
+    },
+    {
+        "song_title": "His Loving-Kindness",
+        "tune_name": "LOVING-KINDNESS",
+        "great_hymns_of_the_faith": 9,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "His Matchless Worth",
+        "tune_name": "ARIEL",
+        "great_hymns_of_the_faith": 48,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "His Name Is Wonderful",
+        "tune_name": "MIEIR",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 258
+    },
+    {
+        "song_title": "His Robes for Mine",
+        "tune_name": "AUSTINBURG",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 279
+    },
+    {
+        "song_title": "His Way Is Perfect",
+        "tune_name": "HIS WAY IS PERFECT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 685
+    },
+    {
+        "song_title": "His Way with Thee",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 367,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Hold the Fort",
+        "tune_name": "HOLD THE FORT",
+        "great_hymns_of_the_faith": 409,
+        "rejoice_hymns": 674
+    },
+    {
+        "song_title": "Holy Bible, Book Divine",
+        "tune_name": "ALETTA",
+        "great_hymns_of_the_faith": 179,
+        "rejoice_hymns": 179
+    },
+    {
+        "song_title": "Holy Ghost, with Light Divine",
+        "tune_name": "MERCY",
+        "great_hymns_of_the_faith": 165,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Holy God, We Praise Thy Name",
+        "tune_name": "GROSSER GOTT",
+        "great_hymns_of_the_faith": 28,
+        "rejoice_hymns": 37
+    },
+    {
+        "song_title": "Holy Is He",
+        "tune_name": "HOLY IS HE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 84
+    },
+    {
+        "song_title": "Holy Is the Lord",
+        "tune_name": "HOLY IS THE LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 89
+    },
+    {
+        "song_title": "Holy Spirit, Faithful Guide",
+        "tune_name": "FAITHFUL GUIDE",
+        "great_hymns_of_the_faith": 169,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Holy Spirit, Light Divine",
+        "tune_name": "MERCY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 524
+    },
+    {
+        "song_title": "Holy Spirit, Now Outpoured",
+        "tune_name": "GLEN ECHO",
+        "great_hymns_of_the_faith": 167,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Holy, Holy, Holy",
+        "tune_name": "NICAEA",
+        "great_hymns_of_the_faith": 70,
+        "rejoice_hymns": 85
+    },
+    {
+        "song_title": "Hosanna, Loud Hosanna",
+        "tune_name": "ELLACOMBE",
+        "great_hymns_of_the_faith": 107,
+        "rejoice_hymns": 275
+    },
+    {
+        "song_title": "How Can I Fear?",
+        "tune_name": "JONATHAN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 165
+    },
+    {
+        "song_title": "How Can It Be?",
+        "tune_name": "HOW CAN IT BE",
+        "great_hymns_of_the_faith": 67,
+        "rejoice_hymns": 114
+    },
+    {
+        "song_title": "How Deep the Father's Love for Us",
+        "tune_name": "FATHER'S LOVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 106
+    },
+    {
+        "song_title": "How Firm a Foundation",
+        "tune_name": "FOUNDATION",
+        "great_hymns_of_the_faith": 268,
+        "rejoice_hymns": 578
+    },
+    {
+        "song_title": "How Great Our Joy",
+        "tune_name": "JÜNGST",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 198
+    },
+    {
+        "song_title": "How Great Thou Art",
+        "tune_name": "HOW GREAT THOU ART",
+        "great_hymns_of_the_faith": 37,
+        "rejoice_hymns": 28
+    },
+    {
+        "song_title": "How Great Thou Art (Descant - Last Chorus only)",
+        "tune_name": "HOW GREAT THOU ART",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 29
+    },
+    {
+        "song_title": "How Majestic Is Thy Name",
+        "tune_name": "HAY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 47
+    },
+    {
+        "song_title": "How Sweet the Name of Jesus Sounds",
+        "tune_name": "BRIDGEWATER",
+        "great_hymns_of_the_faith": 53,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "How Sweet the Name of Jesus Sounds",
+        "tune_name": "ST. PETER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 252
+    },
+    {
+        "song_title": "I Am Coming, Lord",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 240,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I Am His, and He Is Mine",
+        "tune_name": "EVERLASTING LOVE",
+        "great_hymns_of_the_faith": 56,
+        "rejoice_hymns": 185
+    },
+    {
+        "song_title": "I Am Praying for You",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 245,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I Am Resolved",
+        "tune_name": "RESOLUTION",
+        "great_hymns_of_the_faith": 389,
+        "rejoice_hymns": 455
+    },
+    {
+        "song_title": "I Am Thine, O Lord",
+        "tune_name": "I AM THINE",
+        "great_hymns_of_the_faith": 314,
+        "rejoice_hymns": 404
+    },
+    {
+        "song_title": "I Am Trusting Thee, Lord Jesus",
+        "tune_name": "BULLINGER",
+        "great_hymns_of_the_faith": 278,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I Believe in Miracles",
+        "tune_name": "MIRACLES",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 465
+    },
+    {
+        "song_title": "I Belong to the King",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 275,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I Gave My Life for Thee",
+        "tune_name": "KENOSIS",
+        "great_hymns_of_the_faith": 375,
+        "rejoice_hymns": 420
+    },
+    {
+        "song_title": "I Have Come from the Darkness",
+        "tune_name": "TO THE LIGHT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 453
+    },
+    {
+        "song_title": "I Have Decided to Follow Jesus",
+        "tune_name": "ASSAM",
+        "great_hymns_of_the_faith": 397,
+        "rejoice_hymns": 399
+    },
+    {
+        "song_title": "I Hear Thy Welcome Voice",
+        "tune_name": "WELCOME VOICE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 490
+    },
+    {
+        "song_title": "I Heard the Bells on Christmas Day",
+        "tune_name": "WALTHAM",
+        "great_hymns_of_the_faith": 98,
+        "rejoice_hymns": 231
+    },
+    {
+        "song_title": "I Heard the Voice of Jesus Say",
+        "tune_name": "VOX DILECTI",
+        "great_hymns_of_the_faith": 225,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I Just Keep Trusting My Lord",
+        "tune_name": "TRUSTING",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 384
+    },
+    {
+        "song_title": "I Know a Fount",
+        "tune_name": "I KNOW A FOUNT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 277
+    },
+    {
+        "song_title": "I Know That My Redeemer Liveth",
+        "tune_name": "HANNAH",
+        "great_hymns_of_the_faith": 134,
+        "rejoice_hymns": 329
+    },
+    {
+        "song_title": "I Know Whom I Have Believed",
+        "tune_name": "EL NATHAN",
+        "great_hymns_of_the_faith": 224,
+        "rejoice_hymns": 388
+    },
+    {
+        "song_title": "I Love Thy Kingdom, Lord",
+        "tune_name": "ST. THOMAS",
+        "great_hymns_of_the_faith": 188,
+        "rejoice_hymns": 580
+    },
+    {
+        "song_title": "I Love To Tell The Story",
+        "tune_name": "HANKEY",
+        "great_hymns_of_the_faith": 431,
+        "rejoice_hymns": 650
+    },
+    {
+        "song_title": "I Love You, Lord",
+        "tune_name": "CONLEY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 444
+    },
+    {
+        "song_title": "I Love You, Lord",
+        "tune_name": "I LOVE YOU, LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 443
+    },
+    {
+        "song_title": "I Must Tell Jesus",
+        "tune_name": "ORWIGSBURG",
+        "great_hymns_of_the_faith": 344,
+        "rejoice_hymns": 509
+    },
+    {
+        "song_title": "I Need Thee Every Hour",
+        "tune_name": "NEED",
+        "great_hymns_of_the_faith": 318,
+        "rejoice_hymns": 506
+    },
+    {
+        "song_title": "I Run to Christ",
+        "tune_name": "RUN TO CHRIST",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 540
+    },
+    {
+        "song_title": "I Saw Jesus in You",
+        "tune_name": "MELVIN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 451
+    },
+    {
+        "song_title": "I Shall Know Him",
+        "tune_name": "FLORA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 613
+    },
+    {
+        "song_title": "I Shall Know Him",
+        "tune_name": "SAVIOR FIRST",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 614
+    },
+    {
+        "song_title": "I Sing a New Song",
+        "tune_name": "A NEW SONG",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 552
+    },
+    {
+        "song_title": "I Sing Praises",
+        "tune_name": "I SING PRAISES",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 50
+    },
+    {
+        "song_title": "I Sing the Mighty Power of God",
+        "tune_name": "ELLACOMBE",
+        "great_hymns_of_the_faith": 27,
+        "rejoice_hymns": 11
+    },
+    {
+        "song_title": "I Stand Amazed in the Presence",
+        "tune_name": "MY SAVIOR'S LOVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 102
+    },
+    {
+        "song_title": "I Stand Redeemed",
+        "tune_name": "CHERYL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 346
+    },
+    {
+        "song_title": "I Surrender All",
+        "tune_name": "SURRENDER",
+        "great_hymns_of_the_faith": 394,
+        "rejoice_hymns": 476
+    },
+    {
+        "song_title": "I Want a Principle Within",
+        "tune_name": "GERALD",
+        "great_hymns_of_the_faith": 343,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I Want to Be Faithful",
+        "tune_name": "JEFFREY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 428
+    },
+    {
+        "song_title": "I Want to Be Like Jesus",
+        "tune_name": "IVES",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 449
+    },
+    {
+        "song_title": "I Will Follow",
+        "tune_name": "CROSS LANES",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 442
+    },
+    {
+        "song_title": "I Will Glory in My Redeemer",
+        "tune_name": "GLORY IN MY REDEEMER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 33
+    },
+    {
+        "song_title": "I Will Praise Him",
+        "tune_name": "I WILL PRAISE HIM",
+        "great_hymns_of_the_faith": 464,
+        "rejoice_hymns": 5
+    },
+    {
+        "song_title": "I Will Sing of My Redeemer",
+        "tune_name": "MY REDEEMER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 364
+    },
+    {
+        "song_title": "I Will Sing of the Mercies",
+        "tune_name": "I WILL SING",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 48
+    },
+    {
+        "song_title": "I Will Sing the Wondrous Story",
+        "tune_name": "WONDROUS STORY",
+        "great_hymns_of_the_faith": 468,
+        "rejoice_hymns": 461
+    },
+    {
+        "song_title": "I with Thee Would Begin",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 307,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I Wonder as I Wander",
+        "tune_name": "I WONDER AS I WANDER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 201
+    },
+    {
+        "song_title": "I Worship Thee",
+        "tune_name": "LINDA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 54
+    },
+    {
+        "song_title": "I Worship You, Almighty God",
+        "tune_name": "I WORSHIP YOU",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 26
+    },
+    {
+        "song_title": "I Would Be Like Jesus",
+        "tune_name": "SPRING HILL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 434
+    },
+    {
+        "song_title": "I Would Be True",
+        "tune_name": "PEEK",
+        "great_hymns_of_the_faith": 319,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I'd Rather Have Jesus",
+        "tune_name": "I'D RATHER HAVE JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 474
+    },
+    {
+        "song_title": "If Jesus Goes with Me",
+        "tune_name": "IF JESUS GOES",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 435
+    },
+    {
+        "song_title": "I'll Fly Away",
+        "tune_name": "I'LL FLY AWAY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 617
+    },
+    {
+        "song_title": "I'll Go Where You Want Me to Go",
+        "tune_name": "MANCHESTER",
+        "great_hymns_of_the_faith": 440,
+        "rejoice_hymns": 647
+    },
+    {
+        "song_title": "I'll Live for Him",
+        "tune_name": "DUNBAR",
+        "great_hymns_of_the_faith": 396,
+        "rejoice_hymns": 319
+    },
+    {
+        "song_title": "I'll Live for Jesus",
+        "tune_name": "I'LL LIVE FOR JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 400
+    },
+    {
+        "song_title": "I'll Stand By Until the Morning",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 220,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I'll Tell the World That I'm a Christian",
+        "tune_name": "TUCKER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 456
+    },
+    {
+        "song_title": "I'll Walk with Him Always (A Round)",
+        "tune_name": "ALWAYS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 446
+    },
+    {
+        "song_title": "I'll Wish I Had Given Him More",
+        "tune_name": "GIVE HIM MORE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 441
+    },
+    {
+        "song_title": "I'm a Soldier",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 406,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I'm Adopted",
+        "tune_name": "DANIEL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 187
+    },
+    {
+        "song_title": "I'm Going Home",
+        "tune_name": "MILLER",
+        "great_hymns_of_the_faith": 516,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Immortal Love – Forever Full",
+        "tune_name": "SERENITY",
+        "great_hymns_of_the_faith": 104,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Immortal, Invisible, God Only Wise",
+        "tune_name": "ST. DENIO",
+        "great_hymns_of_the_faith": 34,
+        "rejoice_hymns": 10
+    },
+    {
+        "song_title": "In a Cave",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 88,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "In All Things",
+        "tune_name": "IN ALL THINGS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 562
+    },
+    {
+        "song_title": "In Christ Alone",
+        "tune_name": "IN CHRIST ALONE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 239
+    },
+    {
+        "song_title": "In Christ There Is No East or West",
+        "tune_name": "ST. PETER",
+        "great_hymns_of_the_faith": 417,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "In His Time",
+        "tune_name": "IN HIS TIME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 167
+    },
+    {
+        "song_title": "In Jordan’s Stream",
+        "tune_name": "BRIDGEWATER",
+        "great_hymns_of_the_faith": 189,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "In My Heart",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 457,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "In My Heart There Rings a Melody",
+        "tune_name": "HEART MELODY",
+        "great_hymns_of_the_faith": 455,
+        "rejoice_hymns": 537
+    },
+    {
+        "song_title": "In Tenderness He Sought Me",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 480,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "In the Bleak Mid-Winter",
+        "tune_name": "CRANHAM",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 217
+    },
+    {
+        "song_title": "In the Cross of Christ I Glory",
+        "tune_name": "RATHBUN",
+        "great_hymns_of_the_faith": 123,
+        "rejoice_hymns": 311
+    },
+    {
+        "song_title": "In the Garden",
+        "tune_name": "GARDEN",
+        "great_hymns_of_the_faith": 264,
+        "rejoice_hymns": 507
+    },
+    {
+        "song_title": "In the Hour of Trial",
+        "tune_name": "PENITENCE",
+        "great_hymns_of_the_faith": 276,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "In the Sweet By and By",
+        "tune_name": "SWEET BY AND BY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 603
+    },
+    {
+        "song_title": "In Times Like These",
+        "tune_name": "BE VERY SURE",
+        "great_hymns_of_the_faith": 202,
+        "rejoice_hymns": 382
+    },
+    {
+        "song_title": "Infant Holy, Infant Lowly",
+        "tune_name": "W ZLOBIE LEZY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 215
+    },
+    {
+        "song_title": "Into My Heart",
+        "tune_name": "INTO MY HEART",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 370
+    },
+    {
+        "song_title": "Is it the Crowning Day?",
+        "tune_name": "GLAD DAY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 592
+    },
+    {
+        "song_title": "Is My Name Written There?",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 260,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Is Your All on the Alter?",
+        "tune_name": "HOFFMAN",
+        "great_hymns_of_the_faith": 381,
+        "rejoice_hymns": 491
+    },
+    {
+        "song_title": "Isn't He Wonderful?",
+        "tune_name": "ISN'T HE WONDERFUL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 705
+    },
+    {
+        "song_title": "Isn't the Love of Jesus Something Wonderful?",
+        "tune_name": "WONDERFUL",
+        "great_hymns_of_the_faith": 450,
+        "rejoice_hymns": 545
+    },
+    {
+        "song_title": "It Came upon the Midnight Clear",
+        "tune_name": "CAROL",
+        "great_hymns_of_the_faith": 90,
+        "rejoice_hymns": 194
+    },
+    {
+        "song_title": "It Is Finished",
+        "tune_name": "NANCY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 299
+    },
+    {
+        "song_title": "It Is Glory Just to Walk with Him",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 476,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "It Is No Secret",
+        "tune_name": "IT IS NO SECRET",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 372
+    },
+    {
+        "song_title": "It Is Well with My Soul",
+        "tune_name": "VILLE DU HAVRE",
+        "great_hymns_of_the_faith": 256,
+        "rejoice_hymns": 529
+    },
+    {
+        "song_title": "It Took a Miracle",
+        "tune_name": "MONTROSE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 368
+    },
+    {
+        "song_title": "It Will Be Worth It All",
+        "tune_name": "WHEN WE SEE CHRIST",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 609
+    },
+    {
+        "song_title": "It's a Grand Thing to Be a Christian",
+        "tune_name": "TIPPERARY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 361
+    },
+    {
+        "song_title": "It's Friday, but Sunday's Comin'",
+        "tune_name": "HANKINS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 328
+    },
+    {
+        "song_title": "It's in His Name",
+        "tune_name": "SIMON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 242
+    },
+    {
+        "song_title": "It's Just Like His Great Love",
+        "tune_name": "GREAT LOVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 273
+    },
+    {
+        "song_title": "It's Just Like His Great Love",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 494,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I've a Home Beyond the River",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 499,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "I've Discovered the Way of Gladness",
+        "tune_name": "DISCOVERY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 447
+    },
+    {
+        "song_title": "I've Found a Friend",
+        "tune_name": "FRIEND",
+        "great_hymns_of_the_faith": 469,
+        "rejoice_hymns": 466
+    },
+    {
+        "song_title": "I've Got Peace Like a River",
+        "tune_name": "PEACE LIKE A RIVER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 530
+    },
+    {
+        "song_title": "Ivory Palaces",
+        "tune_name": "MONTREAT",
+        "great_hymns_of_the_faith": 115,
+        "rejoice_hymns": 611
+    },
+    {
+        "song_title": "Jerusalem, My Happy Home",
+        "tune_name": "LAND OF REST",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 628
+    },
+    {
+        "song_title": "Jesus Calls Us",
+        "tune_name": "GALILEE",
+        "great_hymns_of_the_faith": 374,
+        "rejoice_hymns": 440
+    },
+    {
+        "song_title": "Jesus Christ Is Risen Today",
+        "tune_name": "LLANFAIR",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 326
+    },
+    {
+        "song_title": "Jesus Is All the World to Me",
+        "tune_name": "ELIZABETH",
+        "great_hymns_of_the_faith": 470,
+        "rejoice_hymns": 272
+    },
+    {
+        "song_title": "Jesus Is Calling",
+        "tune_name": "CALLING TODAY",
+        "great_hymns_of_the_faith": 247,
+        "rejoice_hymns": 489
+    },
+    {
+        "song_title": "Jesus Is Coming Again",
+        "tune_name": "COMING AGAIN",
+        "great_hymns_of_the_faith": 151,
+        "rejoice_hymns": 589
+    },
+    {
+        "song_title": "Jesus Is Lord",
+        "tune_name": "HORTON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 72
+    },
+    {
+        "song_title": "Jesus Is the Sweetest Name I Know",
+        "tune_name": "LOVELY NAME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 243
+    },
+    {
+        "song_title": "Jesus Led Me All the Way",
+        "tune_name": "MARIE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 154
+    },
+    {
+        "song_title": "Jesus Loves Even Me",
+        "tune_name": "GLADNESS",
+        "great_hymns_of_the_faith": 492,
+        "rejoice_hymns": 689
+    },
+    {
+        "song_title": "Jesus Loves Me",
+        "tune_name": "CHINA",
+        "great_hymns_of_the_faith": 479,
+        "rejoice_hymns": 690
+    },
+    {
+        "song_title": "Jesus Loves Me (A Round)",
+        "tune_name": "LEOTA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 693
+    },
+    {
+        "song_title": "Jesus Loves the Little Children",
+        "tune_name": "CHILDREN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 694
+    },
+    {
+        "song_title": "Jesus Never Fails",
+        "tune_name": "JESUS NEVER FAILS",
+        "great_hymns_of_the_faith": 274,
+        "rejoice_hymns": 245
+    },
+    {
+        "song_title": "Jesus Paid It All",
+        "tune_name": "ALL TO CHRIST",
+        "great_hymns_of_the_faith": 125,
+        "rejoice_hymns": 276
+    },
+    {
+        "song_title": "Jesus Saves",
+        "tune_name": "LIMPSFIELD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 341
+    },
+    {
+        "song_title": "Jesus Saves!",
+        "tune_name": "JESUS SAVES",
+        "great_hymns_of_the_faith": 231,
+        "rejoice_hymns": 342
+    },
+    {
+        "song_title": "Jesus Shall Reign",
+        "tune_name": "DUKE STREET",
+        "great_hymns_of_the_faith": 142,
+        "rejoice_hymns": 250
+    },
+    {
+        "song_title": "Jesus! Jesus! Jesus!",
+        "tune_name": "LLANTHONY",
+        "great_hymns_of_the_faith": 65,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Jesus, and Shall It Ever Be?",
+        "tune_name": "FEDERAL STREET",
+        "great_hymns_of_the_faith": 400,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Jesus, at Your Holy Table",
+        "tune_name": "BEACH SPRING",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 331
+    },
+    {
+        "song_title": "Jesus, Draw Me Ever Nearer",
+        "tune_name": "EVER NEARER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 683
+    },
+    {
+        "song_title": "Jesus, I Am Resting, Resting",
+        "tune_name": "TRANQUILITY",
+        "great_hymns_of_the_faith": 57,
+        "rejoice_hymns": 462
+    },
+    {
+        "song_title": "Jesus, I Come",
+        "tune_name": "JESUS, I COME",
+        "great_hymns_of_the_faith": 242,
+        "rejoice_hymns": 488
+    },
+    {
+        "song_title": "Jesus, I My Cross Have Taken",
+        "tune_name": "ELLESDIE",
+        "great_hymns_of_the_faith": 390,
+        "rejoice_hymns": 427
+    },
+    {
+        "song_title": "Jesus, Lover of My Soul",
+        "tune_name": "MARTYN",
+        "great_hymns_of_the_faith": 352,
+        "rejoice_hymns": 240
+    },
+    {
+        "song_title": "Jesus, Name Above All Names",
+        "tune_name": "HEARN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 257
+    },
+    {
+        "song_title": "Jesus, Our Lord and King",
+        "tune_name": "TRENTHAM",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 40
+    },
+    {
+        "song_title": "Jesus, Savior, Pilot Me",
+        "tune_name": "PILOT",
+        "great_hymns_of_the_faith": 303,
+        "rejoice_hymns": 247
+    },
+    {
+        "song_title": "Jesus, the Very Thought of Thee",
+        "tune_name": "ST. AGNES",
+        "great_hymns_of_the_faith": 58,
+        "rejoice_hymns": 264
+    },
+    {
+        "song_title": "Jesus, Thou Joy of Loving Hearts",
+        "tune_name": "QUEBEC",
+        "great_hymns_of_the_faith": 66,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Jesus, Thy Blood and Righteousness",
+        "tune_name": "GERMANY",
+        "great_hymns_of_the_faith": 217,
+        "rejoice_hymns": 321
+    },
+    {
+        "song_title": "Jesus, Wonderful Lord!",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 102,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Joy in Serving Jesus",
+        "tune_name": "JOY IN SERVING",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 536
+    },
+    {
+        "song_title": "Joy to the World!",
+        "tune_name": "ANTIOCH",
+        "great_hymns_of_the_faith": 87,
+        "rejoice_hymns": 199
+    },
+    {
+        "song_title": "Joy Will Come in the Morning",
+        "tune_name": "HANDFORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 551
+    },
+    {
+        "song_title": "Joyful, Joyful, We Adore Thee",
+        "tune_name": "HYMN TO JOY",
+        "great_hymns_of_the_faith": 38,
+        "rejoice_hymns": 1
+    },
+    {
+        "song_title": "Just A Closer Walk with Thee",
+        "tune_name": "CLOSER WALK",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 426
+    },
+    {
+        "song_title": "Just As I Am",
+        "tune_name": "WOODWORTH",
+        "great_hymns_of_the_faith": 249,
+        "rejoice_hymns": 481
+    },
+    {
+        "song_title": "Just One Step at a Time",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 305,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Just Over in the Glory Land",
+        "tune_name": "GLORYLAND",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 604
+    },
+    {
+        "song_title": "King of Kings (A Round)",
+        "tune_name": "KING OF KINGS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 81
+    },
+    {
+        "song_title": "Lamb of Glory",
+        "tune_name": "LAMB OF GLORY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 261
+    },
+    {
+        "song_title": "Lead Me to Calvary",
+        "tune_name": "DUNCANNON",
+        "great_hymns_of_the_faith": 124,
+        "rejoice_hymns": 302
+    },
+    {
+        "song_title": "Lead Me, Lord",
+        "tune_name": "LEAD ME LORD",
+        "great_hymns_of_the_faith": 302,
+        "rejoice_hymns": 153
+    },
+    {
+        "song_title": "Lead On, O King Eternal",
+        "tune_name": "LANCASHIRE",
+        "great_hymns_of_the_faith": 407,
+        "rejoice_hymns": 140
+    },
+    {
+        "song_title": "Leaning on the Everlasting Arms",
+        "tune_name": "SHOWALTER",
+        "great_hymns_of_the_faith": 460,
+        "rejoice_hymns": 139
+    },
+    {
+        "song_title": "Learning to Lean",
+        "tune_name": "LEARNING TO LEAN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 138
+    },
+    {
+        "song_title": "Leave It There",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 353,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Let All the World in Every Corner Sing",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 534,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Let All Things Now Living",
+        "tune_name": "ASH GROVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 63
+    },
+    {
+        "song_title": "Let Jesus Come into Your Heart",
+        "tune_name": "MCCONNELSVILLE",
+        "great_hymns_of_the_faith": 244,
+        "rejoice_hymns": 348
+    },
+    {
+        "song_title": "Let the Lower Lights Be Burning",
+        "tune_name": "LOWER LIGHTS",
+        "great_hymns_of_the_faith": 371,
+        "rejoice_hymns": 646
+    },
+    {
+        "song_title": "Let Us Break Bread Together",
+        "tune_name": "BREAK BREAD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 333
+    },
+    {
+        "song_title": "Lift High the Cross",
+        "tune_name": "CRUCIFER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 312
+    },
+    {
+        "song_title": "Lift Him Up!",
+        "tune_name": "GADDY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 73
+    },
+    {
+        "song_title": "Lift Up the Cross",
+        "tune_name": "LIFT UP THE CROSS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 283
+    },
+    {
+        "song_title": "Lift Up Your Heads",
+        "tune_name": "LIFT UP YOUR HEADS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 596
+    },
+    {
+        "song_title": "Lift Up, Lift Up Your Voices Now",
+        "tune_name": "WALTHAM",
+        "great_hymns_of_the_faith": 131,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Like a River Glorious",
+        "tune_name": "WYE VALLEY",
+        "great_hymns_of_the_faith": 287,
+        "rejoice_hymns": 549
+    },
+    {
+        "song_title": "Like A River Glorious (Descant - last stanza only)",
+        "tune_name": "WYE VALLEY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 550
+    },
+    {
+        "song_title": "Listen For The Trumpet",
+        "tune_name": "GLADD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 585
+    },
+    {
+        "song_title": "Living for Jesus",
+        "tune_name": "LIVING",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 475
+    },
+    {
+        "song_title": "Lo! He Comes, with Clouds Descending",
+        "tune_name": "SICILIAN MARINERS",
+        "great_hymns_of_the_faith": 152,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Lo! How a Rose E'er Blooming",
+        "tune_name": "ES IST EIN ROS'",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 229
+    },
+    {
+        "song_title": "Look and Live",
+        "tune_name": "LOOK AND LIVE",
+        "great_hymns_of_the_faith": 195,
+        "rejoice_hymns": 354
+    },
+    {
+        "song_title": "Look to the Lamb of God",
+        "tune_name": "LOOK TO THE LAMB",
+        "great_hymns_of_the_faith": 216,
+        "rejoice_hymns": 358
+    },
+    {
+        "song_title": "Look, Ye Saints! The Sight Is Glorious",
+        "tune_name": "CORONAE",
+        "great_hymns_of_the_faith": 141,
+        "rejoice_hymns": 34
+    },
+    {
+        "song_title": "Lord God, Our Thanks to Thee We Raise",
+        "tune_name": "BREWSTER",
+        "great_hymns_of_the_faith": 180,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Lord of My Heart",
+        "tune_name": "BRODY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 471
+    },
+    {
+        "song_title": "Lord, Be Glorified",
+        "tune_name": "BE GLORIFIED",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 464
+    },
+    {
+        "song_title": "Lord, Bless Our Home",
+        "tune_name": "EMORY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 635
+    },
+    {
+        "song_title": "Lord, Dismiss Us with Thy Blessing",
+        "tune_name": "SICILIAN MARINERS",
+        "great_hymns_of_the_faith": 80,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Lord, Here Am I",
+        "tune_name": "BECK",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 653
+    },
+    {
+        "song_title": "Lord, I Need You",
+        "tune_name": "GIBBS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 505
+    },
+    {
+        "song_title": "Lord, I'm Coming Home",
+        "tune_name": "COMING HOME",
+        "great_hymns_of_the_faith": 253,
+        "rejoice_hymns": 483
+    },
+    {
+        "song_title": "Lord, Lay Some Soul Upon My Heart",
+        "tune_name": "IRA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 648
+    },
+    {
+        "song_title": "Lord, Send Me Anywhere",
+        "tune_name": "LIVINGSTONE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 654
+    },
+    {
+        "song_title": "Lord, Speak to Me",
+        "tune_name": "CANONBURY",
+        "great_hymns_of_the_faith": 435,
+        "rejoice_hymns": 438
+    },
+    {
+        "song_title": "Lord, You've Been Faithful",
+        "tune_name": "DEAN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 120
+    },
+    {
+        "song_title": "Love Divine, All Loves Excelling",
+        "tune_name": "BEECHER",
+        "great_hymns_of_the_faith": 2,
+        "rejoice_hymns": 100
+    },
+    {
+        "song_title": "Love Found a Way",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 471,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Love Lifted Me",
+        "tune_name": "SAFETY",
+        "great_hymns_of_the_faith": 441,
+        "rejoice_hymns": 115
+    },
+    {
+        "song_title": "Loyalty to Christ",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 408,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Majestic Sweetness Sits Enthroned",
+        "tune_name": "ORTONVILLE",
+        "great_hymns_of_the_faith": 52,
+        "rejoice_hymns": 78
+    },
+    {
+        "song_title": "Make Me a Blessing",
+        "tune_name": "SCHULER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 437
+    },
+    {
+        "song_title": "Make Me a Channel of Blessing",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 331,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Make Me a Servant",
+        "tune_name": "SERVANT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 430
+    },
+    {
+        "song_title": "Make Me a Stranger",
+        "tune_name": "PILGRIMAGE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 432
+    },
+    {
+        "song_title": "Mansion Over the Hilltop",
+        "tune_name": "I'VE GOT A MANSION",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 629
+    },
+    {
+        "song_title": "March of the Wise Men",
+        "tune_name": "PYLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 234
+    },
+    {
+        "song_title": "Master, the Tempest Is Raging",
+        "tune_name": "PEACE BE STILL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 543
+    },
+    {
+        "song_title": "May Jesus Christ Be Praised",
+        "tune_name": "LAUDES DOMINI",
+        "great_hymns_of_the_faith": 73,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "May the Lord Find Us Faithful",
+        "tune_name": "2 TIMOTHY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 429
+    },
+    {
+        "song_title": "May the Mind of Christ, My Savior",
+        "tune_name": "ST. LEONARDS",
+        "great_hymns_of_the_faith": 333,
+        "rejoice_hymns": 169
+    },
+    {
+        "song_title": "Maybe Today",
+        "tune_name": "GRACE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 582
+    },
+    {
+        "song_title": "Meet Me There",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 506,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Mercies Anew",
+        "tune_name": "MERCIES ANEW",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 94
+    },
+    {
+        "song_title": "Molding a Masterpiece",
+        "tune_name": "HUMMEL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 439
+    },
+    {
+        "song_title": "Moment by Moment",
+        "tune_name": "WHITTLE",
+        "great_hymns_of_the_faith": 280,
+        "rejoice_hymns": 503
+    },
+    {
+        "song_title": "More About Jesus",
+        "tune_name": "SWENEY",
+        "great_hymns_of_the_faith": 326,
+        "rejoice_hymns": 433
+    },
+    {
+        "song_title": "More Holiness Give Me",
+        "tune_name": "MY PRAYER",
+        "great_hymns_of_the_faith": 362,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "More Like the Master",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 325,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "More Love",
+        "tune_name": "MORE LOVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 110
+    },
+    {
+        "song_title": "More Love to Thee",
+        "tune_name": "MORE LOVE TO THEE",
+        "great_hymns_of_the_faith": 323,
+        "rejoice_hymns": 473
+    },
+    {
+        "song_title": "More Precious than Silver",
+        "tune_name": "MORE PRECIOUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 95
+    },
+    {
+        "song_title": "More Secure Is No One Ever",
+        "tune_name": "TRYGGARE KAN INGEN VARA",
+        "great_hymns_of_the_faith": 300,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Must I Go, and Empty-Handed?",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 418,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Must Jesus Bear the Cross Alone?",
+        "tune_name": "MAITLAND",
+        "great_hymns_of_the_faith": 342,
+        "rejoice_hymns": 287
+    },
+    {
+        "song_title": "My Anchor Holds",
+        "tune_name": "MY ANCHOR HOLDS",
+        "great_hymns_of_the_faith": 271,
+        "rejoice_hymns": 178
+    },
+    {
+        "song_title": "My Country, 'Tis of Thee",
+        "tune_name": "AMERICA",
+        "great_hymns_of_the_faith": 529,
+        "rejoice_hymns": 698
+    },
+    {
+        "song_title": "My Desire",
+        "tune_name": "MY DESIRE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 394
+    },
+    {
+        "song_title": "My Faith Has Found a Resting Place",
+        "tune_name": "LANDAS",
+        "great_hymns_of_the_faith": 228,
+        "rejoice_hymns": 389
+    },
+    {
+        "song_title": "My Faith Looks Up to Thee",
+        "tune_name": "OLIVET",
+        "great_hymns_of_the_faith": 359,
+        "rejoice_hymns": 378
+    },
+    {
+        "song_title": "My Father Planned It All",
+        "tune_name": "OMNIPOTENCE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 145
+    },
+    {
+        "song_title": "My God Is a Righteous God",
+        "tune_name": "REAGAN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 98
+    },
+    {
+        "song_title": "My Heart's Prayer",
+        "tune_name": "SAN GABRIEL",
+        "great_hymns_of_the_faith": 399,
+        "rejoice_hymns": 517
+    },
+    {
+        "song_title": "My Home, Sweet Home",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 503,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "My Hope Is in the Lord",
+        "tune_name": "WAKEFIELD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 344
+    },
+    {
+        "song_title": "My Jesus, Fair",
+        "tune_name": "TERRACE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 316
+    },
+    {
+        "song_title": "My Jesus, I Love Thee",
+        "tune_name": "GORDON",
+        "great_hymns_of_the_faith": 332,
+        "rejoice_hymns": 472
+    },
+    {
+        "song_title": "My Life Is Thine",
+        "tune_name": "MY LIFE IS THINE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 407
+    },
+    {
+        "song_title": "My Life Is Yours to Control",
+        "tune_name": "COACH",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 418
+    },
+    {
+        "song_title": "My Redeemer",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 488,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "My Savior",
+        "tune_name": "GREENWELL",
+        "great_hymns_of_the_faith": 226,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "My Savior First of All",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 502,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "My Savior's Love",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 452,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "My Shepherd Will Supply My Need",
+        "tune_name": "RESIGNATION",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 146
+    },
+    {
+        "song_title": "My Sins Are Blotted Out, I Know",
+        "tune_name": "DUNLOP",
+        "great_hymns_of_the_faith": 200,
+        "rejoice_hymns": 339
+    },
+    {
+        "song_title": "My Song",
+        "tune_name": "JONES",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 62
+    },
+    {
+        "song_title": "My Soul, Be on Thy Guard",
+        "tune_name": "LABAN",
+        "great_hymns_of_the_faith": 405,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "My Times Are in Thy Hand",
+        "tune_name": "SHARALINA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 624
+    },
+    {
+        "song_title": "My Wonderful Lord",
+        "tune_name": "MY WONDERFUL LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 117
+    },
+    {
+        "song_title": "Near the Cross",
+        "tune_name": "NEAR THE CROSS",
+        "great_hymns_of_the_faith": 351,
+        "rejoice_hymns": 313
+    },
+    {
+        "song_title": "Near to the Heart to God",
+        "tune_name": "MCAFEE",
+        "great_hymns_of_the_faith": 356,
+        "rejoice_hymns": 510
+    },
+    {
+        "song_title": "Near to Thy Heart",
+        "tune_name": "SUSQUEHANNA",
+        "great_hymns_of_the_faith": 322,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Nearer, My God, to Thee",
+        "tune_name": "BETHANY",
+        "great_hymns_of_the_faith": 357,
+        "rejoice_hymns": 502
+    },
+    {
+        "song_title": "Nearer, Still Nearer",
+        "tune_name": "MORRIS",
+        "great_hymns_of_the_faith": 340,
+        "rejoice_hymns": 511
+    },
+    {
+        "song_title": "Never Alone",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 281,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "No One Ever Cared for Me Like Jesus",
+        "tune_name": "WEIGLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 155
+    },
+    {
+        "song_title": "No One Understands Like Jesus",
+        "tune_name": "NO ONE UNDERSTANDS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 684
+    },
+    {
+        "song_title": "No Other Name",
+        "tune_name": "NO OTHER NAME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 345
+    },
+    {
+        "song_title": "No, Not Desparingly",
+        "tune_name": "KEDRON",
+        "great_hymns_of_the_faith": 193,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "No, Not One!",
+        "tune_name": "HARPER MEMORIAL",
+        "great_hymns_of_the_faith": 445,
+        "rejoice_hymns": 271
+    },
+    {
+        "song_title": "Nor Silver nor Gold",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 215,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Not I, but Christ",
+        "tune_name": "CASEY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 469
+    },
+    {
+        "song_title": "Nothing Between",
+        "tune_name": "NOTHING BETWEEN",
+        "great_hymns_of_the_faith": 321,
+        "rejoice_hymns": 501
+    },
+    {
+        "song_title": "Nothing But the Blood",
+        "tune_name": "PLAINFIELD",
+        "great_hymns_of_the_faith": 212,
+        "rejoice_hymns": 308
+    },
+    {
+        "song_title": "Nothing Is Impossible",
+        "tune_name": "NOTHING IS IMPOSSIBLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 703
+    },
+    {
+        "song_title": "Now I Belong to Jesus",
+        "tune_name": "ELLSWORTH",
+        "great_hymns_of_the_faith": 487,
+        "rejoice_hymns": 352
+    },
+    {
+        "song_title": "Now Thank We All Our God",
+        "tune_name": "NUN DANKET",
+        "great_hymns_of_the_faith": 18,
+        "rejoice_hymns": 557
+    },
+    {
+        "song_title": "Now the Day Is Over",
+        "tune_name": "MERRIAL",
+        "great_hymns_of_the_faith": 74,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O Breath of Life",
+        "tune_name": "CORONADO",
+        "great_hymns_of_the_faith": 170,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O Church, Arise",
+        "tune_name": "O CHURCH, ARISE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 661
+    },
+    {
+        "song_title": "O Come, All Ye Faithful",
+        "tune_name": "ADESTE FIDELES",
+        "great_hymns_of_the_faith": 100,
+        "rejoice_hymns": 189
+    },
+    {
+        "song_title": "O Come, O Come, Emmanuel",
+        "tune_name": "VENI EMMANUEL",
+        "great_hymns_of_the_faith": 83,
+        "rejoice_hymns": 208
+    },
+    {
+        "song_title": "O Day of Rest and Gladness",
+        "tune_name": "MENDEBRAS",
+        "great_hymns_of_the_faith": 68,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O for a Closer Walk with God",
+        "tune_name": "BEATITUDO",
+        "great_hymns_of_the_faith": 336,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O for a Faith That Will Not Shrink",
+        "tune_name": "EVAN",
+        "great_hymns_of_the_faith": 327,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O for a Heart to Praise My God",
+        "tune_name": "AZMON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 20
+    },
+    {
+        "song_title": "O for a Thousand Tongues",
+        "tune_name": "AZMON",
+        "great_hymns_of_the_faith": 46,
+        "rejoice_hymns": 19
+    },
+    {
+        "song_title": "O for a Thousand Tongues",
+        "tune_name": "LYNGHAM",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 18
+    },
+    {
+        "song_title": "O God, My Joy",
+        "tune_name": "GOD MY JOY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 533
+    },
+    {
+        "song_title": "O God, Our Help in Ages Past",
+        "tune_name": "ST. ANNE",
+        "great_hymns_of_the_faith": 10,
+        "rejoice_hymns": 24
+    },
+    {
+        "song_title": "O Grant Thy Touch",
+        "tune_name": "LINDSBORG",
+        "great_hymns_of_the_faith": 338,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O Great God",
+        "tune_name": "O GREAT GOD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 76
+    },
+    {
+        "song_title": "O Happy Day",
+        "tune_name": "HAPPY DAY",
+        "great_hymns_of_the_faith": 207,
+        "rejoice_hymns": 547
+    },
+    {
+        "song_title": "O Hearken Ye",
+        "tune_name": "O HEARKEN YE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 222
+    },
+    {
+        "song_title": "O Holy Night!",
+        "tune_name": "CANTIQUE DE NOEL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 192
+    },
+    {
+        "song_title": "O How He Loves You and Me",
+        "tune_name": "PATRICIA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 103
+    },
+    {
+        "song_title": "O How I Love Jesus",
+        "tune_name": "O HOW I LOVE JESUS",
+        "great_hymns_of_the_faith": 483,
+        "rejoice_hymns": 248
+    },
+    {
+        "song_title": "O How I Love the Savior's Name",
+        "tune_name": "SAVIOR'S NAME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 259
+    },
+    {
+        "song_title": "O I Want to Be Like Jesus",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 320,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O It Is Wonderful to Be a Christian",
+        "tune_name": "IT IS WONDERFUL",
+        "great_hymns_of_the_faith": 461,
+        "rejoice_hymns": 463
+    },
+    {
+        "song_title": "O Jesus, I Have Promised",
+        "tune_name": "ANGEL'S STORY",
+        "great_hymns_of_the_faith": 392,
+        "rejoice_hymns": 398
+    },
+    {
+        "song_title": "O Jesus, Thou Art Standing",
+        "tune_name": "ST. HILDA",
+        "great_hymns_of_the_faith": 238,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O Little Town of Bethlehem",
+        "tune_name": "ST. LOUIS",
+        "great_hymns_of_the_faith": 92,
+        "rejoice_hymns": 226
+    },
+    {
+        "song_title": "O Love That Wilt Not Let Me Go",
+        "tune_name": "ST. MARGARET",
+        "great_hymns_of_the_faith": 339,
+        "rejoice_hymns": 109
+    },
+    {
+        "song_title": "O Magnify the Lord",
+        "tune_name": "WARREN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 25
+    },
+    {
+        "song_title": "O Master, Let Me Walk with Thee",
+        "tune_name": "MARYTON",
+        "great_hymns_of_the_faith": 437,
+        "rejoice_hymns": 448
+    },
+    {
+        "song_title": "O Mighty Cross",
+        "tune_name": "O MIGHTY CROSS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 291
+    },
+    {
+        "song_title": "O Perfect Love",
+        "tune_name": "O PERFECT LOVE",
+        "great_hymns_of_the_faith": 312,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O Sacred Head, Now Wounded",
+        "tune_name": "PASSION CHORALE",
+        "great_hymns_of_the_faith": 116,
+        "rejoice_hymns": 289
+    },
+    {
+        "song_title": "O Say, but I'm Glad",
+        "tune_name": "SULLIVAN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 526
+    },
+    {
+        "song_title": "O Sing a Song of Bethlehem",
+        "tune_name": "KINGSFOLD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 219
+    },
+    {
+        "song_title": "O That Will Be Glory",
+        "tune_name": "GLORY SONG",
+        "great_hymns_of_the_faith": 505,
+        "rejoice_hymns": 586
+    },
+    {
+        "song_title": "O the Blood of Jesus",
+        "tune_name": "O THE BLOOD OF JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 282
+    },
+    {
+        "song_title": "O the Deep, Deep Love of Jesus",
+        "tune_name": "BUNESSAN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 99
+    },
+    {
+        "song_title": "O the Deep, Deep Love of Jesus",
+        "tune_name": "EBENEZER",
+        "great_hymns_of_the_faith": 61,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O Thou, in Whose Presence",
+        "tune_name": "DAVIS",
+        "great_hymns_of_the_faith": 277,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O to Be Like Thee",
+        "tune_name": "RONDEINELLA",
+        "great_hymns_of_the_faith": 316,
+        "rejoice_hymns": 450
+    },
+    {
+        "song_title": "O Where Are Kings and Empires Now",
+        "tune_name": "ST. ANNE",
+        "great_hymns_of_the_faith": 182,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O Wondrous Love",
+        "tune_name": "O WONDROUS LOVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 105
+    },
+    {
+        "song_title": "O Word of God Incarnate",
+        "tune_name": "MUNICH",
+        "great_hymns_of_the_faith": 172,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "O Worship the King",
+        "tune_name": "LYONS",
+        "great_hymns_of_the_faith": 1,
+        "rejoice_hymns": 27
+    },
+    {
+        "song_title": "O Zion, Haste",
+        "tune_name": "TIDINGS",
+        "great_hymns_of_the_faith": 430,
+        "rejoice_hymns": 657
+    },
+    {
+        "song_title": "Obedience",
+        "tune_name": "OBEDIENCE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 691
+    },
+    {
+        "song_title": "Oh, He's a Wonderful Savior",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 41,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "On Christ I Stand",
+        "tune_name": "CONNIE LYNN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 380
+    },
+    {
+        "song_title": "On Jordan's Stormy Banks",
+        "tune_name": "PROMISED LAND",
+        "great_hymns_of_the_faith": 517,
+        "rejoice_hymns": 615
+    },
+    {
+        "song_title": "Once for All",
+        "tune_name": "ONCE FOR ALL",
+        "great_hymns_of_the_faith": 205,
+        "rejoice_hymns": 371
+    },
+    {
+        "song_title": "Once in Royal David's City",
+        "tune_name": "IRBY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 196
+    },
+    {
+        "song_title": "Once to Every Man and Nation",
+        "tune_name": "EBENEZER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 672
+    },
+    {
+        "song_title": "One Day",
+        "tune_name": "CHAPMAN",
+        "great_hymns_of_the_faith": 103,
+        "rejoice_hymns": 595
+    },
+    {
+        "song_title": "One Small Child",
+        "tune_name": "ONE SMALL CHILD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 235
+    },
+    {
+        "song_title": "Only a Sinner",
+        "tune_name": "ONLY A SINNER",
+        "great_hymns_of_the_faith": 474,
+        "rejoice_hymns": 356
+    },
+    {
+        "song_title": "Only Believe",
+        "tune_name": "ONLY BELIEVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 131
+    },
+    {
+        "song_title": "Only One Life",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 395,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Only Trust Him",
+        "tune_name": "STOCKTON",
+        "great_hymns_of_the_faith": 252,
+        "rejoice_hymns": 478
+    },
+    {
+        "song_title": "Onward, Christian Soldiers",
+        "tune_name": "ST. GERTRUDE",
+        "great_hymns_of_the_faith": 181,
+        "rejoice_hymns": 660
+    },
+    {
+        "song_title": "Open My Eyes, That I May See",
+        "tune_name": "SCOTT",
+        "great_hymns_of_the_faith": 163,
+        "rejoice_hymns": 515
+    },
+    {
+        "song_title": "Open Our Eyes",
+        "tune_name": "OPEN OUR EYES",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 514
+    },
+    {
+        "song_title": "Open Our Eyes",
+        "tune_name": "SALTER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 500
+    },
+    {
+        "song_title": "Open Wide, Ye Doors",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 140,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Opened for Me",
+        "tune_name": "A FOUNTAIN",
+        "great_hymns_of_the_faith": 120,
+        "rejoice_hymns": 314
+    },
+    {
+        "song_title": "Our Great Savior",
+        "tune_name": "HYFRYDOL",
+        "great_hymns_of_the_faith": 49,
+        "rejoice_hymns": 241
+    },
+    {
+        "song_title": "Our Thanks, O God, for Fathers",
+        "tune_name": "SOLIE",
+        "great_hymns_of_the_faith": 522,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Over the Sunset Mountains",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 518,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Pass Me Not, O Gentle Savior",
+        "tune_name": "PASS ME NOT",
+        "great_hymns_of_the_faith": 235,
+        "rejoice_hymns": 492
+    },
+    {
+        "song_title": "Peace, Perfect Peace",
+        "tune_name": "PAX TECUM",
+        "great_hymns_of_the_faith": 285,
+        "rejoice_hymns": 548
+    },
+    {
+        "song_title": "Praise Him! Praise Him!",
+        "tune_name": "JOYFUL SONG",
+        "great_hymns_of_the_faith": 442,
+        "rejoice_hymns": 39
+    },
+    {
+        "song_title": "Praise Him, All Ye Little Children",
+        "tune_name": "BONNER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 692
+    },
+    {
+        "song_title": "Praise Our God",
+        "tune_name": "KENT",
+        "great_hymns_of_the_faith": 7,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Praise the Lord! Ye Heavens, Adore Him",
+        "tune_name": "LEDO",
+        "great_hymns_of_the_faith": 29,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Praise the Savior",
+        "tune_name": "ACCLAIM",
+        "great_hymns_of_the_faith": 51,
+        "rejoice_hymns": 22
+    },
+    {
+        "song_title": "Praise to the Lord, the Almighty",
+        "tune_name": "LOBE DEN HERREN",
+        "great_hymns_of_the_faith": 13,
+        "rejoice_hymns": 74
+    },
+    {
+        "song_title": "Praise Ye Jehovah",
+        "tune_name": "ANNIVERSARY HYMN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 49
+    },
+    {
+        "song_title": "Praise Ye the Triune God",
+        "tune_name": "FLEMMING",
+        "great_hymns_of_the_faith": 4,
+        "rejoice_hymns": 66
+    },
+    {
+        "song_title": "Praise, My Soul, the King of Heaven",
+        "tune_name": "LAUDA ANIMA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 30
+    },
+    {
+        "song_title": "Praise, My Soul, the King of Heaven",
+        "tune_name": "ZION",
+        "great_hymns_of_the_faith": 35,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Precious Lord, Take My Hand",
+        "tune_name": "PRECIOUS LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 504
+    },
+    {
+        "song_title": "Precious Name",
+        "tune_name": "PRECIOUS NAME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 707
+    },
+    {
+        "song_title": "Ready",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 429,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Redeemed",
+        "tune_name": "ADA",
+        "great_hymns_of_the_faith": 475,
+        "rejoice_hymns": 336
+    },
+    {
+        "song_title": "Redeemed, How I Love to Proclaim It",
+        "tune_name": "REDEEMED",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 335
+    },
+    {
+        "song_title": "Rejoice – the Lord Is King!",
+        "tune_name": "DARWALL",
+        "great_hymns_of_the_faith": 143,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Rejoice in the Lord",
+        "tune_name": "SHERRILYN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 680
+    },
+    {
+        "song_title": "Rejoice in the Lord Always",
+        "tune_name": "REJOICE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 620
+    },
+    {
+        "song_title": "Rejoice, the Lord Is King",
+        "tune_name": "DARWAL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 43
+    },
+    {
+        "song_title": "Rejoice, Ye Pure in Heart",
+        "tune_name": "MARION",
+        "great_hymns_of_the_faith": 26,
+        "rejoice_hymns": 568
+    },
+    {
+        "song_title": "Rescue the Perishing",
+        "tune_name": "RESCUE",
+        "great_hymns_of_the_faith": 432,
+        "rejoice_hymns": 343
+    },
+    {
+        "song_title": "Revive Us Again",
+        "tune_name": "REVIVE US AGAIN",
+        "great_hymns_of_the_faith": 485,
+        "rejoice_hymns": 636
+    },
+    {
+        "song_title": "Ride On! Ride On in Majesty!",
+        "tune_name": "ST. DROSTANE",
+        "great_hymns_of_the_faith": 109,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Ring the Bells",
+        "tune_name": "BOLLBACK",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 210
+    },
+    {
+        "song_title": "Ring the Bells of Heaven",
+        "tune_name": "RING THE BELLS",
+        "great_hymns_of_the_faith": 458,
+        "rejoice_hymns": 367
+    },
+    {
+        "song_title": "Rise Up, O Men of God",
+        "tune_name": "ST. THOMAS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 662
+    },
+    {
+        "song_title": "Rise Up, O Men of God!",
+        "tune_name": "FESTAL SONG",
+        "great_hymns_of_the_faith": 380,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Rock of Ages",
+        "tune_name": "TOPLADY",
+        "great_hymns_of_the_faith": 126,
+        "rejoice_hymns": 392
+    },
+    {
+        "song_title": "Room at the Cross for You",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 243,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Safely Through Another Week",
+        "tune_name": "SABBATH",
+        "great_hymns_of_the_faith": 69,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Satisfied",
+        "tune_name": "SATISIFIED",
+        "great_hymns_of_the_faith": 446,
+        "rejoice_hymns": 359
+    },
+    {
+        "song_title": "Saved by Grace",
+        "tune_name": "SAVED BY GRACE",
+        "great_hymns_of_the_faith": 512,
+        "rejoice_hymns": 350
+    },
+    {
+        "song_title": "Saved by the Blood",
+        "tune_name": "GLORY, I'M SAVED",
+        "great_hymns_of_the_faith": 210,
+        "rejoice_hymns": 375
+    },
+    {
+        "song_title": "Saved, Saved!",
+        "tune_name": "RAPTURE",
+        "great_hymns_of_the_faith": 230,
+        "rejoice_hymns": 373
+    },
+    {
+        "song_title": "Savior, Again to Thy Dear Name",
+        "tune_name": "ELLERS",
+        "great_hymns_of_the_faith": 81,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Savior, Breathe an Evening Blessing",
+        "tune_name": "EVENING PRAYER",
+        "great_hymns_of_the_faith": 76,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Savior, Like a Shepherd Lead Us",
+        "tune_name": "BRADBURY",
+        "great_hymns_of_the_faith": 294,
+        "rejoice_hymns": 135
+    },
+    {
+        "song_title": "Savior, More Than Life to Me",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 304,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Search Me",
+        "tune_name": "DEANNA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 499
+    },
+    {
+        "song_title": "Search Me, O God",
+        "tune_name": "MAORI",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 497
+    },
+    {
+        "song_title": "Seek Ye First",
+        "tune_name": "LAFFERTY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 411
+    },
+    {
+        "song_title": "Seeking the Lost",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 425,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Send the Light",
+        "tune_name": "MCCABE",
+        "great_hymns_of_the_faith": 424,
+        "rejoice_hymns": 656
+    },
+    {
+        "song_title": "Servant's Heart",
+        "tune_name": "COLLIER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 431
+    },
+    {
+        "song_title": "Shall We Gather At The River?",
+        "tune_name": "HANSON PLACE",
+        "great_hymns_of_the_faith": 510,
+        "rejoice_hymns": 612
+    },
+    {
+        "song_title": "Shepherd of Eager Youth",
+        "tune_name": "ITALIAN HYMN",
+        "great_hymns_of_the_faith": 60,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Silent Night, Holy Night",
+        "tune_name": "STILLE NACHT",
+        "great_hymns_of_the_faith": 85,
+        "rejoice_hymns": 190
+    },
+    {
+        "song_title": "Since I Have Been Redeemed",
+        "tune_name": "OTHELLO",
+        "great_hymns_of_the_faith": 467,
+        "rejoice_hymns": 337
+    },
+    {
+        "song_title": "Since Jesus Came into My Heart",
+        "tune_name": "MCDANIEL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 351
+    },
+    {
+        "song_title": "Since the Savior Found Me",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 493,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Sing Hallelujah",
+        "tune_name": "SING HALLELUJAH",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 58
+    },
+    {
+        "song_title": "Sing Praise to God",
+        "tune_name": "MIT FREUDEN ZART",
+        "great_hymns_of_the_faith": 3,
+        "rejoice_hymns": 75
+    },
+    {
+        "song_title": "Sing We Now of Christmas",
+        "tune_name": "FRENCH CAROL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 202
+    },
+    {
+        "song_title": "Singing I Go",
+        "tune_name": "SINGING I GO",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 539
+    },
+    {
+        "song_title": "Sitting at the Feet of Jesus",
+        "tune_name": "CONSTANCY",
+        "great_hymns_of_the_faith": 329,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "So Send I You",
+        "tune_name": "TORONTO",
+        "great_hymns_of_the_faith": 416,
+        "rejoice_hymns": 655
+    },
+    {
+        "song_title": "Softly and Tenderly",
+        "tune_name": "THOMPSON",
+        "great_hymns_of_the_faith": 246,
+        "rejoice_hymns": 484
+    },
+    {
+        "song_title": "Softly Now the Light of Day",
+        "tune_name": "SEYMOUR",
+        "great_hymns_of_the_faith": 79,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Soldiers of Christ, Arise",
+        "tune_name": "DIADEMATA",
+        "great_hymns_of_the_faith": 403,
+        "rejoice_hymns": 659
+    },
+    {
+        "song_title": "Some Golden Daybreak",
+        "tune_name": "DAYBREAK",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 591
+    },
+    {
+        "song_title": "Something for Thee",
+        "tune_name": "SOMETHING FOR JESUS",
+        "great_hymns_of_the_faith": 341,
+        "rejoice_hymns": 423
+    },
+    {
+        "song_title": "Song for the Nations",
+        "tune_name": "SONG FOR THE NATIONS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 468
+    },
+    {
+        "song_title": "Sooner or Later",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 146,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Sound the Battle Cry",
+        "tune_name": "BATTLE CRY",
+        "great_hymns_of_the_faith": 413,
+        "rejoice_hymns": 671
+    },
+    {
+        "song_title": "Speak, Lord",
+        "tune_name": "SPEAK, LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 512
+    },
+    {
+        "song_title": "Speak, Lord, in the Stillness",
+        "tune_name": "QUIET HOUR",
+        "great_hymns_of_the_faith": 360,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Speak, O Lord",
+        "tune_name": "SPEAK, O LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 513
+    },
+    {
+        "song_title": "Spirit of God, Descend upon My Heart",
+        "tune_name": "MORECAMBE",
+        "great_hymns_of_the_faith": 171,
+        "rejoice_hymns": 520
+    },
+    {
+        "song_title": "Spirit of the Living God, fall fresh on me",
+        "tune_name": "IVERSON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 519
+    },
+    {
+        "song_title": "Springs of Living Water",
+        "tune_name": "LIVING WATER",
+        "great_hymns_of_the_faith": 465,
+        "rejoice_hymns": 369
+    },
+    {
+        "song_title": "Stand Up and Bless the Lord",
+        "tune_name": "ALTUS",
+        "great_hymns_of_the_faith": 33,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Stand Up and Bless the Lord",
+        "tune_name": "OLD 134TH",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 64
+    },
+    {
+        "song_title": "Stand Up, Stand Up for Jesus",
+        "tune_name": "GEIBEL",
+        "great_hymns_of_the_faith": 377,
+        "rejoice_hymns": 663
+    },
+    {
+        "song_title": "Stand Up, Stand Up for Jesus",
+        "tune_name": "WEBB",
+        "great_hymns_of_the_faith": 378,
+        "rejoice_hymns": 665
+    },
+    {
+        "song_title": "Standing on the Promises",
+        "tune_name": "PROMISES",
+        "great_hymns_of_the_faith": 175,
+        "rejoice_hymns": 395
+    },
+    {
+        "song_title": "Stepping in the Light",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 313,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Still Sweeter Every Day",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 484,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Still, Still with Thee",
+        "tune_name": "CONSOLATION",
+        "great_hymns_of_the_faith": 72,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Still, Still, Still",
+        "tune_name": "STILL, STILL, STILL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 230
+    },
+    {
+        "song_title": "Strong in Salvation",
+        "tune_name": "SALVATION",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 80
+    },
+    {
+        "song_title": "Sun of My Soul",
+        "tune_name": "HURSLEY",
+        "great_hymns_of_the_faith": 77,
+        "rejoice_hymns": 142
+    },
+    {
+        "song_title": "Sunlight",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 481,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Sunshine in My Soul",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 462,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Surely Goodness and Mercy",
+        "tune_name": "GOODNESS",
+        "great_hymns_of_the_faith": 292,
+        "rejoice_hymns": 544
+    },
+    {
+        "song_title": "Sweet Beulah Land",
+        "tune_name": "PARSONS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 631
+    },
+    {
+        "song_title": "Sweet By and By",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 504,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Sweet Hour of Prayer",
+        "tune_name": "SWEET HOUR",
+        "great_hymns_of_the_faith": 361,
+        "rejoice_hymns": 516
+    },
+    {
+        "song_title": "Sweet Peace, the Gift of God’s Love",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 284,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Sweeter as the Years Go By",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 486,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Take My Life, and Let it Be Consecrated",
+        "tune_name": "HENDON",
+        "great_hymns_of_the_faith": 393,
+        "rejoice_hymns": 405
+    },
+    {
+        "song_title": "Take the Name of Jesus with You",
+        "tune_name": "PRECIOUS NAME",
+        "great_hymns_of_the_faith": 63,
+        "rejoice_hymns": 652
+    },
+    {
+        "song_title": "Take the World, but Give Me Jesus",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 385,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Take Time to Be Holy",
+        "tune_name": "HOLINESS",
+        "great_hymns_of_the_faith": 376,
+        "rejoice_hymns": 413
+    },
+    {
+        "song_title": "Teach Me Thy Way, O Lord",
+        "tune_name": "CAMACHA",
+        "great_hymns_of_the_faith": 337,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Teach Me to Pray",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 346,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Teach Me to Trust",
+        "tune_name": "DINJAN",
+        "great_hymns_of_the_faith": 350,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Teach Me Your Word",
+        "tune_name": "PETTIT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 460
+    },
+    {
+        "song_title": "Tell It to Jesus",
+        "tune_name": "DAYTON",
+        "great_hymns_of_the_faith": 347,
+        "rejoice_hymns": 508
+    },
+    {
+        "song_title": "Tell Me the Old, Old Story",
+        "tune_name": "THE OLD STORY",
+        "great_hymns_of_the_faith": 229,
+        "rejoice_hymns": 360
+    },
+    {
+        "song_title": "Tell Me the Story of Jesus",
+        "tune_name": "STORY OF JESUS",
+        "great_hymns_of_the_faith": 106,
+        "rejoice_hymns": 357
+    },
+    {
+        "song_title": "Ten Thousand Angels",
+        "tune_name": "HE COULD HAVE CALLED",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 306
+    },
+    {
+        "song_title": "Ten Thousand Hallelujahs",
+        "tune_name": "RACHELLE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 220
+    },
+    {
+        "song_title": "Thank You, Jesus",
+        "tune_name": "THANK YOU, JESUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 566
+    },
+    {
+        "song_title": "Thank You, Lord",
+        "tune_name": "LYNCH",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 561
+    },
+    {
+        "song_title": "Thank You, Lord",
+        "tune_name": "THANK YOU, LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 266
+    },
+    {
+        "song_title": "Thank You, Lord",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 221,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Thanks to God!",
+        "tune_name": "HULTMAN",
+        "great_hymns_of_the_faith": 527,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "That Beautiful Name",
+        "tune_name": "BEAUTIFUL NAME",
+        "great_hymns_of_the_faith": 105,
+        "rejoice_hymns": 269
+    },
+    {
+        "song_title": "The Banner of the Cross",
+        "tune_name": "ROYAL BANNER",
+        "great_hymns_of_the_faith": 410,
+        "rejoice_hymns": 676
+    },
+    {
+        "song_title": "The Beautiful Garden of Prayer",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 348,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Bible Stands",
+        "tune_name": "A SURE FOUNDATION",
+        "great_hymns_of_the_faith": 178,
+        "rejoice_hymns": 184
+    },
+    {
+        "song_title": "The Birthday of a King",
+        "tune_name": "NEIDLINGER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 191
+    },
+    {
+        "song_title": "The Call for Reapers",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 419,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Church's One Foundation",
+        "tune_name": "AURELIA",
+        "great_hymns_of_the_faith": 186,
+        "rejoice_hymns": 575
+    },
+    {
+        "song_title": "The Cleansing Wave",
+        "tune_name": "CLEANSING WAVE",
+        "great_hymns_of_the_faith": 227,
+        "rejoice_hymns": 362
+    },
+    {
+        "song_title": "The Comforter Has Come",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 161,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Day of Resurrection",
+        "tune_name": "GREENLAND",
+        "great_hymns_of_the_faith": 135,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Family of God",
+        "tune_name": "FAMILY OF GOD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 188
+    },
+    {
+        "song_title": "The Fight Is On",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 404,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The First Noel",
+        "tune_name": "THE FIRST NOEL",
+        "great_hymns_of_the_faith": 91,
+        "rejoice_hymns": 204
+    },
+    {
+        "song_title": "The God of Abraham Praise",
+        "tune_name": "LEONI",
+        "great_hymns_of_the_faith": 19,
+        "rejoice_hymns": 82
+    },
+    {
+        "song_title": "The God of the Impossible",
+        "tune_name": "CAMPBELL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 92
+    },
+    {
+        "song_title": "The Gospel Song",
+        "tune_name": "GOSPEL SONG",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 363
+    },
+    {
+        "song_title": "The Great Creator",
+        "tune_name": "LANDGRAF",
+        "great_hymns_of_the_faith": 25,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Great Physician",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 59,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Haven of Rest",
+        "tune_name": "HAVEN OF REST",
+        "great_hymns_of_the_faith": 270,
+        "rejoice_hymns": 527
+    },
+    {
+        "song_title": "The Holy Heart",
+        "tune_name": "THE HOLY HEART",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 315
+    },
+    {
+        "song_title": "The Joy of the Lord",
+        "tune_name": "THE JOY OF THE LORD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 546
+    },
+    {
+        "song_title": "The King of Love My Shepherd Is",
+        "tune_name": "DOMINUS REGIT ME",
+        "great_hymns_of_the_faith": 301,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The King of Love My Shepherd Is",
+        "tune_name": "ST. COLUMBIA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 268
+    },
+    {
+        "song_title": "The Kingdom of God",
+        "tune_name": "MCKEE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 630
+    },
+    {
+        "song_title": "The Light of the World",
+        "tune_name": "PHILIP",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 265
+    },
+    {
+        "song_title": "The Light of the World Is Jesus",
+        "tune_name": "LIGHT OF THE WORLD",
+        "great_hymns_of_the_faith": 213,
+        "rejoice_hymns": 267
+    },
+    {
+        "song_title": "The Lily of the Valley",
+        "tune_name": "SALVATIONIST",
+        "great_hymns_of_the_faith": 447,
+        "rejoice_hymns": 251
+    },
+    {
+        "song_title": "The Lord Bless You and Keep You",
+        "tune_name": "BENEDICTION",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 571
+    },
+    {
+        "song_title": "The Lord Is Good",
+        "tune_name": "THE LORD IS GOOD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 567
+    },
+    {
+        "song_title": "The Lord Is King!",
+        "tune_name": "ALL IS WELL",
+        "great_hymns_of_the_faith": 16,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Lord's My Shepherd",
+        "tune_name": "CRIMOND",
+        "great_hymns_of_the_faith": 293,
+        "rejoice_hymns": 152
+    },
+    {
+        "song_title": "The Lord's Prayer",
+        "tune_name": "MALOTTE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 496
+    },
+    {
+        "song_title": "The Love of God",
+        "tune_name": "LOVE OF GOD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 108
+    },
+    {
+        "song_title": "The Majesty and Glory of Your Name",
+        "tune_name": "SOLI DEO GLORIA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 41
+    },
+    {
+        "song_title": "The Meeting in the Air",
+        "tune_name": "CANANDAIGUA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 587
+    },
+    {
+        "song_title": "The Mercies of God",
+        "tune_name": "THOMAS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 90
+    },
+    {
+        "song_title": "The Name of Jesus",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 64,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Old Book and the Old Faith",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 174,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Old Rugged Cross",
+        "tune_name": "OLD RUGGED CROSS",
+        "great_hymns_of_the_faith": 113,
+        "rejoice_hymns": 310
+    },
+    {
+        "song_title": "The Old-Time Religion",
+        "tune_name": "OLD TIME RELIGION",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 374
+    },
+    {
+        "song_title": "The Power of the Cross",
+        "tune_name": "OH, TO SEE THE DAWN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 290
+    },
+    {
+        "song_title": "The Praise Song",
+        "tune_name": "MARDI",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 52
+    },
+    {
+        "song_title": "The Rock That Is Higher Than I",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 259,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Sands of Time Are Sinking",
+        "tune_name": "RUTHERFORD",
+        "great_hymns_of_the_faith": 509,
+        "rejoice_hymns": 606
+    },
+    {
+        "song_title": "The Savior Is Waiting",
+        "tune_name": "CARMICHAEL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 486
+    },
+    {
+        "song_title": "The Secret Place",
+        "tune_name": "LAVERNE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 176
+    },
+    {
+        "song_title": "The Solid Rock",
+        "tune_name": "SOLID ROCK",
+        "great_hymns_of_the_faith": 272,
+        "rejoice_hymns": 383
+    },
+    {
+        "song_title": "The Son of God Goes Forth to War",
+        "tune_name": "ALL SAINTS NEW",
+        "great_hymns_of_the_faith": 412,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Star-Spangled Banner",
+        "tune_name": "NATIONAL ANTHEM",
+        "great_hymns_of_the_faith": 528,
+        "rejoice_hymns": 696
+    },
+    {
+        "song_title": "The Steps of a Good Man",
+        "tune_name": "PATIENCE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 467
+    },
+    {
+        "song_title": "The Strife Is O’er",
+        "tune_name": "VICTORY",
+        "great_hymns_of_the_faith": 133,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "The Trees of the Field",
+        "tune_name": "THE TREES OF THE FIELD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 59
+    },
+    {
+        "song_title": "The Way of the Cross Leads Home",
+        "tune_name": "WAY OF THE CROSS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 300
+    },
+    {
+        "song_title": "The Wonder of It All",
+        "tune_name": "WONDER OF IT ALL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 116
+    },
+    {
+        "song_title": "There Is a Fountain",
+        "tune_name": "CLEANSING FOUNTAIN",
+        "great_hymns_of_the_faith": 222,
+        "rejoice_hymns": 309
+    },
+    {
+        "song_title": "There Is a Green Hill Far Away",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 114,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "There Is a Redeemer",
+        "tune_name": "GREEN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 365
+    },
+    {
+        "song_title": "There Is No Name So Sweet on Earth",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 443,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "There Is Peace in the Name of Jesus",
+        "tune_name": "SANDRA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 538
+    },
+    {
+        "song_title": "There Is Power in the Blood",
+        "tune_name": "POWER IN THE BLOOD",
+        "great_hymns_of_the_faith": 198,
+        "rejoice_hymns": 298
+    },
+    {
+        "song_title": "There Is Sunshine in My Soul",
+        "tune_name": "SUNSHINE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 542
+    },
+    {
+        "song_title": "There Shall Be Showers of Blessing",
+        "tune_name": "SHOWERS OF BLESSING",
+        "great_hymns_of_the_faith": 349,
+        "rejoice_hymns": 555
+    },
+    {
+        "song_title": "There'll Be No Dark Valley",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 147,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "There's a Song in the Air!",
+        "tune_name": "CHRISTMAS SONG",
+        "great_hymns_of_the_faith": 97,
+        "rejoice_hymns": 211
+    },
+    {
+        "song_title": "There's a Wideness in God's Mercy",
+        "tune_name": "WELLESLEY",
+        "great_hymns_of_the_faith": 444,
+        "rejoice_hymns": 91
+    },
+    {
+        "song_title": "There's Room at the Cross",
+        "tune_name": "STANPHILL",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 347
+    },
+    {
+        "song_title": "Thine Be the Glory",
+        "tune_name": "MACCABEUS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 70
+    },
+    {
+        "song_title": "This Is My Father's World",
+        "tune_name": "TERRA PATRIS",
+        "great_hymns_of_the_faith": 39,
+        "rejoice_hymns": 147
+    },
+    {
+        "song_title": "This Is the Day",
+        "tune_name": "THIS IS THE DAY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 622
+    },
+    {
+        "song_title": "This World Is Not My Home",
+        "tune_name": "BRUMLEY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 708
+    },
+    {
+        "song_title": "Thou Art Worthy",
+        "tune_name": "WORTHY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 67
+    },
+    {
+        "song_title": "Thou Didst Leave Thy Throne",
+        "tune_name": "MARGARET",
+        "great_hymns_of_the_faith": 101,
+        "rejoice_hymns": 218
+    },
+    {
+        "song_title": "Through the Eyes of Christ",
+        "tune_name": "WHITCOMB",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 643
+    },
+    {
+        "song_title": "Throw Out the Life-Line",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 426,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Thy Word Have I Hid in My Heart",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 177,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Thy Word Is Like a Garden, Lord",
+        "tune_name": "BETHLEHEM",
+        "great_hymns_of_the_faith": 173,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Till the Storm Passes By",
+        "tune_name": "LISTER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 687
+    },
+    {
+        "song_title": "Tis Midnight – and on Olive’s Brow",
+        "tune_name": "OLIVE'S BROW",
+        "great_hymns_of_the_faith": 119,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Tis So Sweet to Trust in Jesus",
+        "tune_name": "TRUST IN JESUS",
+        "great_hymns_of_the_faith": 257,
+        "rejoice_hymns": 679
+    },
+    {
+        "song_title": "Tis the Blessed Hour of Prayer",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 345,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "To God Be the Glory",
+        "tune_name": "TO GOD BE THE GLORY",
+        "great_hymns_of_the_faith": 449,
+        "rejoice_hymns": 79
+    },
+    {
+        "song_title": "To the Work!",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 428,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "To Whom Much Has Been Given",
+        "tune_name": "BEECH GROVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 425
+    },
+    {
+        "song_title": "True-Hearted, Whole-Hearted",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 387,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Trust and Obey",
+        "tune_name": "TRUST AND OBEY",
+        "great_hymns_of_the_faith": 261,
+        "rejoice_hymns": 385
+    },
+    {
+        "song_title": "Trust His Word",
+        "tune_name": "",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 182
+    },
+    {
+        "song_title": "Trust, Try, and Prove Me",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 382,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Trusting Jesus",
+        "tune_name": "TRUSTING JESUS",
+        "great_hymns_of_the_faith": 262,
+        "rejoice_hymns": 678
+    },
+    {
+        "song_title": "Try My Heart",
+        "tune_name": "DANA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 133
+    },
+    {
+        "song_title": "Turn Your Eyes Upon Jesus",
+        "tune_name": "LEMMEL",
+        "great_hymns_of_the_faith": 204,
+        "rejoice_hymns": 253
+    },
+    {
+        "song_title": "Under His Wings",
+        "tune_name": "HINGHAM",
+        "great_hymns_of_the_faith": 269,
+        "rejoice_hymns": 174
+    },
+    {
+        "song_title": "Unsearchable Riches",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 495,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Until Then",
+        "tune_name": "UNTIL THEN",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 598
+    },
+    {
+        "song_title": "Verily, Verily",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 214,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Victory in Jesus",
+        "tune_name": "HARTFORD",
+        "great_hymns_of_the_faith": 496,
+        "rejoice_hymns": 353
+    },
+    {
+        "song_title": "Victory Through Grace",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 411,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Walk in the Light",
+        "tune_name": "CAMPMEETING",
+        "great_hymns_of_the_faith": 273,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Walk Worthy of the Lord",
+        "tune_name": "WALK WORTHY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 457
+    },
+    {
+        "song_title": "Walking in the Light",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 482,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "We Are More than Conquerors",
+        "tune_name": "CONQUERORS",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 669
+    },
+    {
+        "song_title": "We Are Your Church",
+        "tune_name": "CORNERSTONE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 579
+    },
+    {
+        "song_title": "We Bid Thee Welcome",
+        "tune_name": "SMOLAN",
+        "great_hymns_of_the_faith": 533,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "We Bless the Name of Christ, the Lord",
+        "tune_name": "RETREAT",
+        "great_hymns_of_the_faith": 190,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "We Gather Together",
+        "tune_name": "KREMSER",
+        "great_hymns_of_the_faith": 21,
+        "rejoice_hymns": 558
+    },
+    {
+        "song_title": "We Give Thee But Thine Own",
+        "tune_name": "SCHUMANN",
+        "great_hymns_of_the_faith": 538,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "We Have an Anchor",
+        "tune_name": "WE HAVE AN ANCHOR",
+        "great_hymns_of_the_faith": 265,
+        "rejoice_hymns": 391
+    },
+    {
+        "song_title": "We Magnify Our Father God",
+        "tune_name": "MONTROSE",
+        "great_hymns_of_the_faith": 24,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "We Praise Thee, O God, Our Redeemer",
+        "tune_name": "KREMSER",
+        "great_hymns_of_the_faith": 20,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "We Thank Thee",
+        "tune_name": "MAC",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 565
+    },
+    {
+        "song_title": "We Three Kings of Orient Are",
+        "tune_name": "KINGS OF ORIENT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 221
+    },
+    {
+        "song_title": "We Would See Jesus",
+        "tune_name": "O PERFECT LOVE",
+        "great_hymns_of_the_faith": 311,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Welcome Home",
+        "tune_name": "DWIGHT",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 610
+    },
+    {
+        "song_title": "We'll Understand It Better By and By",
+        "tune_name": "BY AND BY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 619
+    },
+    {
+        "song_title": "We're Marching to Zion",
+        "tune_name": "MARCHING TO ZION",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 621
+    },
+    {
+        "song_title": "We're Marching to Zion",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 514,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Were You There?",
+        "tune_name": "WERE YOU THERE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 324
+    },
+    {
+        "song_title": "We've a Story to Tell to the Nations",
+        "tune_name": "MESSAGE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 651
+    },
+    {
+        "song_title": "We've a Story to Tell to the Nations",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 423,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "What a Day That Will Be",
+        "tune_name": "WHAT A DAY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 627
+    },
+    {
+        "song_title": "What a Friend We Have in Jesus",
+        "tune_name": "CONVERSE",
+        "great_hymns_of_the_faith": 354,
+        "rejoice_hymns": 244
+    },
+    {
+        "song_title": "What a Gathering!",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 157,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "What a Mighty God We Serve!",
+        "tune_name": "MIGHTY GOD",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 704
+    },
+    {
+        "song_title": "What a Wonderful Savior!",
+        "tune_name": "BENTON HARBOR",
+        "great_hymns_of_the_faith": 454,
+        "rejoice_hymns": 256
+    },
+    {
+        "song_title": "What Child Is This?",
+        "tune_name": "GREENSLEEVES",
+        "great_hymns_of_the_faith": 94,
+        "rejoice_hymns": 236
+    },
+    {
+        "song_title": "What Grace Is Mine",
+        "tune_name": "LONDONDERRY AIR",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 132
+    },
+    {
+        "song_title": "What If It Were Today?",
+        "tune_name": "SECOND COMING",
+        "great_hymns_of_the_faith": 153,
+        "rejoice_hymns": 590
+    },
+    {
+        "song_title": "What Will You Do with Jesus?",
+        "tune_name": "RANDALL",
+        "great_hymns_of_the_faith": 111,
+        "rejoice_hymns": 485
+    },
+    {
+        "song_title": "What Wondrous Love Is This",
+        "tune_name": "WONDROUS LOVE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 104
+    },
+    {
+        "song_title": "When All Thy Mercies, O My God",
+        "tune_name": "BELMONT",
+        "great_hymns_of_the_faith": 11,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "When He Cometh",
+        "tune_name": "JEWELS",
+        "great_hymns_of_the_faith": 150,
+        "rejoice_hymns": 594
+    },
+    {
+        "song_title": "When I Can Read My Title Clear",
+        "tune_name": "PISGAH",
+        "great_hymns_of_the_faith": 497,
+        "rejoice_hymns": 618
+    },
+    {
+        "song_title": "When I See the Blood",
+        "tune_name": "PASSOVER",
+        "great_hymns_of_the_faith": 232,
+        "rejoice_hymns": 317
+    },
+    {
+        "song_title": "When I Survey the Wondrous Cross",
+        "tune_name": "HAMBURG",
+        "great_hymns_of_the_faith": 118,
+        "rejoice_hymns": 293
+    },
+    {
+        "song_title": "When I Survey the Wondrous Cross",
+        "tune_name": "O WALY WALY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 292
+    },
+    {
+        "song_title": "When Love Shines In",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 490,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "When Morning Gilds the Skies",
+        "tune_name": "LAUDES DOMINI",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 71
+    },
+    {
+        "song_title": "When the Roll Is Called Up Yonder",
+        "tune_name": "ROLL CALL",
+        "great_hymns_of_the_faith": 500,
+        "rejoice_hymns": 607
+    },
+    {
+        "song_title": "When We All Get Home",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 507,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "When We All Get To Heaven",
+        "tune_name": "HEAVEN",
+        "great_hymns_of_the_faith": 498,
+        "rejoice_hymns": 602
+    },
+    {
+        "song_title": "When We See Christ",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 149,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Where Cross the Crowded Ways of Life",
+        "tune_name": "GERMANY",
+        "great_hymns_of_the_faith": 521,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Where He Leads I'll Follow",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 401,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Where He Leads Me I Will Follow",
+        "tune_name": "NORRIS",
+        "great_hymns_of_the_faith": 384,
+        "rejoice_hymns": 487
+    },
+    {
+        "song_title": "While Shepherds Watch Their Flocks",
+        "tune_name": "CHRISTMAS",
+        "great_hymns_of_the_faith": 95,
+        "rejoice_hymns": 216
+    },
+    {
+        "song_title": "Whisper a Prayer",
+        "tune_name": "PRAYER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 495
+    },
+    {
+        "song_title": "Whiter than Snow",
+        "tune_name": "FISCHER",
+        "great_hymns_of_the_faith": 310,
+        "rejoice_hymns": 498
+    },
+    {
+        "song_title": "Who Is He in Yonder Stall?",
+        "tune_name": "WHO IS HE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 212
+    },
+    {
+        "song_title": "Who Is on the Lord's Side?",
+        "tune_name": "ARMAGEDDON",
+        "great_hymns_of_the_faith": 372,
+        "rejoice_hymns": 667
+    },
+    {
+        "song_title": "Whosoever Will",
+        "tune_name": "WHOSOEVER",
+        "great_hymns_of_the_faith": 203,
+        "rejoice_hymns": 658
+    },
+    {
+        "song_title": "Why Do I Sing About Jesus?",
+        "tune_name": "KETCHUM",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 249
+    },
+    {
+        "song_title": "Why Do You Wait?",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 237,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Why Not Now?",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 248,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Why Should He Love Me So?",
+        "tune_name": "LOVE ME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 101
+    },
+    {
+        "song_title": "Why?",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 122,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Will Jesus Find Us Watching?",
+        "tune_name": "DOANE",
+        "great_hymns_of_the_faith": 148,
+        "rejoice_hymns": 593
+    },
+    {
+        "song_title": "Wings as Eagles",
+        "tune_name": "ALYSSA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 682
+    },
+    {
+        "song_title": "With My Whole Heart",
+        "tune_name": "SPENCER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 77
+    },
+    {
+        "song_title": "Without Him",
+        "tune_name": "WITHOUT HIM",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 386
+    },
+    {
+        "song_title": "Wonderful Grace of Jesus",
+        "tune_name": "WONDERFUL GRACE",
+        "great_hymns_of_the_faith": 206,
+        "rejoice_hymns": 127
+    },
+    {
+        "song_title": "Wonderful Peace",
+        "tune_name": "WONDERFUL PEACE",
+        "great_hymns_of_the_faith": 288,
+        "rejoice_hymns": 531
+    },
+    {
+        "song_title": "Wonderful Words of Life",
+        "tune_name": "WORDS OF LIFE",
+        "great_hymns_of_the_faith": 234,
+        "rejoice_hymns": 181
+    },
+    {
+        "song_title": "Wonderful, Jesus Is to Me",
+        "tune_name": "WONDERFUL, JESUS IS TO ME",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 706
+    },
+    {
+        "song_title": "Wonderful, Merciful Savior",
+        "tune_name": "VINE RIDGE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 263
+    },
+    {
+        "song_title": "Wonderful, Wonderful Jesus",
+        "tune_name": "NEW ORLEANS",
+        "great_hymns_of_the_faith": 451,
+        "rejoice_hymns": 246
+    },
+    {
+        "song_title": "Work, for the Night Is Coming",
+        "tune_name": "WORK SONG",
+        "great_hymns_of_the_faith": 439,
+        "rejoice_hymns": 588
+    },
+    {
+        "song_title": "Worship the Lord",
+        "tune_name": "SELITA",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 35
+    },
+    {
+        "song_title": "Worthy Is the Lamb",
+        "tune_name": "STRATTON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 69
+    },
+    {
+        "song_title": "Worthy Is the Lamb That Was Slain",
+        "tune_name": "WORTHY IS THE LAMB",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 68
+    },
+    {
+        "song_title": "Worthy of Praise",
+        "tune_name": "GOODE",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 53
+    },
+    {
+        "song_title": "Worthy of Worship",
+        "tune_name": "JUDSON",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 23
+    },
+    {
+        "song_title": "Wounded for Me",
+        "tune_name": "FOR ME",
+        "great_hymns_of_the_faith": 128,
+        "rejoice_hymns": 301
+    },
+    {
+        "song_title": "Ye Christian Heralds",
+        "tune_name": "MISSIONARY CHANT",
+        "great_hymns_of_the_faith": 415,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Ye Must Be Born Again",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 194,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Ye Servants of God",
+        "tune_name": "HANOVER",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 60
+    },
+    {
+        "song_title": "Ye Servants of God, Your Master Proclaim",
+        "tune_name": "LYONS",
+        "great_hymns_of_the_faith": 45,
+        "rejoice_hymns": -1
+    },
+    {
+        "song_title": "Yesterday, Today, Forever",
+        "tune_name": "NYACK",
+        "great_hymns_of_the_faith": 283,
+        "rejoice_hymns": 93
+    },
+    {
+        "song_title": "Yield Not to Temptation",
+        "tune_name": "PALMER",
+        "great_hymns_of_the_faith": 364,
+        "rejoice_hymns": 419
+    },
+    {
+        "song_title": "You Are My Fortress",
+        "tune_name": "GUY",
+        "great_hymns_of_the_faith": -1,
+        "rejoice_hymns": 173
+    },
+    {
+        "song_title": "You May Have the Joy-Bells",
+        "tune_name": "",
+        "great_hymns_of_the_faith": 373,
+        "rejoice_hymns": -1
+    }
+]

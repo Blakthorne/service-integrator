@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import SongCopyright, { formatCopyrightText } from "./SongCopyright";
-import { SongDetailsType } from "./SongDetails";
+import { SongDetailsType } from "../SongDetails";
+import ServiceSchedule from "./ServiceSchedule";
+import CopyrightInformation from "./CopyrightInformation";
 
-interface PlanItem {
+export interface PlanItem {
     id: string;
     title: string;
     itemType: string;
@@ -15,6 +16,8 @@ interface PlanItem {
     description: string | null;
     createdAt: string;
     updatedAt: string;
+    selectedOption?: "Leave blank" | "Custom";
+    customText?: string;
 }
 
 interface Plan {
@@ -27,6 +30,19 @@ interface Plan {
     sortDate: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface HymnVersion {
+    id: string;
+    tune_name: string;
+    rejoice_hymns_number: string;
+    great_hymns_number: string;
+    selected: boolean;
+}
+
+export interface HymnData {
+    song_title: string;
+    versions: HymnVersion[];
 }
 
 interface PlanItemsProps {
@@ -48,7 +64,10 @@ export default function PlanItems({
     const [includedSongs, setIncludedSongs] = useState<SongDetailsType[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-    const [showCopyTooltip, setShowCopyTooltip] = useState<boolean>(false);
+    const [activeTab, setActiveTab] = useState<"copyright" | "schedule">(
+        "copyright"
+    );
+    const [hymnData, setHymnData] = useState<HymnData[]>([]);
 
     useEffect(() => {
         // Fetch plan items from the API
@@ -75,6 +94,44 @@ export default function PlanItems({
                 } = await response.json();
                 setItems(data.items || []);
                 setIncludedSongs(data.included || []);
+
+                // After fetching items, get the hymn data for songs
+                const songTitles: string[] = (data.items as PlanItem[])
+                    .filter((item: PlanItem) => item.itemType === "song")
+                    .map((item: PlanItem) => item.title);
+
+                if (songTitles.length > 0) {
+                    try {
+                        const hymnResponse = await fetch("/api/hymns", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({ titles: songTitles }),
+                        });
+                        if (!hymnResponse.ok) {
+                            throw new Error(
+                                `Failed to fetch hymn data: ${hymnResponse.status}`
+                            );
+                        }
+                        const hymnData = await hymnResponse.json();
+                        // Ensure each hymn has at least one version selected
+                        const processedHymnData = hymnData.hymns.map(
+                            (hymn: HymnData) => ({
+                                ...hymn,
+                                versions: hymn.versions.map(
+                                    (version: HymnVersion, index: number) => ({
+                                        ...version,
+                                        selected: index === 0, // Select first version by default
+                                    })
+                                ),
+                            })
+                        );
+                        setHymnData(processedHymnData);
+                    } catch (err) {
+                        console.error("Error fetching hymn data:", err);
+                    }
+                }
             } catch (err: unknown) {
                 setError("Failed to fetch plan items");
                 console.error("Error fetching plan items:", err);
@@ -97,6 +154,28 @@ export default function PlanItems({
         return "-";
     };
 
+    // TabButton component for tab selection
+    const TabButton = ({
+        onClick,
+        isActive,
+        children,
+    }: {
+        onClick: () => void;
+        isActive: boolean;
+        children: React.ReactNode;
+    }) => (
+        <button
+            onClick={onClick}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${
+                isActive
+                    ? "bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+            }`}
+        >
+            {children}
+        </button>
+    );
+
     // Helper function to get CCLI number for an item
     const getCcliNumberForItem = (item: PlanItem): string => {
         if (item.itemType === "song") {
@@ -106,30 +185,6 @@ export default function PlanItems({
             return song?.ccliNumber?.toString() || "-";
         }
         return "-";
-    };
-
-    // Helper function to get copyright info for an item
-    const getItemCopyrightInfo = (
-        item: PlanItem
-    ): {
-        title: string;
-        author: string;
-        copyright: string;
-        admin: string | null;
-    } | null => {
-        if (item.itemType === "song") {
-            const song = includedSongs.find(
-                (song) => song.title === item.title
-            );
-            if (!song) return null;
-            return {
-                title: song.title,
-                author: song.author,
-                copyright: song.copyright,
-                admin: song.admin,
-            };
-        }
-        return null;
     };
 
     if (loading) {
@@ -305,112 +360,37 @@ export default function PlanItems({
                 </p>
             </div>
 
-            {/* Copyright Information Section */}
+            {/* Tabbed Interface */}
             <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                <div className="flex space-x-4 mb-6">
+                    <TabButton
+                        onClick={() => setActiveTab("copyright")}
+                        isActive={activeTab === "copyright"}
+                    >
                         Copyright Information
-                    </h3>
-                    <div className="flex items-center gap-4">
-                        <div className="relative">
-                            <button
-                                onClick={async () => {
-                                    const songItems = items
-                                        .filter(
-                                            (item) => item.itemType === "song"
-                                        )
-                                        .sort((a, b) => a.sequence - b.sequence)
-                                        .map((item) => {
-                                            const info =
-                                                getItemCopyrightInfo(item);
-                                            return info
-                                                ? formatCopyrightText(info)
-                                                : null;
-                                        })
-                                        .filter(
-                                            (info): info is string =>
-                                                info !== null
-                                        );
-
-                                    const textToCopy = songItems.join("\n\n");
-                                    try {
-                                        if (
-                                            navigator.clipboard &&
-                                            window.isSecureContext
-                                        ) {
-                                            // Modern API for secure contexts
-                                            await navigator.clipboard.writeText(
-                                                textToCopy
-                                            );
-                                        } else {
-                                            // Fallback for older browsers or non-secure contexts
-                                            const textArea =
-                                                document.createElement(
-                                                    "textarea"
-                                                );
-                                            textArea.value = textToCopy;
-                                            textArea.style.position = "fixed";
-                                            textArea.style.opacity = "0";
-                                            document.body.appendChild(textArea);
-                                            textArea.focus();
-                                            textArea.select();
-                                            try {
-                                                document.execCommand("copy");
-                                            } finally {
-                                                document.body.removeChild(
-                                                    textArea
-                                                );
-                                            }
-                                        }
-                                        setShowCopyTooltip(true);
-                                        setTimeout(() => {
-                                            setShowCopyTooltip(false);
-                                        }, 2000);
-                                    } catch (err) {
-                                        console.error("Failed to copy:", err);
-                                    }
-                                }}
-                                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100 transition-colors bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer whitespace-nowrap"
-                            >
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"
-                                    />
-                                </svg>
-                                Copy All
-                            </button>
-                            {showCopyTooltip && (
-                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded whitespace-nowrap">
-                                    Copied!
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    </TabButton>
+                    <TabButton
+                        onClick={() => setActiveTab("schedule")}
+                        isActive={activeTab === "schedule"}
+                    >
+                        Service Schedule
+                    </TabButton>
                 </div>
-                <div className="flex flex-col space-y-4 max-w-3xl mx-auto">
-                    {items
-                        .filter((item) => item.itemType === "song")
-                        .sort((a, b) => a.sequence - b.sequence)
-                        .map((item) => {
-                            const songInfo = getItemCopyrightInfo(item);
-                            if (!songInfo) return null;
 
-                            return (
-                                <div key={item.id}>
-                                    <SongCopyright {...songInfo} />
-                                </div>
-                            );
-                        })}
-                </div>
+                {/* Copyright Information Tab */}
+                {activeTab === "copyright" && (
+                    <CopyrightInformation
+                        items={items}
+                        includedSongs={includedSongs}
+                    />
+                )}
+                {activeTab === "schedule" && (
+                    <ServiceSchedule
+                        items={items}
+                        setItems={setItems}
+                        hymnData={hymnData}
+                    />
+                )}
             </div>
         </div>
     );

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import PlansTable from "../components/PlansTable";
-import PlanItems from "../components/PlanItems";
+import PlanItems from "../components/PlanItems/PlanItems";
 import SongDetails, { SongDetailsType } from "../components/SongDetails";
 
 type View = "plans-table" | "plan-items" | "item-details";
@@ -126,7 +126,7 @@ export default function Home() {
                 </div>
             </main>
 
-            <footer className="w-full p-4 text-center border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+            <footer className="w-full px-4 pt-4 text-center border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 mt-8">
                 <span className="text-sm text-gray-500 dark:text-gray-400">
                     © {new Date().getFullYear()} David Polar
                 </span>
