@@ -72,7 +72,7 @@ export default function ServiceSchedule({
             // Set new timeout to update parent state
             timeoutRef.current = setTimeout(() => {
                 updateParentState(newValue);
-            }, 300);
+            }, 500);
         };
 
         // Cleanup timeout on unmount
@@ -120,10 +120,7 @@ export default function ServiceSchedule({
         hymnVersion: HymnVersion;
     }> = ({ hymnVersion }) => (
         <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">
-            {hymnVersion.tune_name[0].toUpperCase() +
-                hymnVersion.tune_name.substring(1).toLowerCase() +
-                " "}
-            (
+            {hymnVersion.tune_name + " "}(
             {[
                 hymnVersion.rejoice_hymns_number !== "-1"
                     ? `R-${hymnVersion.rejoice_hymns_number}`
@@ -146,9 +143,7 @@ export default function ServiceSchedule({
             <input
                 type="radio"
                 name={`hymn-${item.id}`}
-                checked={
-                    !item.selectedOption || item.selectedOption !== "Custom"
-                }
+                checked={!item.selectedOption}
                 onChange={() => onChooseOption(item, undefined)}
                 className="text-blue-600 focus:ring-blue-500"
             />
