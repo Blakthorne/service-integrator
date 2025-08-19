@@ -389,6 +389,8 @@ export default function PlanItems({
                         items={items}
                         setItems={setItems}
                         hymnData={hymnData}
+                        serviceTypeName={serviceTypeName}
+                        date={new Date(plan.sortDate)}
                     />
                 )}
             </div>

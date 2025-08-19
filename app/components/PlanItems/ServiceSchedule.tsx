@@ -8,10 +8,14 @@ export default function ServiceSchedule({
     items,
     setItems,
     hymnData,
+    serviceTypeName,
+    date,
 }: {
     items: PlanItem[];
     setItems: (items: PlanItem[]) => void;
     hymnData: HymnData[];
+    serviceTypeName: string;
+    date: Date;
 }) {
     const [showCopyTooltip, setShowCopyTooltip] = useState<boolean>(false);
 
@@ -171,6 +175,70 @@ export default function ServiceSchedule({
         </label>
     );
 
+    const getCopyText = () => {
+        let result: string = "";
+
+        if (
+            serviceTypeName === "Sunday Morning" ||
+            serviceTypeName === "Sunday Evening"
+        ) {
+            result +=
+                "Sunday" +
+                (serviceTypeName === "Sunday Morning" ? " AM " : " PM ") +
+                date.toLocaleDateString("en-US", {
+                    month: "numeric",
+                    day: "numeric",
+                    year: "2-digit",
+                }) +
+                "\n\n";
+        }
+
+        result += items
+            .filter((item) => item.itemType === "song")
+            .sort((a, b) => a.sequence - b.sequence)
+            .map((item) => {
+                const hymn = hymnData.find((h) => h.song_title === item.title);
+                if (!hymn) {
+                    if (item.selectedOption === "Custom" && item.customText) {
+                        return `${item.title} (${item.customText})`;
+                    }
+                    return item.title;
+                }
+
+                if (item.selectedOption === "Custom") {
+                    if (
+                        item.customText === undefined ||
+                        item.customText === ""
+                    ) {
+                        return item.title;
+                    }
+                    return `${item.title} (${item.customText})`;
+                }
+
+                const selectedVersion = hymn.versions.find((v) => v.selected);
+                if (!selectedVersion) return item.title;
+
+                const parts: string = [
+                    selectedVersion.rejoice_hymns_number !== "-1"
+                        ? `R-${selectedVersion.rejoice_hymns_number}`
+                        : null,
+                    selectedVersion.great_hymns_number !== "-1"
+                        ? `G-${selectedVersion.great_hymns_number}`
+                        : null,
+                ]
+                    .filter(Boolean)
+                    .join("/");
+
+                if (parts.length > 0) {
+                    return `${item.title} (${parts})`;
+                }
+                return item.title;
+            })
+            .join("\n");
+
+        return result;
+    };
+
     return (
         <div>
             <div className="flex items-center justify-between mb-6">
@@ -180,57 +248,7 @@ export default function ServiceSchedule({
                 <div className="flex items-center gap-4">
                     <div className="relative">
                         <CopyButton
-                            text={items
-                                .filter((item) => item.itemType === "song")
-                                .sort((a, b) => a.sequence - b.sequence)
-                                .map((item) => {
-                                    const hymn = hymnData.find(
-                                        (h) => h.song_title === item.title
-                                    );
-                                    if (!hymn) {
-                                        if (
-                                            item.selectedOption === "Custom" &&
-                                            item.customText
-                                        ) {
-                                            return `${item.title} (${item.customText})`;
-                                        }
-                                        return item.title;
-                                    }
-
-                                    if (item.selectedOption === "Custom") {
-                                        if (
-                                            item.customText === undefined ||
-                                            item.customText === ""
-                                        ) {
-                                            return item.title;
-                                        }
-                                        return `${item.title} (${item.customText})`;
-                                    }
-
-                                    const selectedVersion = hymn.versions.find(
-                                        (v) => v.selected
-                                    );
-                                    if (!selectedVersion) return item.title;
-
-                                    const parts: string = [
-                                        selectedVersion.rejoice_hymns_number !==
-                                        "-1"
-                                            ? `R-${selectedVersion.rejoice_hymns_number}`
-                                            : null,
-                                        selectedVersion.great_hymns_number !==
-                                        "-1"
-                                            ? `G-${selectedVersion.great_hymns_number}`
-                                            : null,
-                                    ]
-                                        .filter(Boolean)
-                                        .join("/");
-
-                                    if (parts.length > 0) {
-                                        return `${item.title} (${parts})`;
-                                    }
-                                    return item.title;
-                                })
-                                .join("\n")}
+                            text={getCopyText()}
                             showTooltip={showCopyTooltip}
                             setShowTooltip={setShowCopyTooltip}
                         />
