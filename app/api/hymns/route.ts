@@ -20,11 +20,12 @@ interface HymnResponse {
     versions: HymnVersion[];
 }
 
-// Group hymns by song title to handle multiple versions
+// Group hymns by song title to handle multiple versions (case-insensitive)
 const hymnsBySongTitle = new Map<string, RawHymn[]>();
 (hymnData as RawHymn[]).forEach(hymn => {
-    const existingHymns = hymnsBySongTitle.get(hymn.song_title) || [];
-    hymnsBySongTitle.set(hymn.song_title, [...existingHymns, hymn]);
+    const lowerCaseTitle = hymn.song_title.toLowerCase();
+    const existingHymns = hymnsBySongTitle.get(lowerCaseTitle) || [];
+    hymnsBySongTitle.set(lowerCaseTitle, [...existingHymns, hymn]);
 });
 
 export async function POST(request: Request) {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
         }
         
         const processedHymns: HymnResponse[] = titles.map((title: string) => {
-            const matchingHymns = hymnsBySongTitle.get(title) || [];
+            const matchingHymns = hymnsBySongTitle.get(title.toLowerCase()) || [];
             return {
                 song_title: title,
                 versions: matchingHymns.map((hymn: RawHymn, index: number) => ({
