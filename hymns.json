@@ -5192,14 +5192,8 @@
     {
         "song_title": "We're Marching to Zion",
         "tune_name": "MARCHING TO ZION",
-        "great_hymns_of_the_faith": -1,
-        "rejoice_hymns": 621
-    },
-    {
-        "song_title": "We're Marching to Zion",
-        "tune_name": "",
         "great_hymns_of_the_faith": 514,
-        "rejoice_hymns": -1
+        "rejoice_hymns": 621
     },
     {
         "song_title": "Were You There?",

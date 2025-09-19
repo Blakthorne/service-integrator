@@ -18,6 +18,7 @@ export interface PlanItem {
     updatedAt: string;
     selectedOption?: "Leave blank" | "Custom";
     customText?: string;
+    selectedVersionIndex?: number;
 }
 
 interface Plan {
@@ -92,7 +93,17 @@ export default function PlanItems({
                     included: SongDetailsType[];
                     totalCount: number;
                 } = await response.json();
-                setItems(data.items || []);
+
+                // Initialize selectedVersionIndex for song items
+                const processedItems = (data.items || []).map(
+                    (item: PlanItem) => ({
+                        ...item,
+                        selectedVersionIndex:
+                            item.itemType === "song" ? 0 : undefined,
+                    })
+                );
+
+                setItems(processedItems);
                 setIncludedSongs(data.included || []);
 
                 // After fetching items, get the hymn data for songs

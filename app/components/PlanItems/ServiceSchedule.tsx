@@ -21,7 +21,8 @@ export default function ServiceSchedule({
 
     const onChooseOption = (
         item: PlanItem,
-        option: "Leave blank" | "Custom" | undefined
+        option: "Leave blank" | "Custom" | undefined,
+        versionIndex?: number
     ) => {
         const updatedItems = items.map((i) =>
             i.id === item.id
@@ -30,6 +31,7 @@ export default function ServiceSchedule({
                       selectedOption: option,
                       customText:
                           option === "Custom" ? i.customText || "" : undefined,
+                      selectedVersionIndex: versionIndex,
                   }
                 : i
         );
@@ -142,13 +144,17 @@ export default function ServiceSchedule({
     const HymnVersionOption: React.FC<{
         item: PlanItem;
         hymnVersion: HymnVersion;
-    }> = ({ item, hymnVersion }) => (
+        versionIndex: number;
+    }> = ({ item, hymnVersion, versionIndex }) => (
         <label className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
                 type="radio"
                 name={`hymn-${item.id}`}
-                checked={!item.selectedOption}
-                onChange={() => onChooseOption(item, undefined)}
+                checked={
+                    !item.selectedOption &&
+                    item.selectedVersionIndex === versionIndex
+                }
+                onChange={() => onChooseOption(item, undefined, versionIndex)}
                 className="text-blue-600 focus:ring-blue-500"
             />
             <HymnNumbers hymnVersion={hymnVersion} />
@@ -215,7 +221,9 @@ export default function ServiceSchedule({
                     return `${item.title} (${item.customText})`;
                 }
 
-                const selectedVersion = hymn.versions.find((v) => v.selected);
+                // Use the actual selected version index from the UI state
+                const selectedVersionIndex = item.selectedVersionIndex ?? 0;
+                const selectedVersion = hymn.versions[selectedVersionIndex];
                 if (!selectedVersion) return item.title;
 
                 const parts: string = [
@@ -292,7 +300,7 @@ export default function ServiceSchedule({
                                             </p>
                                             <div>
                                                 {hymn.versions.map(
-                                                    (version) => (
+                                                    (version, index) => (
                                                         <HymnVersionOption
                                                             key={
                                                                 item.id +
@@ -302,6 +310,7 @@ export default function ServiceSchedule({
                                                             hymnVersion={
                                                                 version
                                                             }
+                                                            versionIndex={index}
                                                         />
                                                     )
                                                 )}
@@ -316,6 +325,7 @@ export default function ServiceSchedule({
                                                     hymnVersion={
                                                         hymn.versions[0]
                                                     }
+                                                    versionIndex={0}
                                                 />
                                                 <CustomOption item={item} />
                                             </div>
