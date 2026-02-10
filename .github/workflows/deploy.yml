@@ -1,9 +1,9 @@
-name: Build and Deploy Next.js to Lightsail
+name: Build and Deploy Next.js to Digital Ocean
 
 on:
     push:
         branches:
-            - main # or your chosen branch
+            - main
 
 jobs:
     build-deploy:
@@ -24,15 +24,40 @@ jobs:
             - name: Build app
               run: npm run build
 
-            - name: Deploy to Lightsail via SSH
+            - name: Create deployment package
+              run: |
+                  mkdir -p deploy
+                  cp -r .next deploy/
+                  cp -r public deploy/ 2>/dev/null || :
+                  cp package.json deploy/
+                  cp package-lock.json deploy/
+                  cp next.config.ts deploy/
+
+                  # Install production dependencies only
+                  cd deploy
+                  npm ci --production --ignore-scripts
+                  cd ..
+
+                  # Create tarball
+                  tar -czf deploy.tar.gz -C deploy .
+
+            - name: Transfer deployment package
+              uses: appleboy/scp-action@master
+              with:
+                  host: ${{ secrets.HOST }}
+                  username: ${{ secrets.USERNAME }}
+                  key: ${{ secrets.SSH_PRIVATE_KEY }}
+                  source: "deploy.tar.gz"
+                  target: "/tmp/"
+
+            - name: Extract and restart on server
               uses: appleboy/ssh-action@master
               with:
                   host: ${{ secrets.HOST }}
                   username: ${{ secrets.USERNAME }}
                   key: ${{ secrets.SSH_PRIVATE_KEY }}
                   script: |
-                      cd ~/service-integrator   # Set your app location here
-                      git pull origin main
-                      npm ci
-                      npm run build
+                      cd ~/service-integrator
+                      tar -xzf /tmp/deploy.tar.gz
+                      rm /tmp/deploy.tar.gz
                       pm2 restart service-integrator
