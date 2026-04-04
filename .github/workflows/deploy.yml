@@ -1,43 +1,43 @@
-# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-
-name: Build and Deploy Next.js to Digital Ocean
+name: Build and Deploy
 
 on:
     push:
         branches:
             - main
 
+# Minimal default permissions. Jobs request only what they need.
+permissions:
+    contents: read
+
+# Prevent overlapping production deploys.
+concurrency:
+    group: production-deploy
+    cancel-in-progress: false
+
 jobs:
     build-deploy:
         runs-on: ubuntu-latest
+        environment: ${{ vars.DEPLOY_ENVIRONMENT || 'production' }}
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v2
+              # Verify SHA at https://github.com/actions/checkout/releases
+              uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
             - name: Set up Node.js
-              uses: actions/setup-node@v3
+              # Verify SHA at https://github.com/actions/setup-node/releases
+              uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
               with:
                   node-version: "20"
+                  cache: "npm"
 
             - name: Install dependencies
               run: npm ci
 
-            - name: Create .env.production file
-              run: |
-                  cat > .env.production << 'EOF'
-                  AUTH_SECRET=${{ secrets.AUTH_SECRET }}
-                  AUTH_URL=${{ secrets.AUTH_URL }}
-                  AUTH_GOOGLE_ID=${{ secrets.AUTH_GOOGLE_ID }}
-                  AUTH_GOOGLE_SECRET=${{ secrets.AUTH_GOOGLE_SECRET }}
-                  ALLOWED_EMAIL_1=${{ secrets.ALLOWED_EMAIL_1 }}
-                  ALLOWED_EMAIL_2=${{ secrets.ALLOWED_EMAIL_2 }}
-                  PLANNING_CENTER_ID=${{ secrets.PLANNING_CENTER_ID }}
-                  PLANNING_CENTER_TOKEN=${{ secrets.PLANNING_CENTER_TOKEN }}
-                  NEXT_PUBLIC_BASE_URL=${{ secrets.NEXT_PUBLIC_BASE_URL }}
-                  EOF
-
             - name: Build app
+              # Only NEXT_PUBLIC_* vars are needed at build time.
+              env:
+                  NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
               run: npm run build
 
             - name: Create deployment package
@@ -45,36 +45,99 @@ jobs:
                   mkdir -p deploy
                   cp -r .next deploy/
                   cp -r public deploy/ 2>/dev/null || :
-                  cp package.json deploy/
-                  cp package-lock.json deploy/
-                  cp next.config.ts deploy/
-                  cp .env.production deploy/
+                  cp package.json package-lock.json next.config.ts deploy/
 
-                  # Install production dependencies only
-                  cd deploy
-                  npm ci --production --ignore-scripts
-                  cd ..
+                  cd deploy && npm ci --omit=dev --ignore-scripts && cd ..
 
-                  # Create tarball
                   tar -czf deploy.tar.gz -C deploy .
 
-            - name: Transfer deployment package
-              uses: appleboy/scp-action@master
-              with:
-                  host: ${{ secrets.HOST }}
-                  username: ${{ secrets.USERNAME }}
-                  key: ${{ secrets.SSH_PRIVATE_KEY }}
-                  source: "deploy.tar.gz"
-                  target: "/tmp/"
+            # Netbird ephemeral peer
+            - name: Install Netbird
+              run: |
+                  curl -fsSL https://pkgs.netbird.io/debian/public.key \
+                    | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/netbird.gpg
+                  echo "deb https://pkgs.netbird.io/debian stable main" \
+                    | sudo tee /etc/apt/sources.list.d/netbird.list > /dev/null
+                  sudo apt-get update -qq
+                  sudo apt-get install -y netbird
 
-            - name: Extract and restart on server
-              uses: appleboy/ssh-action@master
-              with:
-                  host: ${{ secrets.HOST }}
-                  username: ${{ secrets.USERNAME }}
-                  key: ${{ secrets.SSH_PRIVATE_KEY }}
-                  script: |
-                      cd ~/service-integrator
-                      tar -xzf /tmp/deploy.tar.gz
-                      rm /tmp/deploy.tar.gz
-                      pm2 restart service-integrator
+            - name: Connect to Netbird network
+              env:
+                  NETBIRD_SETUP_KEY: ${{ secrets.NETBIRD_SETUP_KEY }}
+              run: |
+                  sudo netbird up \
+                    --setup-key "$NETBIRD_SETUP_KEY" \
+                    --hostname "github-runner-${{ github.run_id }}"
+                  timeout 60 bash -c \
+                    'until sudo netbird status 2>&1 | grep -qi "connected"; do sleep 2; done'
+                  echo "Connected to Netbird network"
+
+            # SSH setup
+            - name: Setup SSH
+              env:
+                  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+                  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+                  DEPLOY_HOST_PUBKEY: ${{ secrets.DEPLOY_HOST_PUBKEY }}
+              run: |
+                  mkdir -p ~/.ssh
+                  chmod 700 ~/.ssh
+                  printf '%s\n' "$SSH_PRIVATE_KEY" | install -m 600 /dev/stdin ~/.ssh/deploy_key
+                  printf '%s %s\n' "$DEPLOY_HOST" "$DEPLOY_HOST_PUBKEY" >> ~/.ssh/known_hosts
+                  chmod 644 ~/.ssh/known_hosts
+
+            # Deploy
+            - name: Transfer deployment package
+              env:
+                  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+                  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+              run: |
+                  scp -i ~/.ssh/deploy_key \
+                    -o StrictHostKeyChecking=yes \
+                    -o BatchMode=yes \
+                    deploy.tar.gz \
+                    "$DEPLOY_USER@$DEPLOY_HOST:/tmp/deploy.tar.gz"
+
+            # Secrets are streamed directly to the server.
+            - name: Write env file on server
+              env:
+                  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+                  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+                  AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+                  AUTH_URL: ${{ secrets.AUTH_URL }}
+                  AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
+                  AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
+                  ALLOWED_EMAIL_1: ${{ secrets.ALLOWED_EMAIL_1 }}
+                  ALLOWED_EMAIL_2: ${{ secrets.ALLOWED_EMAIL_2 }}
+                  PLANNING_CENTER_ID: ${{ secrets.PLANNING_CENTER_ID }}
+                  PLANNING_CENTER_TOKEN: ${{ secrets.PLANNING_CENTER_TOKEN }}
+                  NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
+              run: |
+                  printf 'AUTH_SECRET=%s\nAUTH_URL=%s\nAUTH_GOOGLE_ID=%s\nAUTH_GOOGLE_SECRET=%s\nALLOWED_EMAIL_1=%s\nALLOWED_EMAIL_2=%s\nPLANNING_CENTER_ID=%s\nPLANNING_CENTER_TOKEN=%s\nNEXT_PUBLIC_BASE_URL=%s\n' \
+                    "$AUTH_SECRET" "$AUTH_URL" "$AUTH_GOOGLE_ID" "$AUTH_GOOGLE_SECRET" \
+                    "$ALLOWED_EMAIL_1" "$ALLOWED_EMAIL_2" \
+                    "$PLANNING_CENTER_ID" "$PLANNING_CENTER_TOKEN" \
+                    "$NEXT_PUBLIC_BASE_URL" \
+                  | ssh -i ~/.ssh/deploy_key \
+                      -o StrictHostKeyChecking=yes \
+                      -o BatchMode=yes \
+                      "$DEPLOY_USER@$DEPLOY_HOST" \
+                      'mkdir -p ~/service-integrator && cat > ~/service-integrator/.env.production && chmod 600 ~/service-integrator/.env.production'
+
+            - name: Extract and restart
+              env:
+                  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+                  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+              run: |
+                  ssh -i ~/.ssh/deploy_key \
+                    -o StrictHostKeyChecking=yes \
+                    -o BatchMode=yes \
+                    "$DEPLOY_USER@$DEPLOY_HOST" \
+                    'set -e
+                     cd ~/service-integrator
+                     tar -xzf /tmp/deploy.tar.gz
+                     rm -f /tmp/deploy.tar.gz
+                     pm2 restart service-integrator || pm2 start npm --name service-integrator -- start'
+
+            - name: Disconnect from Netbird
+              if: always()
+              run: sudo netbird down
