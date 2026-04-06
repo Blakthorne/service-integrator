@@ -86,16 +86,51 @@ jobs:
                   chmod 644 ~/.ssh/known_hosts
 
             # Deploy
+            - name: Wait for SSH reachability
+              env:
+                  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+                  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+              run: |
+                  for attempt in {1..30}; do
+                      if ssh -i ~/.ssh/deploy_key \
+                        -o StrictHostKeyChecking=yes \
+                        -o BatchMode=yes \
+                        -o ConnectTimeout=5 \
+                        "$DEPLOY_USER@$DEPLOY_HOST" \
+                        'echo ssh-ready' >/dev/null 2>&1; then
+                          echo "SSH is reachable"
+                          exit 0
+                      fi
+
+                      echo "Waiting for SSH reachability (attempt $attempt/30)..."
+                      sleep 2
+                  done
+
+                  echo "SSH did not become reachable in time"
+                  exit 1
+
             - name: Transfer deployment package
               env:
                   DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
               run: |
-                  scp -i ~/.ssh/deploy_key \
-                    -o StrictHostKeyChecking=yes \
-                    -o BatchMode=yes \
-                    deploy.tar.gz \
-                    "$DEPLOY_USER@$DEPLOY_HOST:/tmp/deploy.tar.gz"
+                  for attempt in {1..5}; do
+                      if scp -i ~/.ssh/deploy_key \
+                        -o StrictHostKeyChecking=yes \
+                        -o BatchMode=yes \
+                        -o ConnectTimeout=10 \
+                        deploy.tar.gz \
+                        "$DEPLOY_USER@$DEPLOY_HOST:/tmp/deploy.tar.gz"; then
+                          echo "Transfer succeeded"
+                          exit 0
+                      fi
+
+                      echo "Transfer failed (attempt $attempt/5); retrying in 5s..."
+                      sleep 5
+                  done
+
+                  echo "Transfer failed after retries"
+                  exit 1
 
             # Secrets are streamed directly to the server.
             - name: Write env file on server
