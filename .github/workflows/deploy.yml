@@ -77,12 +77,13 @@ jobs:
               env:
                   SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
                   DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+                  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
                   DEPLOY_HOST_PUBKEY: ${{ secrets.DEPLOY_HOST_PUBKEY }}
               run: |
                   mkdir -p ~/.ssh
                   chmod 700 ~/.ssh
                   printf '%s\n' "$SSH_PRIVATE_KEY" | install -m 600 /dev/stdin ~/.ssh/deploy_key
-                  printf '%s %s\n' "$DEPLOY_HOST" "$DEPLOY_HOST_PUBKEY" >> ~/.ssh/known_hosts
+                  printf '[%s]:%s %s\n' "$DEPLOY_HOST" "$DEPLOY_PORT" "$DEPLOY_HOST_PUBKEY" >> ~/.ssh/known_hosts
                   chmod 644 ~/.ssh/known_hosts
 
             # Deploy
@@ -90,18 +91,22 @@ jobs:
               env:
                   DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+                  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
               run: |
                   for attempt in {1..30}; do
-                      if ssh -i ~/.ssh/deploy_key \
+                      SSH_OUTPUT="$(ssh -i ~/.ssh/deploy_key \
                         -o StrictHostKeyChecking=yes \
                         -o BatchMode=yes \
                         -o ConnectTimeout=5 \
+                        -p "$DEPLOY_PORT" \
                         "$DEPLOY_USER@$DEPLOY_HOST" \
-                        'echo ssh-ready' >/dev/null 2>&1; then
+                        'echo ssh-ready' 2>&1 >/dev/null)"
+                      if [ $? -eq 0 ]; then
                           echo "SSH is reachable"
                           exit 0
                       fi
 
+                      echo "Last SSH error: $SSH_OUTPUT"
                       echo "Waiting for SSH reachability (attempt $attempt/30)..."
                       sleep 2
                   done
@@ -113,9 +118,11 @@ jobs:
               env:
                   DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+                  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
               run: |
                   for attempt in {1..5}; do
                       if scp -i ~/.ssh/deploy_key \
+                        -P "$DEPLOY_PORT" \
                         -o StrictHostKeyChecking=yes \
                         -o BatchMode=yes \
                         -o ConnectTimeout=10 \
@@ -137,6 +144,7 @@ jobs:
               env:
                   DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+                  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
                   AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
                   AUTH_URL: ${{ secrets.AUTH_URL }}
                   AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
@@ -153,6 +161,7 @@ jobs:
                     "$PLANNING_CENTER_ID" "$PLANNING_CENTER_TOKEN" \
                     "$NEXT_PUBLIC_BASE_URL" \
                   | ssh -i ~/.ssh/deploy_key \
+                      -p "$DEPLOY_PORT" \
                       -o StrictHostKeyChecking=yes \
                       -o BatchMode=yes \
                       "$DEPLOY_USER@$DEPLOY_HOST" \
@@ -162,8 +171,10 @@ jobs:
               env:
                   DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+                  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
               run: |
                   ssh -i ~/.ssh/deploy_key \
+                    -p "$DEPLOY_PORT" \
                     -o StrictHostKeyChecking=yes \
                     -o BatchMode=yes \
                     "$DEPLOY_USER@$DEPLOY_HOST" \
