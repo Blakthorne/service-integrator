@@ -95,6 +95,7 @@ jobs:
               run: |
                   for attempt in {1..30}; do
                       if SSH_OUTPUT="$(ssh -i ~/.ssh/deploy_key \
+                        -o ProxyCommand=none \
                         -o StrictHostKeyChecking=yes \
                         -o BatchMode=yes \
                         -o ConnectTimeout=5 \
@@ -121,6 +122,7 @@ jobs:
               run: |
                   for attempt in {1..5}; do
                       if scp -i ~/.ssh/deploy_key \
+                        -o ProxyCommand=none \
                         -P "$DEPLOY_PORT" \
                         -o StrictHostKeyChecking=yes \
                         -o BatchMode=yes \
@@ -160,6 +162,7 @@ jobs:
                     "$PLANNING_CENTER_ID" "$PLANNING_CENTER_TOKEN" \
                     "$NEXT_PUBLIC_BASE_URL" \
                   | ssh -i ~/.ssh/deploy_key \
+                      -o ProxyCommand=none \
                       -p "$DEPLOY_PORT" \
                       -o StrictHostKeyChecking=yes \
                       -o BatchMode=yes \
@@ -173,6 +176,7 @@ jobs:
                   DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
               run: |
                   ssh -i ~/.ssh/deploy_key \
+                    -o ProxyCommand=none \
                     -p "$DEPLOY_PORT" \
                     -o StrictHostKeyChecking=yes \
                     -o BatchMode=yes \
