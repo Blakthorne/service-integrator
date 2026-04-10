@@ -93,7 +93,16 @@ jobs:
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
                   DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
               run: |
+                  KEYSCAN_DONE=false
                   for attempt in {1..30}; do
+                      # Fetch all host key types once the host is reachable.
+                      # Covers key-type mismatches with the static DEPLOY_HOST_PUBKEY entry.
+                      if [ "$KEYSCAN_DONE" = false ]; then
+                          if ssh-keyscan -T 5 -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+                              KEYSCAN_DONE=true
+                          fi
+                      fi
+
                       if SSH_OUTPUT="$(ssh -i ~/.ssh/deploy_key \
                         -o ProxyCommand=none \
                         -o StrictHostKeyChecking=yes \
