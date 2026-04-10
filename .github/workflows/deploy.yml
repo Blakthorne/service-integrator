@@ -83,7 +83,7 @@ jobs:
                   mkdir -p ~/.ssh
                   chmod 700 ~/.ssh
                   printf '%s\n' "$SSH_PRIVATE_KEY" | install -m 600 /dev/stdin ~/.ssh/deploy_key
-                  printf '[%s]:%s %s\n' "$DEPLOY_HOST" "$DEPLOY_PORT" "$DEPLOY_HOST_PUBKEY" >> ~/.ssh/known_hosts
+                  printf '%s %s\n' "$DEPLOY_HOST" "$DEPLOY_HOST_PUBKEY" >> ~/.ssh/known_hosts
                   chmod 644 ~/.ssh/known_hosts
 
             # Deploy
