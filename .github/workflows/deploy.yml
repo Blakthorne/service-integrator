@@ -94,14 +94,13 @@ jobs:
                   DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
               run: |
                   for attempt in {1..30}; do
-                      SSH_OUTPUT="$(ssh -i ~/.ssh/deploy_key \
+                      if SSH_OUTPUT="$(ssh -i ~/.ssh/deploy_key \
                         -o StrictHostKeyChecking=yes \
                         -o BatchMode=yes \
                         -o ConnectTimeout=5 \
                         -p "$DEPLOY_PORT" \
                         "$DEPLOY_USER@$DEPLOY_HOST" \
-                        'echo ssh-ready' 2>&1 >/dev/null)"
-                      if [ $? -eq 0 ]; then
+                        'echo ssh-ready' 2>&1 >/dev/null)"; then
                           echo "SSH is reachable"
                           exit 0
                       fi
