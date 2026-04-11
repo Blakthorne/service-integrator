@@ -72,6 +72,34 @@ jobs:
                     'until sudo netbird status 2>&1 | grep -qi "connected"; do sleep 2; done'
                   echo "Connected to Netbird network"
 
+            - name: Verify Netbird route to deploy target
+              env:
+                  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+                  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+              run: |
+                  RESOLVED_IP="$(getent ahostsv4 "$DEPLOY_HOST" | awk 'NR==1 {print $1}')"
+                  if [ -z "$RESOLVED_IP" ]; then
+                      RESOLVED_IP="$DEPLOY_HOST"
+                  fi
+
+                  echo "Deploy host input: $DEPLOY_HOST"
+                  echo "Resolved deploy host IP: $RESOLVED_IP"
+
+                  for attempt in {1..30}; do
+                      if timeout 2 bash -c "cat < /dev/null > /dev/tcp/$RESOLVED_IP/$DEPLOY_PORT" 2>/dev/null; then
+                          echo "Netbird route/TCP reachability verified"
+                          exit 0
+                      fi
+
+                      echo "Netbird route/TCP not ready (attempt $attempt/30)"
+                      sudo netbird status -d --filter-by-ips "$RESOLVED_IP" 2>/dev/null || sudo netbird status -d || true
+                      sleep 2
+                  done
+
+                  echo "Deploy target is not reachable over Netbird."
+                  echo "Likely causes: target peer offline, ACL does not allow TCP $DEPLOY_PORT from this ephemeral peer, or DEPLOY_HOST resolves to an address outside the Netbird overlay."
+                  exit 1
+
             # SSH setup
             - name: Setup SSH
               env:
