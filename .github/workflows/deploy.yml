@@ -83,8 +83,23 @@ jobs:
                   mkdir -p ~/.ssh
                   chmod 700 ~/.ssh
                   printf '%s\n' "$SSH_PRIVATE_KEY" | install -m 600 /dev/stdin ~/.ssh/deploy_key
-                  printf '%s %s\n' "$DEPLOY_HOST" "$DEPLOY_HOST_PUBKEY" >> ~/.ssh/known_hosts
-                  chmod 644 ~/.ssh/known_hosts
+                  : > ~/.ssh/known_hosts_ci
+                  printf '%s %s\n' "$DEPLOY_HOST" "$DEPLOY_HOST_PUBKEY" >> ~/.ssh/known_hosts_ci
+                  chmod 644 ~/.ssh/known_hosts_ci
+
+                  cat > ~/.ssh/config-ci << 'EOF'
+                  Host *
+                      IdentityFile ~/.ssh/deploy_key
+                      IdentitiesOnly yes
+                      BatchMode yes
+                      StrictHostKeyChecking yes
+                      ProxyCommand none
+                      UserKnownHostsFile ~/.ssh/known_hosts_ci
+                      GlobalKnownHostsFile /dev/null
+                      HostKeyAlias %h
+                      CanonicalizeHostname no
+                  EOF
+                  chmod 600 ~/.ssh/config-ci
 
             # Deploy
             - name: Wait for SSH reachability
@@ -106,16 +121,13 @@ jobs:
 
                         KEY_LINES="$(printf '%s\n' "$SCAN" | awk 'NF >= 3 && ($2 ~ /^ssh-/ || $2 ~ /^ecdsa-/) { print }')"
                         if [ -n "$KEY_LINES" ]; then
-                          printf '%s\n' "$KEY_LINES" >> ~/.ssh/known_hosts
+                              printf '%s\n' "$KEY_LINES" >> ~/.ssh/known_hosts_ci
                               KEYSCAN_DONE=true
                               echo "Host keys fetched via ssh-keyscan"
                           fi
                       fi
 
-                      if SSH_OUTPUT="$(ssh -i ~/.ssh/deploy_key \
-                        -o ProxyCommand=none \
-                        -o StrictHostKeyChecking=yes \
-                        -o BatchMode=yes \
+                      if SSH_OUTPUT="$(ssh -F ~/.ssh/config-ci \
                         -o ConnectTimeout=5 \
                         -p "$DEPLOY_PORT" \
                         "$DEPLOY_USER@$DEPLOY_HOST" \
@@ -139,11 +151,8 @@ jobs:
                   DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
               run: |
                   for attempt in {1..5}; do
-                      if scp -i ~/.ssh/deploy_key \
-                        -o ProxyCommand=none \
+                    if scp -F ~/.ssh/config-ci \
                         -P "$DEPLOY_PORT" \
-                        -o StrictHostKeyChecking=yes \
-                        -o BatchMode=yes \
                         -o ConnectTimeout=10 \
                         deploy.tar.gz \
                         "$DEPLOY_USER@$DEPLOY_HOST:/tmp/deploy.tar.gz"; then
@@ -179,11 +188,8 @@ jobs:
                     "$ALLOWED_EMAIL_1" "$ALLOWED_EMAIL_2" \
                     "$PLANNING_CENTER_ID" "$PLANNING_CENTER_TOKEN" \
                     "$NEXT_PUBLIC_BASE_URL" \
-                  | ssh -i ~/.ssh/deploy_key \
-                      -o ProxyCommand=none \
+                  | ssh -F ~/.ssh/config-ci \
                       -p "$DEPLOY_PORT" \
-                      -o StrictHostKeyChecking=yes \
-                      -o BatchMode=yes \
                       "$DEPLOY_USER@$DEPLOY_HOST" \
                       'mkdir -p ~/service-integrator && cat > ~/service-integrator/.env.production && chmod 600 ~/service-integrator/.env.production'
 
@@ -193,11 +199,8 @@ jobs:
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
                   DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
               run: |
-                  ssh -i ~/.ssh/deploy_key \
-                    -o ProxyCommand=none \
+                  ssh -F ~/.ssh/config-ci \
                     -p "$DEPLOY_PORT" \
-                    -o StrictHostKeyChecking=yes \
-                    -o BatchMode=yes \
                     "$DEPLOY_USER@$DEPLOY_HOST" \
                     'set -e
                      cd ~/service-integrator
