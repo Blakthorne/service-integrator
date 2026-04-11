@@ -96,9 +96,9 @@ jobs:
                   KEYSCAN_DONE=false
                   for attempt in {1..30}; do
                       # Fetch all host key types once the host is reachable.
-                      # ssh-keyscan exits 0 even when it gets no keys, so check output.
+                      # Under bash -e, ssh-keyscan failures must not abort the loop.
                       if [ "$KEYSCAN_DONE" = false ]; then
-                          SCAN="$(ssh-keyscan -T 5 -p "$DEPLOY_PORT" "$DEPLOY_HOST" 2>/dev/null)"
+                          SCAN="$(ssh-keyscan -T 5 -p "$DEPLOY_PORT" "$DEPLOY_HOST" 2>/dev/null || true)"
                           if [ -n "$SCAN" ]; then
                               printf '%s\n' "$SCAN" >> ~/.ssh/known_hosts
                               KEYSCAN_DONE=true
