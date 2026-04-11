@@ -96,10 +96,13 @@ jobs:
                   KEYSCAN_DONE=false
                   for attempt in {1..30}; do
                       # Fetch all host key types once the host is reachable.
-                      # Covers key-type mismatches with the static DEPLOY_HOST_PUBKEY entry.
+                      # ssh-keyscan exits 0 even when it gets no keys, so check output.
                       if [ "$KEYSCAN_DONE" = false ]; then
-                          if ssh-keyscan -T 5 -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null; then
+                          SCAN="$(ssh-keyscan -T 5 -p "$DEPLOY_PORT" "$DEPLOY_HOST" 2>/dev/null)"
+                          if [ -n "$SCAN" ]; then
+                              printf '%s\n' "$SCAN" >> ~/.ssh/known_hosts
                               KEYSCAN_DONE=true
+                              echo "Host keys fetched via ssh-keyscan"
                           fi
                       fi
 
