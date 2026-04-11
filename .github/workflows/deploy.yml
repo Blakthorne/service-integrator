@@ -124,7 +124,6 @@ jobs:
                       ProxyCommand none
                       UserKnownHostsFile ~/.ssh/known_hosts_ci
                       GlobalKnownHostsFile /dev/null
-                      HostKeyAlias %h
                       CanonicalizeHostname no
                   EOF
                   chmod 600 ~/.ssh/config-ci
