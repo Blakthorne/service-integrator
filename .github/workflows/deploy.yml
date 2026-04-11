@@ -98,9 +98,15 @@ jobs:
                       # Fetch all host key types once the host is reachable.
                       # Under bash -e, ssh-keyscan failures must not abort the loop.
                       if [ "$KEYSCAN_DONE" = false ]; then
-                          SCAN="$(ssh-keyscan -T 5 -p "$DEPLOY_PORT" "$DEPLOY_HOST" 2>/dev/null || true)"
-                          if [ -n "$SCAN" ]; then
-                              printf '%s\n' "$SCAN" >> ~/.ssh/known_hosts
+                        if [ "$DEPLOY_PORT" = "22" ]; then
+                          SCAN="$(ssh-keyscan -q -T 5 -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null || true)"
+                        else
+                          SCAN="$(ssh-keyscan -q -T 5 -p "$DEPLOY_PORT" -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null || true)"
+                        fi
+
+                        KEY_LINES="$(printf '%s\n' "$SCAN" | awk 'NF >= 3 && ($2 ~ /^ssh-/ || $2 ~ /^ecdsa-/) { print }')"
+                        if [ -n "$KEY_LINES" ]; then
+                          printf '%s\n' "$KEY_LINES" >> ~/.ssh/known_hosts
                               KEYSCAN_DONE=true
                               echo "Host keys fetched via ssh-keyscan"
                           fi
