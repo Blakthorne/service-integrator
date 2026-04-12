@@ -110,7 +110,7 @@ jobs:
               run: |
                   mkdir -p ~/.ssh
                   chmod 700 ~/.ssh
-                  printf '%s\n' "$SSH_PRIVATE_KEY" | install -m 600 /dev/stdin ~/.ssh/deploy_key
+                  printf '%s\n' "$SSH_PRIVATE_KEY" | sed 's/\\n/\n/g' | install -m 600 /dev/stdin ~/.ssh/deploy_key
                   : > ~/.ssh/known_hosts_ci
                   chmod 644 ~/.ssh/known_hosts_ci
 
