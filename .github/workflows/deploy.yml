@@ -114,12 +114,25 @@ jobs:
                   : > ~/.ssh/known_hosts_ci
                   chmod 644 ~/.ssh/known_hosts_ci
 
+                  # Pre-seed known_hosts with pinned key if provided.
+                  # Format: known_hosts requires "hostname type base64" (port 22)
+                  #         or "[hostname]:port type base64" (non-standard port).
+                  if [ -n "$DEPLOY_HOST_PUBKEY" ]; then
+                      KEY_TYPE_AND_DATA="$(printf '%s\n' "$DEPLOY_HOST_PUBKEY" | awk '{print $1, $2}')"
+                      if [ "$DEPLOY_PORT" = "22" ]; then
+                          printf '%s %s\n' "$DEPLOY_HOST" "$KEY_TYPE_AND_DATA" > ~/.ssh/known_hosts_ci
+                      else
+                          printf '[%s]:%s %s\n' "$DEPLOY_HOST" "$DEPLOY_PORT" "$KEY_TYPE_AND_DATA" > ~/.ssh/known_hosts_ci
+                      fi
+                      echo "Pre-seeded known_hosts_ci with DEPLOY_HOST_PUBKEY"
+                  fi
+
                   cat > ~/.ssh/config-ci << 'EOF'
                   Host *
                       IdentityFile ~/.ssh/deploy_key
                       IdentitiesOnly yes
                       BatchMode yes
-                      StrictHostKeyChecking yes
+                      StrictHostKeyChecking accept-new
                       ProxyCommand none
                       UserKnownHostsFile ~/.ssh/known_hosts_ci
                       GlobalKnownHostsFile /dev/null
@@ -133,54 +146,18 @@ jobs:
                   DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
                   DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
-                  DEPLOY_HOST_PUBKEY: ${{ secrets.DEPLOY_HOST_PUBKEY }}
               run: |
-                  KEYSCAN_DONE=false
                   for attempt in {1..30}; do
-                      # Fetch all host key types once the host is reachable.
-                      # Under bash -e, ssh-keyscan failures must not abort the loop.
-                      if [ "$KEYSCAN_DONE" = false ]; then
-                          if [ "$DEPLOY_PORT" = "22" ]; then
-                              SCAN="$(ssh-keyscan -q -T 5 -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null || true)"
-                          else
-                              SCAN="$(ssh-keyscan -q -T 5 -p "$DEPLOY_PORT" -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null || true)"
-                          fi
-
-                          KEY_LINES="$(printf '%s\n' "$SCAN" | awk 'NF >= 3 && ($2 ~ /^ssh-/ || $2 ~ /^ecdsa-/) { print }')"
-                          if [ -n "$KEY_LINES" ]; then
-                              if [ -n "$DEPLOY_HOST_PUBKEY" ]; then
-                                  EXPECTED_KEY="$(printf '%s\n' "$DEPLOY_HOST_PUBKEY" | awk 'NF >= 2 { print $1 " " $2 }')"
-                                  LIVE_KEYS="$(printf '%s\n' "$KEY_LINES" | awk '{ print $2 " " $3 }')"
-
-                                  if ! printf '%s\n' "$LIVE_KEYS" | grep -Fxq "$EXPECTED_KEY"; then
-                                      echo "DEPLOY_HOST_PUBKEY does not match any live host key presented by $DEPLOY_HOST."
-                                      if [ "$DEPLOY_PORT" = "22" ]; then
-                                        echo "If this target peer has NetBird SSH enabled, port 22 may be redirected to NetBird's embedded SSH service instead of your server's sshd."
-                                        echo "In that case, disable NetBird SSH on the target peer or move your server's OpenSSH daemon to a different port and set DEPLOY_PORT to that port."
-                                      else
-                                        echo "Update the DEPLOY_HOST_PUBKEY secret to the current host key before retrying."
-                                      fi
-                                      exit 1
-                                  fi
-                              fi
-
-                              printf '%s\n' "$KEY_LINES" > ~/.ssh/known_hosts_ci
-                              KEYSCAN_DONE=true
-                              echo "Host keys fetched via ssh-keyscan"
-                          fi
-                      fi
-
-                      if SSH_OUTPUT="$(ssh -F ~/.ssh/config-ci \
+                      if ssh -F ~/.ssh/config-ci \
                         -o ConnectTimeout=5 \
                         -p "$DEPLOY_PORT" \
                         "$DEPLOY_USER@$DEPLOY_HOST" \
-                        'echo ssh-ready' 2>&1 >/dev/null)"; then
+                        'echo ssh-ready' 2>&1; then
                           echo "SSH is reachable"
                           exit 0
                       fi
 
-                      echo "Last SSH error: $SSH_OUTPUT"
-                      echo "Waiting for SSH reachability (attempt $attempt/30)..."
+                      echo "Waiting for SSH (attempt $attempt/30)..."
                       sleep 2
                   done
 
