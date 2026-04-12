@@ -222,11 +222,13 @@ jobs:
                   ssh -F ~/.ssh/config-ci \
                     -p "$DEPLOY_PORT" \
                     "$DEPLOY_USER@$DEPLOY_HOST" \
-                    'set -e
-                     cd ~/service-integrator
-                     tar -xzf /tmp/deploy.tar.gz
-                     rm -f /tmp/deploy.tar.gz
-                     pm2 restart service-integrator || pm2 start npm --name service-integrator -- start'
+                    bash -l << 'REMOTE'
+                  set -e
+                  cd ~/service-integrator
+                  tar -xzf /tmp/deploy.tar.gz
+                  rm -f /tmp/deploy.tar.gz
+                  pm2 restart service-integrator || pm2 start npm --name service-integrator -- start
+                  REMOTE
 
             - name: Disconnect from Netbird
               if: always()
