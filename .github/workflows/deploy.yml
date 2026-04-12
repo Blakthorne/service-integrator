@@ -112,7 +112,6 @@ jobs:
                   chmod 700 ~/.ssh
                   printf '%s\n' "$SSH_PRIVATE_KEY" | install -m 600 /dev/stdin ~/.ssh/deploy_key
                   : > ~/.ssh/known_hosts_ci
-                  printf '%s %s\n' "$DEPLOY_HOST" "$DEPLOY_HOST_PUBKEY" >> ~/.ssh/known_hosts_ci
                   chmod 644 ~/.ssh/known_hosts_ci
 
                   cat > ~/.ssh/config-ci << 'EOF'
@@ -134,21 +133,33 @@ jobs:
                   DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
                   DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
                   DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || '22' }}
+                  DEPLOY_HOST_PUBKEY: ${{ secrets.DEPLOY_HOST_PUBKEY }}
               run: |
                   KEYSCAN_DONE=false
                   for attempt in {1..30}; do
                       # Fetch all host key types once the host is reachable.
                       # Under bash -e, ssh-keyscan failures must not abort the loop.
                       if [ "$KEYSCAN_DONE" = false ]; then
-                        if [ "$DEPLOY_PORT" = "22" ]; then
-                          SCAN="$(ssh-keyscan -q -T 5 -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null || true)"
-                        else
-                          SCAN="$(ssh-keyscan -q -T 5 -p "$DEPLOY_PORT" -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null || true)"
-                        fi
+                          if [ "$DEPLOY_PORT" = "22" ]; then
+                              SCAN="$(ssh-keyscan -q -T 5 -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null || true)"
+                          else
+                              SCAN="$(ssh-keyscan -q -T 5 -p "$DEPLOY_PORT" -t ed25519,ecdsa,rsa "$DEPLOY_HOST" 2>/dev/null || true)"
+                          fi
 
-                        KEY_LINES="$(printf '%s\n' "$SCAN" | awk 'NF >= 3 && ($2 ~ /^ssh-/ || $2 ~ /^ecdsa-/) { print }')"
-                        if [ -n "$KEY_LINES" ]; then
-                              printf '%s\n' "$KEY_LINES" >> ~/.ssh/known_hosts_ci
+                          KEY_LINES="$(printf '%s\n' "$SCAN" | awk 'NF >= 3 && ($2 ~ /^ssh-/ || $2 ~ /^ecdsa-/) { print }')"
+                          if [ -n "$KEY_LINES" ]; then
+                              if [ -n "$DEPLOY_HOST_PUBKEY" ]; then
+                                  EXPECTED_KEY="$(printf '%s\n' "$DEPLOY_HOST_PUBKEY" | awk 'NF >= 2 { print $1 " " $2 }')"
+                                  LIVE_KEYS="$(printf '%s\n' "$KEY_LINES" | awk '{ print $2 " " $3 }')"
+
+                                  if ! printf '%s\n' "$LIVE_KEYS" | grep -Fxq "$EXPECTED_KEY"; then
+                                      echo "DEPLOY_HOST_PUBKEY does not match any live host key presented by $DEPLOY_HOST."
+                                      echo "Update the DEPLOY_HOST_PUBKEY secret to the current host key before retrying."
+                                      exit 1
+                                  fi
+                              fi
+
+                              printf '%s\n' "$KEY_LINES" > ~/.ssh/known_hosts_ci
                               KEYSCAN_DONE=true
                               echo "Host keys fetched via ssh-keyscan"
                           fi
