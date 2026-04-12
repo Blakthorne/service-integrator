@@ -154,7 +154,12 @@ jobs:
 
                                   if ! printf '%s\n' "$LIVE_KEYS" | grep -Fxq "$EXPECTED_KEY"; then
                                       echo "DEPLOY_HOST_PUBKEY does not match any live host key presented by $DEPLOY_HOST."
-                                      echo "Update the DEPLOY_HOST_PUBKEY secret to the current host key before retrying."
+                                      if [ "$DEPLOY_PORT" = "22" ]; then
+                                        echo "If this target peer has NetBird SSH enabled, port 22 may be redirected to NetBird's embedded SSH service instead of your server's sshd."
+                                        echo "In that case, disable NetBird SSH on the target peer or move your server's OpenSSH daemon to a different port and set DEPLOY_PORT to that port."
+                                      else
+                                        echo "Update the DEPLOY_HOST_PUBKEY secret to the current host key before retrying."
+                                      fi
                                       exit 1
                                   fi
                               fi
