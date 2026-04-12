@@ -221,9 +221,15 @@ jobs:
               run: |
                   ssh -F ~/.ssh/config-ci \
                     -p "$DEPLOY_PORT" \
-                    "$DEPLOY_USER@$DEPLOY_HOST" \
-                    bash -l << 'REMOTE'
+                    "$DEPLOY_USER@$DEPLOY_HOST" << 'REMOTE'
                   set -e
+
+                  # nvm guards ~/.bashrc with an interactive-shell check, so nvm is
+                  # never initialised in non-interactive SSH sessions even with bash -l.
+                  # Source it explicitly here so pm2 is on PATH regardless.
+                  export NVM_DIR="${HOME}/.nvm"
+                  [ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
+
                   cd ~/service-integrator
                   tar -xzf /tmp/deploy.tar.gz
                   rm -f /tmp/deploy.tar.gz
