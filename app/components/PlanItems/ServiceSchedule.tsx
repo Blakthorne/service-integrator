@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import CopyButton from "./CopyButton";
 import { HymnData, HymnVersion, PlanItem } from "./PlanItems";
+import { normalizeTitle } from "@/lib/normalizeTitle";
 
 export default function ServiceSchedule({
     items,
@@ -203,7 +204,9 @@ export default function ServiceSchedule({
             .filter((item) => item.itemType === "song")
             .sort((a, b) => a.sequence - b.sequence)
             .map((item) => {
-                const hymn = hymnData.find((h) => h.song_title === item.title);
+                const hymn = hymnData.find(
+                    (h) => normalizeTitle(h.song_title) === normalizeTitle(item.title)
+                );
                 if (!hymn) {
                     if (item.selectedOption === "Custom" && item.customText) {
                         return `${item.title} (${item.customText})`;
@@ -269,7 +272,7 @@ export default function ServiceSchedule({
                     .sort((a, b) => a.sequence - b.sequence)
                     .map((item) => {
                         const hymn = hymnData.find(
-                            (h) => h.song_title === item.title
+                            (h) => normalizeTitle(h.song_title) === normalizeTitle(item.title)
                         );
 
                         return (
