@@ -34,3 +34,94 @@ describe("isNearMatch", () => {
         expect(isNearMatch("go", "do")).toBe(false);
     });
 });
+
+import { computeUnusedHymns, type PcoSong, type RawHymn } from "./unusedHymns";
+
+const AT = "2026-06-13T00:00:00.000Z";
+
+function rejoice(title: string, tune: string, num: number): RawHymn {
+    return { song_title: title, tune_name: tune, rejoice_hymns: num, great_hymns_of_the_faith: -1 };
+}
+
+describe("computeUnusedHymns", () => {
+    test("unique title matched in PCO is excluded (used)", () => {
+        const hymns: RawHymn[] = [rejoice("Amazing Grace", "NEW BRITAIN", 100)];
+        const songs: PcoSong[] = [{ title: "Amazing Grace", lastScheduledAt: AT }];
+        const result = computeUnusedHymns(hymns, songs, AT);
+        expect(result.unused).toHaveLength(0);
+        expect(result.review).toHaveLength(0);
+    });
+
+    test("unique title not in PCO is unused", () => {
+        const hymns: RawHymn[] = [rejoice("Amazing Grace", "NEW BRITAIN", 100)];
+        const result = computeUnusedHymns(hymns, [], AT);
+        expect(result.unused).toEqual([
+            { songTitle: "Amazing Grace", tuneName: "NEW BRITAIN", rejoiceNumber: 100, greatHymnsNumber: null },
+        ]);
+    });
+
+    test("a song scheduled only via null last_scheduled_at counts as unused", () => {
+        const hymns: RawHymn[] = [rejoice("Amazing Grace", "NEW BRITAIN", 100)];
+        const songs: PcoSong[] = [{ title: "Amazing Grace", lastScheduledAt: null }];
+        const result = computeUnusedHymns(hymns, songs, AT);
+        expect(result.unused).toHaveLength(1);
+    });
+
+    test("multi-tune title used with no tune info sends both variants to review", () => {
+        const hymns: RawHymn[] = [
+            rejoice("Abba, Father", "ABBA, FATHER", 42),
+            rejoice("Abba, Father", "PRITCHARD", 7),
+        ];
+        const songs: PcoSong[] = [{ title: "Abba, Father", lastScheduledAt: AT }];
+        const result = computeUnusedHymns(hymns, songs, AT);
+        expect(result.unused).toHaveLength(0);
+        expect(result.review).toHaveLength(2);
+        expect(result.review.every((r) => r.reason === "ambiguous-tune")).toBe(true);
+        expect(result.review[0].matchedPcoTitle).toBe("Abba, Father");
+    });
+
+    test("multi-tune title with the tune named in the PCO title attributes usage to that variant", () => {
+        const hymns: RawHymn[] = [
+            rejoice("Abba, Father", "ABBA, FATHER", 42),
+            rejoice("Abba, Father", "PRITCHARD", 7),
+        ];
+        const songs: PcoSong[] = [{ title: "Abba, Father (PRITCHARD)", lastScheduledAt: AT }];
+        const result = computeUnusedHymns(hymns, songs, AT);
+        // PRITCHARD attributed as used; the other variant has no evidence -> unused.
+        expect(result.review).toHaveLength(0);
+        expect(result.unused).toEqual([
+            { songTitle: "Abba, Father", tuneName: "ABBA, FATHER", rejoiceNumber: 42, greatHymnsNumber: null },
+        ]);
+    });
+
+    test("near-match goes to review, not silently unused", () => {
+        const hymns: RawHymn[] = [rejoice("Blessed Assurance", "ASSURANCE", 300)];
+        const songs: PcoSong[] = [{ title: "Blesed Assurance", lastScheduledAt: AT }];
+        const result = computeUnusedHymns(hymns, songs, AT);
+        expect(result.unused).toHaveLength(0);
+        expect(result.review).toHaveLength(1);
+        expect(result.review[0].reason).toBe("near-match");
+        expect(result.review[0].matchedPcoTitle).toBe("Blesed Assurance");
+    });
+
+    test("maps -1 to null and counts per-book totals", () => {
+        const hymns: RawHymn[] = [
+            { song_title: "Both Books", tune_name: "X", rejoice_hymns: 5, great_hymns_of_the_faith: 9 },
+            { song_title: "Rejoice Only", tune_name: "Y", rejoice_hymns: 6, great_hymns_of_the_faith: -1 },
+        ];
+        const result = computeUnusedHymns(hymns, [], AT);
+        expect(result.meta.totals).toEqual({ rejoice: 2, greatHymns: 1 });
+        const both = result.unused.find((e) => e.songTitle === "Both Books")!;
+        expect(both.rejoiceNumber).toBe(5);
+        expect(both.greatHymnsNumber).toBe(9);
+        const rej = result.unused.find((e) => e.songTitle === "Rejoice Only")!;
+        expect(rej.greatHymnsNumber).toBeNull();
+    });
+
+    test("stamps meta", () => {
+        const result = computeUnusedHymns([], [{ title: "x", lastScheduledAt: AT }], AT);
+        expect(result.meta.computedAt).toBe(AT);
+        expect(result.meta.songsScanned).toBe(1);
+        expect(result.meta.usedTitleCount).toBe(1);
+    });
+});
