@@ -11,6 +11,8 @@ export const dynamic = "force-dynamic";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+// Process-local cache: shared within a single long-running server (this app's
+// PM2 deploy). On a multi-instance/serverless host each instance gets its own.
 let cache: { data: UnusedHymnsResult; expires: number } | null = null;
 
 export async function GET(request: Request): Promise<NextResponse> {

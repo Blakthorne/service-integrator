@@ -162,10 +162,12 @@ export function computeUnusedHymns(
                 continue; // this specific tune was named in a used PCO title
             }
 
-            // Check whether ANY of the PCO originals names a specific tune.
-            // If so, disambiguation exists and un-attributed variants are unused.
-            // If no tune is named at all, the match is ambiguous → review.
-            const anyTuneDisambiguated = usedOriginals.some((orig) => {
+            // This variant's tune was not named. Only treat it as unused when
+            // EVERY used original names some (other) specific tune — positive
+            // evidence each scheduling referred to a different tune. If any used
+            // original is tune-less, that scheduling is ambiguous and could refer
+            // to this variant, so route it to review rather than mislabel it unused.
+            const allOriginalsNameATune = usedOriginals.every((orig) => {
                 const origNorm = normalizeTitle(orig);
                 const extra = origNorm.startsWith(norm)
                     ? origNorm.slice(norm.length)
@@ -173,7 +175,7 @@ export function computeUnusedHymns(
                 return extra.trim().length > 0;
             });
 
-            if (anyTuneDisambiguated) {
+            if (allOriginalsNameATune) {
                 unused.push(entry);
             } else {
                 review.push({

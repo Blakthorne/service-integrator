@@ -124,4 +124,22 @@ describe("computeUnusedHymns", () => {
         expect(result.meta.songsScanned).toBe(1);
         expect(result.meta.usedTitleCount).toBe(1);
     });
+
+    test("multi-tune with mixed disambiguated + plain usage routes the un-named variant to review", () => {
+        const hymns: RawHymn[] = [
+            rejoice("Abba, Father", "ABBA, FATHER", 42),
+            rejoice("Abba, Father", "PRITCHARD", 7),
+        ];
+        const songs: PcoSong[] = [
+            { title: "Abba, Father (PRITCHARD)", lastScheduledAt: AT },
+            { title: "Abba, Father", lastScheduledAt: AT },
+        ];
+        const result = computeUnusedHymns(hymns, songs, AT);
+        // PRITCHARD is named -> used. ABBA, FATHER is not named, but a plain
+        // (ambiguous) usage exists, so it must go to review, not unused.
+        expect(result.unused).toHaveLength(0);
+        expect(result.review).toHaveLength(1);
+        expect(result.review[0].tuneName).toBe("ABBA, FATHER");
+        expect(result.review[0].reason).toBe("ambiguous-tune");
+    });
 });
