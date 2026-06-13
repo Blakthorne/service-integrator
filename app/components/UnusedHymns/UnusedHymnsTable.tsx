@@ -72,7 +72,7 @@ export default function UnusedHymnsTable({
                             ) : (
                                 rows.map((row) => (
                                     <tr
-                                        key={`${row.songTitle}-${row.tuneName}`}
+                                        key={`${row.songTitle}-${row.tuneName}-${row.rejoiceNumber ?? ""}-${row.greatHymnsNumber ?? ""}`}
                                         className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                     >
                                         <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -105,6 +105,8 @@ export default function UnusedHymnsTable({
                     <button
                         type="button"
                         onClick={() => setReviewOpen((open) => !open)}
+                        aria-expanded={reviewOpen}
+                        aria-controls="unused-hymns-review"
                         className="w-full flex items-center justify-between px-6 py-4 bg-gray-50 dark:bg-gray-700 text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                         <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -115,10 +117,10 @@ export default function UnusedHymnsTable({
                         </span>
                     </button>
                     {reviewOpen && (
-                        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                        <ul id="unused-hymns-review" className="divide-y divide-gray-200 dark:divide-gray-700">
                             {review.map((entry) => (
                                 <li
-                                    key={`${entry.songTitle}-${entry.tuneName}`}
+                                    key={`${entry.songTitle}-${entry.tuneName}-${entry.rejoiceNumber ?? ""}-${entry.greatHymnsNumber ?? ""}`}
                                     className="px-6 py-3 text-sm"
                                 >
                                     <span className="font-medium text-gray-900 dark:text-gray-100">

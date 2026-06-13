@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { HymnEntry, ReviewEntry, UnusedHymnsResult } from "@/lib/unusedHymns";
 import UnusedHymnsControls, {
@@ -85,48 +85,70 @@ export default function UnusedHymnsView() {
     const [error, setError] = useState<string | null>(null);
     const [page, setPage] = useState(1);
 
-    const load = useCallback(async (refresh: boolean, signal?: AbortSignal) => {
+    const mountedRef = useRef(true);
+    const controllerRef = useRef<AbortController | null>(null);
+
+    const runLoad = useCallback((refresh: boolean) => {
+        controllerRef.current?.abort();
+        const controller = new AbortController();
+        controllerRef.current = controller;
+        if (refresh) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+
         const baseUrl =
             process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
         const url = `${baseUrl}/api/unused-hymns${refresh ? "?refresh=1" : ""}`;
-        const response = await fetch(url, { signal });
-        if (!response.ok) {
-            throw new Error(`Failed to load unused hymns: ${response.status}`);
-        }
-        return (await response.json()) as UnusedHymnsResult;
-    }, []);
 
-    useEffect(() => {
-        const controller = new AbortController();
-        setLoading(true);
-        load(false, controller.signal)
-            .then((data) => {
-                setResult(data);
-                setError(null);
+        fetch(url, { signal: controller.signal })
+            .then(async (response) => {
+                if (!response.ok) {
+                    throw new Error(
+                        `Failed to load unused hymns: ${response.status}`
+                    );
+                }
+                return (await response.json()) as UnusedHymnsResult;
             })
-            .catch((err: unknown) => {
-                if ((err as Error).name === "AbortError") return;
-                console.error("Error loading unused hymns:", err);
-                setError("Failed to load unused hymns");
-            })
-            .finally(() => setLoading(false));
-        return () => controller.abort();
-    }, [load]);
-
-    const handleRefresh = useCallback(() => {
-        setRefreshing(true);
-        load(true)
             .then((data) => {
+                if (!mountedRef.current) return;
                 setResult(data);
                 setError(null);
                 setPage(1);
             })
             .catch((err: unknown) => {
-                console.error("Error refreshing unused hymns:", err);
-                setError("Failed to refresh unused hymns");
+                if ((err as Error).name === "AbortError") return;
+                if (!mountedRef.current) return;
+                console.error("Error loading unused hymns:", err);
+                setError(
+                    refresh
+                        ? "Failed to refresh unused hymns"
+                        : "Failed to load unused hymns"
+                );
             })
-            .finally(() => setRefreshing(false));
-    }, [load]);
+            .finally(() => {
+                if (!mountedRef.current) return;
+                if (refresh) {
+                    setRefreshing(false);
+                } else {
+                    setLoading(false);
+                }
+            });
+    }, []);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        runLoad(false);
+        return () => {
+            mountedRef.current = false;
+            controllerRef.current?.abort();
+        };
+    }, [runLoad]);
+
+    const handleRefresh = useCallback(() => {
+        runLoad(true);
+    }, [runLoad]);
 
     const updateParam = useCallback(
         (key: string, value: string) => {
@@ -156,7 +178,7 @@ export default function UnusedHymnsView() {
                     {error ?? "No data"}
                 </p>
                 <button
-                    onClick={() => handleRefresh()}
+                    onClick={() => runLoad(false)}
                     className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                 >
                     Try Again
