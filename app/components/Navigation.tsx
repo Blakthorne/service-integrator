@@ -1,17 +1,19 @@
 import { signOut } from "@/auth";
 import React from "react";
+import NavLinks from "./Navigation/NavLinks";
 
 export default function Navigation() {
     return (
         <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-16">
-                    <div className="flex">
+                    <div className="flex items-center">
                         <div className="flex-shrink-0 flex items-center">
                             <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                                 Service Integrator
                             </h1>
                         </div>
+                        <NavLinks />
                     </div>
                     <div className="flex items-center">
                         <form
