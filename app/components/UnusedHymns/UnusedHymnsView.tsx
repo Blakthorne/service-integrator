@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { refreshUnusedHymns } from "@/app/(app)/unused-hymns/actions";
 import { useUrlState } from "@/app/hooks/useUrlState";
 import type { HymnEntry, ReviewEntry, UnusedHymnsResult } from "@/lib/unusedHymns";
@@ -89,8 +89,8 @@ export default function UnusedHymnsView({
     const sort = parseEnum(searchParams.get("sort"), SORT_KEYS, "title");
 
     const [result, setResult] = useState(initialResult);
+    const [refreshing, setRefreshing] = useState(false);
     const [refreshError, setRefreshError] = useState<string | null>(null);
-    const [refreshing, startRefresh] = useTransition();
 
     function handleBookChange(next: BookFilter) {
         setSearchParams({ book: next, page: null }, { history: "replace" });
@@ -108,32 +108,30 @@ export default function UnusedHymnsView({
         );
     }
 
-    function handleRefresh() {
+    // The pending state is plain state, not useTransition: React batches all
+    // transitions, so one held open across the action would stall every
+    // navigation (a <Link> click, Back) until the refresh returned.
+    async function handleRefresh() {
         const pathAtClick = window.location.pathname;
+        setRefreshing(true);
         setRefreshError(null);
-        startRefresh(async () => {
-            let next: UnusedHymnsResult;
-            try {
-                next = await refreshUnusedHymns();
-            } catch (error) {
-                // Keep showing the current results; Refresh is the retry.
-                console.error("Error refreshing unused hymns:", error);
-                // Updates after an await are only part of the transition if
-                // they are wrapped in startRefresh again.
-                startRefresh(() => {
-                    setRefreshError("Failed to refresh unused hymns");
-                });
-                return;
-            }
-            startRefresh(() => {
-                setResult(next);
-                // The URL belongs to whichever page is showing now, so leave
-                // it alone if the viewer navigated away while refreshing.
-                if (window.location.pathname === pathAtClick) {
-                    setSearchParams({ page: null }, { history: "replace" });
-                }
-            });
-        });
+        let next: UnusedHymnsResult;
+        try {
+            next = await refreshUnusedHymns();
+        } catch (error) {
+            // Keep showing the current results; Refresh is the retry.
+            console.error("Error refreshing unused hymns:", error);
+            setRefreshError("Failed to refresh unused hymns");
+            return;
+        } finally {
+            setRefreshing(false);
+        }
+        setResult(next);
+        // The URL belongs to whichever page is showing now, so leave it alone
+        // if the viewer navigated away while refreshing.
+        if (window.location.pathname === pathAtClick) {
+            setSearchParams({ page: null }, { history: "replace" });
+        }
     }
 
     const filteredUnused: HymnEntry[] = result.unused.filter((entry) =>
