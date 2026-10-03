@@ -80,7 +80,6 @@ describe("formatHymnNumbers", () => {
         const full = {
             id: "Holy-0",
             tune_name: "NICAEA",
-            selected: true,
             ...BOTH,
         };
         expect(formatHymnNumbers(full)).toBe("R-12/G-34");

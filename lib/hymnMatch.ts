@@ -28,9 +28,8 @@ export function buildHymnIndex(catalog: RawHymn[]): Map<string, RawHymn[]> {
  * only ones the lookup found before titles were normalized, so a title that
  * already matched keeps its default version), then the records found only
  * through normalization, each group in catalog order. The result echoes the
- * *requested* title as `song_title` and omits titles with no match.
- * `selected` is true only when a title has exactly one version. A non-array
- * `titles` yields `[]`; a non-string entry throws.
+ * *requested* title as `song_title` and omits titles with no match. A
+ * non-array `titles` yields `[]`; a non-string entry throws.
  */
 export function matchHymns(
     index: Map<string, RawHymn[]>,
@@ -57,7 +56,6 @@ export function matchHymns(
                     tune_name: hymn.tune_name,
                     rejoice_hymns_number: hymn.rejoice_hymns.toString(),
                     great_hymns_number: hymn.great_hymns_of_the_faith.toString(),
-                    selected: matchingHymns.length === 1, // Auto-select if only one version exists
                 })),
             };
         })

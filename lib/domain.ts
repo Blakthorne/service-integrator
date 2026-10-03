@@ -85,8 +85,6 @@ export interface HymnVersion {
     tune_name: string;
     rejoice_hymns_number: string;
     great_hymns_number: string;
-    /** True when the title has exactly one version. */
-    selected: boolean;
 }
 
 /** The hymnbook match for a requested song title, with every tune version. */

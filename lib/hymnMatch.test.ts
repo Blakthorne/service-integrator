@@ -251,7 +251,6 @@ describe("matchHymns", () => {
                             great_hymns_number: String(
                                 record.great_hymns_of_the_faith
                             ),
-                            selected: true,
                         },
                     ],
                 },
@@ -292,7 +291,6 @@ describe("matchHymns", () => {
                     tune_name: record.tune_name,
                     rejoice_hymns_number: String(record.rejoice_hymns),
                     great_hymns_number: String(record.great_hymns_of_the_faith),
-                    selected: false,
                 }))
             );
             // The example really exercises a missing book: "-1" as a string.
@@ -362,14 +360,12 @@ describe("matchHymns", () => {
                             tune_name: "TUNE ONE",
                             rejoice_hymns_number: "42",
                             great_hymns_number: "-1",
-                            selected: false,
                         },
                         {
                             id: "Test Hymn-1",
                             tune_name: "TUNE TWO",
                             rejoice_hymns_number: "-1",
                             great_hymns_number: "305",
-                            selected: false,
                         },
                     ],
                 },
@@ -381,35 +377,10 @@ describe("matchHymns", () => {
                             tune_name: "",
                             rejoice_hymns_number: "7",
                             great_hymns_number: "8",
-                            selected: true,
                         },
                     ],
                 },
             ]);
-        });
-    });
-
-    describe("selected", () => {
-        test("is true when a title has exactly one version", () => {
-            const [entry] = matchHymns(index, [singleTuneTitle]);
-            expect(entry.versions).toHaveLength(1);
-            expect(entry.versions[0].selected).toBe(true);
-        });
-
-        test("is false on every version of a multi-tune title", () => {
-            const [entry] = matchHymns(index, [multiTuneTitle]);
-            expect(entry.versions.length).toBeGreaterThan(1);
-            expect(entry.versions.every((version) => !version.selected)).toBe(
-                true
-            );
-        });
-
-        test("is true only for single-version titles, across the whole catalog", () => {
-            for (const entry of matchHymns(index, catalogTitles)) {
-                for (const version of entry.versions) {
-                    expect(version.selected).toBe(entry.versions.length === 1);
-                }
-            }
         });
     });
 
@@ -468,11 +439,10 @@ describe("matchHymns", () => {
                     v.tune_name,
                     v.rejoice_hymns_number,
                     v.great_hymns_number,
-                    v.selected,
                 ])
             ).toEqual([
-                ["Jesus Saves!-0", "JESUS SAVES", "342", "231", false],
-                ["Jesus Saves-1", "LIMPSFIELD", "341", "-1", false],
+                ["Jesus Saves!-0", "JESUS SAVES", "342", "231"],
+                ["Jesus Saves-1", "LIMPSFIELD", "341", "-1"],
             ]);
         });
 
@@ -484,11 +454,10 @@ describe("matchHymns", () => {
                     v.tune_name,
                     v.rejoice_hymns_number,
                     v.great_hymns_number,
-                    v.selected,
                 ])
             ).toEqual([
-                ["Jesus Saves-0", "LIMPSFIELD", "341", "-1", false],
-                ["Jesus Saves!-1", "JESUS SAVES", "342", "231", false],
+                ["Jesus Saves-0", "LIMPSFIELD", "341", "-1"],
+                ["Jesus Saves!-1", "JESUS SAVES", "342", "231"],
             ]);
         });
 
@@ -530,8 +499,8 @@ describe("matchHymns", () => {
             ]) {
                 const [entry] = matchHymns(synthetic, [query]);
                 expect(entry.song_title).toBe(query);
-                expect(entry.versions.map((v) => [v.id, v.selected])).toEqual([
-                    ["Jesus\u2019 Love & Mercy!-0", true],
+                expect(entry.versions.map((v) => v.id)).toEqual([
+                    "Jesus\u2019 Love & Mercy!-0",
                 ]);
             }
         });
