@@ -1,11 +1,12 @@
 import { describe, expect, test } from "vitest";
 import { hymnCatalog } from "@/lib/hymnCatalog";
 import { buildHymnIndex, matchHymns } from "./hymnMatch";
+import { normalizeTitle } from "./normalizeTitle";
 import type { RawHymn } from "./unusedHymns";
 
-// Characterization tests: they pin what /api/hymns does today, quirks included.
-// Tests prefixed "quirk (pinned)" record behavior that a later commit changes on
-// purpose (a normalized hymn lookup); flip their assertions in that commit.
+// Characterization tests for /api/hymns. They began by pinning its exact,
+// lowercase-only lookup; the normalized lookup fix flipped those quirks into
+// the "normalized matching" tests below.
 //
 // Examples are found in the real catalog instead of being hard-coded, so these
 // keep working when hymns.json is edited.
@@ -24,6 +25,27 @@ function required<T>(value: T | undefined, what: string): T {
 function recordsFor(title: string): RawHymn[] {
     return hymnCatalog.filter(
         (hymn) => hymn.song_title.toLowerCase() === title.toLowerCase()
+    );
+}
+
+/** Catalog records whose normalized title matches `title`'s, in catalog order. */
+function recordsForNormalized(title: string): RawHymn[] {
+    return hymnCatalog.filter(
+        (hymn) => normalizeTitle(hymn.song_title) === normalizeTitle(title)
+    );
+}
+
+/**
+ * The version ids matchHymns should list for `title`: records equal to it
+ * ignoring case first, then the other records of its normalized group, each
+ * in catalog order.
+ */
+function expectedIds(title: string): string[] {
+    const group = recordsForNormalized(title);
+    const isExact = (hymn: RawHymn) =>
+        hymn.song_title.toLowerCase() === title.toLowerCase();
+    return [...group.filter(isExact), ...group.filter((hymn) => !isExact(hymn))].map(
+        (hymn, i) => `${hymn.song_title}-${i}`
     );
 }
 
@@ -68,24 +90,50 @@ describe("real catalog examples", () => {
 });
 
 describe("buildHymnIndex", () => {
-    test("groups the real catalog by lowercased title, keeping catalog order", () => {
-        const lowerCaseTitles = new Set(
-            hymnCatalog.map((hymn) => hymn.song_title.toLowerCase())
+    test("groups the real catalog by normalized title, keeping catalog order", () => {
+        const normalizedTitles = new Set(
+            hymnCatalog.map((hymn) => normalizeTitle(hymn.song_title))
         );
-        expect(index.size).toBe(lowerCaseTitles.size);
+        expect(index.size).toBe(normalizedTitles.size);
 
         let indexed = 0;
         for (const [key, group] of index) {
-            expect(key).toBe(key.toLowerCase());
+            expect(key).toBe(normalizeTitle(key));
             expect(group).toEqual(
                 hymnCatalog.filter(
-                    (hymn) => hymn.song_title.toLowerCase() === key
+                    (hymn) => normalizeTitle(hymn.song_title) === key
                 )
             );
             indexed += group.length;
         }
         // Every catalog record lands in exactly one group.
         expect(indexed).toBe(hymnCatalog.length);
+    });
+
+    test('puts punctuation-only siblings such as "Jesus Saves" and "Jesus Saves!" under one key', () => {
+        expect(
+            index.get("jesus saves")?.map((hymn) => [hymn.song_title, hymn.tune_name])
+        ).toEqual([
+            ["Jesus Saves", "LIMPSFIELD"],
+            ["Jesus Saves!", "JESUS SAVES"],
+        ]);
+    });
+
+    test("merges records whose titles differ only by quotes, spacing, '&' or trailing punctuation (synthetic)", () => {
+        const record = (song_title: string, tune_name: string): RawHymn => ({
+            song_title,
+            tune_name,
+            rejoice_hymns: 1,
+            great_hymns_of_the_faith: -1,
+        });
+        const catalog = [
+            record("Jesus\u2019 Love & Mercy", "ONE"),
+            record("Jesus' Love  and Mercy!", "TWO"),
+            record(" JESUS' LOVE AND MERCY. ", "THREE"),
+        ];
+        const result = buildHymnIndex(catalog);
+        expect([...result.keys()]).toEqual(["jesus' love and mercy"]);
+        expect(result.get("jesus' love and mercy")).toEqual(catalog);
     });
 
     test("merges records whose titles differ only by case (synthetic: the real catalog has none)", () => {
@@ -149,13 +197,13 @@ describe("matchHymns", () => {
             ]);
         });
 
-        test("every exact catalog title finds all of its own records", () => {
+        test("every catalog title finds every record of its normalized title, its own records first", () => {
             const results = matchHymns(index, catalogTitles);
             expect(results).toHaveLength(catalogTitles.length);
             results.forEach((result, i) => {
                 expect(result.song_title).toBe(catalogTitles[i]);
-                expect(result.versions).toHaveLength(
-                    recordsFor(catalogTitles[i]).length
+                expect(result.versions.map((version) => version.id)).toEqual(
+                    expectedIds(catalogTitles[i])
                 );
             });
         });
@@ -221,7 +269,7 @@ describe("matchHymns", () => {
             }
         });
 
-        test("is exact otherwise: a prefix or a longer title does not match", () => {
+        test("a prefix or a longer title still does not match", () => {
             const prefix = singleTuneTitle.slice(0, -1);
             const longer = `${singleTuneTitle} Medley`;
             expect(recordsFor(prefix)).toEqual([]);
@@ -265,11 +313,14 @@ describe("matchHymns", () => {
             for (const title of multiTuneTitles) {
                 const records = recordsFor(title);
                 const [entry] = matchHymns(index, [title]);
-                expect(entry.versions.map((version) => version.tune_name)).toEqual(
-                    records.map((record) => record.tune_name)
-                );
+                // Its own records come first, in catalog order.
+                expect(
+                    entry.versions
+                        .slice(0, records.length)
+                        .map((version) => version.tune_name)
+                ).toEqual(records.map((record) => record.tune_name));
                 expect(entry.versions.map((version) => version.id)).toEqual(
-                    records.map((record, i) => `${record.song_title}-${i}`)
+                    expectedIds(title)
                 );
             }
         });
@@ -361,11 +412,11 @@ describe("matchHymns", () => {
         });
     });
 
-    describe("known non-matches", () => {
+    describe("normalized matching", () => {
         test.each(["!", "?"])(
-            'quirk (pinned): a catalog title ending in "%s" does not match when queried without it',
+            'a catalog title ending in "%s" also matches when queried without it',
             (mark) => {
-                // Skip titles whose unpunctuated form is a different catalog title.
+                // Titles whose unpunctuated form is not itself a catalog title.
                 const titles = catalogTitles.filter(
                     (title) =>
                         title.endsWith(mark) &&
@@ -374,18 +425,19 @@ describe("matchHymns", () => {
                 );
                 expect(titles.length).toBeGreaterThan(0);
                 for (const title of titles) {
-                    // Control: the exact title is found...
-                    expect(matchHymns(index, [title])).toHaveLength(1);
-                    // ...but the same title without its punctuation is not.
-                    expect(
-                        matchHymns(index, [withoutTrailingPunctuation(title)])
-                    ).toEqual([]);
+                    const bare = withoutTrailingPunctuation(title);
+                    const [entry] = matchHymns(index, [bare]);
+                    expect(entry.song_title).toBe(bare);
+                    expect(entry.versions.map((version) => version.id)).toEqual(
+                        expectedIds(bare)
+                    );
+                    expect(entry.versions.length).toBeGreaterThan(0);
                 }
             }
         );
 
-        test("quirk (pinned): a title and its trailing-punctuation sibling stay separate lookups, never merged", () => {
-            // E.g. "X!" and "X" are two catalog titles; each finds only its own record.
+        test("a title and its trailing-punctuation sibling are merged, each listing its own records first", () => {
+            // E.g. "X!" and "X" are two catalog titles; both lookups find both.
             const punctuated = catalogTitles.filter(
                 (title) =>
                     trailingPunctuation.test(title) &&
@@ -396,17 +448,94 @@ describe("matchHymns", () => {
                 const bare = withoutTrailingPunctuation(title);
                 const [withMark] = matchHymns(index, [title]);
                 const [withoutMark] = matchHymns(index, [bare]);
-                expect(withMark.versions).toHaveLength(recordsFor(title).length);
-                expect(withoutMark.versions).toHaveLength(
-                    recordsFor(bare).length
-                );
-                expect(withMark.versions.map((v) => v.id)).not.toEqual(
-                    withoutMark.versions.map((v) => v.id)
-                );
+                const merged = recordsFor(title).length + recordsFor(bare).length;
+                expect(withMark.versions).toHaveLength(merged);
+                expect(withoutMark.versions).toHaveLength(merged);
+                expect(withMark.versions.map((v) => v.id)).toEqual(expectedIds(title));
+                expect(withoutMark.versions.map((v) => v.id)).toEqual(expectedIds(bare));
             }
         });
 
-        test("quirk (pinned): a catalog title with a curly apostrophe or quote does not match when queried with straight quotes", () => {
+        // The merged pair the lookup fix was checked against (hymns.json
+        // records 439 and 440). Each spelling keeps the default version it
+        // had before the fix and now also offers the other tune.
+        test('"Jesus Saves!" defaults to JESUS SAVES and also lists LIMPSFIELD', () => {
+            const [entry] = matchHymns(index, ["Jesus Saves!"]);
+            expect(
+                entry.versions.map((v) => [
+                    v.id,
+                    v.tune_name,
+                    v.rejoice_hymns_number,
+                    v.great_hymns_number,
+                    v.selected,
+                ])
+            ).toEqual([
+                ["Jesus Saves!-0", "JESUS SAVES", "342", "231", false],
+                ["Jesus Saves-1", "LIMPSFIELD", "341", "-1", false],
+            ]);
+        });
+
+        test('"Jesus Saves" defaults to LIMPSFIELD and also lists JESUS SAVES', () => {
+            const [entry] = matchHymns(index, ["Jesus Saves"]);
+            expect(
+                entry.versions.map((v) => [
+                    v.id,
+                    v.tune_name,
+                    v.rejoice_hymns_number,
+                    v.great_hymns_number,
+                    v.selected,
+                ])
+            ).toEqual([
+                ["Jesus Saves-0", "LIMPSFIELD", "341", "-1", false],
+                ["Jesus Saves!-1", "JESUS SAVES", "342", "231", false],
+            ]);
+        });
+
+        test("lists records equal to the request (ignoring case) first, then the rest in catalog order (synthetic catalog)", () => {
+            const record = (song_title: string, tune_name: string): RawHymn => ({
+                song_title,
+                tune_name,
+                rejoice_hymns: 1,
+                great_hymns_of_the_faith: -1,
+            });
+            const synthetic = buildHymnIndex([
+                record("Rise Up", "A"),
+                record("Rise Up!", "B"),
+                record("RISE UP.", "C"),
+                record("Rise Up!", "D"),
+            ]);
+            const tunes = (title: string) =>
+                matchHymns(synthetic, [title])[0].versions.map((v) => v.tune_name);
+            expect(tunes("Rise Up!")).toEqual(["B", "D", "A", "C"]);
+            expect(tunes("rise up")).toEqual(["A", "B", "C", "D"]);
+            expect(tunes("Rise up.")).toEqual(["C", "A", "B", "D"]);
+            // No spelling matches exactly: plain catalog order.
+            expect(tunes("Rise Up?")).toEqual(["A", "B", "C", "D"]);
+        });
+
+        test("ignores case, curly quotes, spacing, '&' and trailing punctuation (synthetic catalog)", () => {
+            const synthetic = buildHymnIndex([
+                {
+                    song_title: "Jesus\u2019 Love & Mercy!",
+                    tune_name: "ONE",
+                    rejoice_hymns: 1,
+                    great_hymns_of_the_faith: -1,
+                },
+            ]);
+            for (const query of [
+                "jesus' love and mercy",
+                "  JESUS\u2018 LOVE  &  MERCY ",
+                "Jesus' Love & Mercy?",
+            ]) {
+                const [entry] = matchHymns(synthetic, [query]);
+                expect(entry.song_title).toBe(query);
+                expect(entry.versions.map((v) => [v.id, v.selected])).toEqual([
+                    ["Jesus\u2019 Love & Mercy!-0", true],
+                ]);
+            }
+        });
+
+        test("a catalog title with a curly apostrophe or quote matches when queried with straight quotes", () => {
             const titles = catalogTitles.filter(
                 (title) =>
                     curlyQuote.test(title) &&
@@ -414,16 +543,17 @@ describe("matchHymns", () => {
             );
             expect(titles.length).toBeGreaterThan(0);
             for (const title of titles) {
-                // Control: the exact (curly) title is found...
-                expect(matchHymns(index, [title])).toHaveLength(1);
-                // ...but the straight-quoted spelling is not.
-                expect(matchHymns(index, [toStraightQuotes(title)])).toEqual(
-                    []
+                const [entry] = matchHymns(index, [toStraightQuotes(title)]);
+                expect(entry.song_title).toBe(toStraightQuotes(title));
+                expect(entry.versions.map((v) => v.id)).toEqual(
+                    recordsForNormalized(title).map(
+                        (record, i) => `${record.song_title}-${i}`
+                    )
                 );
             }
         });
 
-        test("quirk (pinned): a catalog title with a straight apostrophe does not match when queried with a curly one", () => {
+        test("a catalog title with a straight apostrophe matches when queried with a curly one", () => {
             const titles = catalogTitles.filter(
                 (title) =>
                     title.includes("'") &&
@@ -431,19 +561,28 @@ describe("matchHymns", () => {
             );
             expect(titles.length).toBeGreaterThan(0);
             for (const title of titles) {
-                expect(matchHymns(index, [title])).toHaveLength(1);
-                expect(matchHymns(index, [toCurlyApostrophe(title)])).toEqual(
-                    []
+                const [entry] = matchHymns(index, [toCurlyApostrophe(title)]);
+                expect(entry.versions.map((v) => v.id)).toEqual(
+                    recordsForNormalized(title).map(
+                        (record, i) => `${record.song_title}-${i}`
+                    )
                 );
             }
         });
 
-        test("quirk (pinned): a title with a trailing space does not match", () => {
-            // Control: the same title without the space is found.
-            expect(matchHymns(index, [singleTuneTitle])).toHaveLength(1);
-            expect(matchHymns(index, [`${singleTuneTitle} `])).toEqual([]);
-            // Leading whitespace is not trimmed either.
-            expect(matchHymns(index, [` ${singleTuneTitle}`])).toEqual([]);
+        test("surrounding and repeated whitespace is ignored", () => {
+            const [record] = recordsFor(singleTuneTitle);
+            for (const query of [
+                `${singleTuneTitle} `,
+                ` ${singleTuneTitle}`,
+                singleTuneTitle.replace(/ /g, "  "),
+            ]) {
+                const [entry] = matchHymns(index, [query]);
+                expect(entry.song_title).toBe(query);
+                expect(entry.versions.map((v) => v.id)).toEqual([
+                    `${record.song_title}-0`,
+                ]);
+            }
         });
     });
 });
