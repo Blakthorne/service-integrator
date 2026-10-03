@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Pagination from "./ui/Pagination";
+import { formatPlanDateHeading, sortPlanDates } from "@/lib/plansByDate";
 
 interface Plan {
     id: string;
@@ -62,16 +63,7 @@ export default function PlansTable({
         fetchPlans();
     }, []);
 
-    const formatDate = (dateString: string): string => {
-        return new Date(dateString + "T00:00:00").toLocaleDateString("en-US", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        });
-    };
-
-    const dates = Object.keys(plansByDate).sort((a, b) => b.localeCompare(a));
+    const dates = sortPlanDates(plansByDate);
     const totalDates = dates.length;
     const totalPages = Math.ceil(totalDates / itemsPerPage);
 
@@ -123,7 +115,7 @@ export default function PlansTable({
                 >
                     <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                         <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                            {formatDate(date)}
+                            {formatPlanDateHeading(date)}
                         </h3>
                     </div>
                     <div className="overflow-x-auto">

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ServiceTypeData } from "../service-types/route";
 import { PlanData } from "../plans/route";
+import { groupPlansByDate } from "@/lib/plansByDate";
 
 interface Plan {
     id: string;
@@ -92,18 +93,8 @@ export async function GET() {
         const allPlansArrays = await Promise.all(plansPromises);
         const allPlans = allPlansArrays.flat();
 
-        // Sort all plans by date
-        allPlans.sort((a: Plan, b: Plan) => b.sortDate.localeCompare(a.sortDate));
-
-        // Group plans by date
-        const plansByDate = allPlans.reduce((acc: { [key: string]: Plan[] }, plan: Plan) => {
-            const date = plan.sortDate.split("T")[0]; // Get just the date part
-            if (!acc[date]) {
-                acc[date] = [];
-            }
-            acc[date].push(plan);
-            return acc;
-        }, {});
+        // Sort all plans by date (newest first) and group them by date
+        const plansByDate = groupPlansByDate<Plan>(allPlans);
 
         return NextResponse.json({
             plansByDate,
