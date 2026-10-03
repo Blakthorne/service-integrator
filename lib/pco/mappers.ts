@@ -97,20 +97,24 @@ function isSongResource(
 
 /**
  * Attach each plan item's song from the resources included with the items
- * (`include=song`). Only "song" items get one: the first included song whose
- * title is identical (case-sensitive) to the item's. Included resources that
- * are not songs are ignored. Items keep their order and are not modified.
+ * (`include=song`). Only "song" items get one: the included song whose ID is
+ * the item's `songId`, so an item renamed in the plan still finds its song.
+ * Without a songId (or if that song wasn't included), the first included
+ * song with an identical (case-sensitive) title is used. Included resources
+ * that are not songs are ignored. Items keep their order and are not modified.
  */
 export function joinItemsToSongs(
     items: PlanItem[],
     included: readonly PcoResourceIdentifier[]
 ): PlanItemWithSong[] {
     const songs = included.filter(isSongResource).map(toSong);
-    return items.map((item) => ({
-        ...item,
-        song:
-            item.itemType === "song"
-                ? (songs.find((song) => song.title === item.title) ?? null)
-                : null,
-    }));
+    const songsById = new Map(songs.map((song) => [song.id, song]));
+    const songFor = (item: PlanItem): Song | null => {
+        if (item.itemType !== "song") {
+            return null;
+        }
+        const linked = item.songId === null ? undefined : songsById.get(item.songId);
+        return linked ?? songs.find((song) => song.title === item.title) ?? null;
+    };
+    return items.map((item) => ({ ...item, song: songFor(item) }));
 }

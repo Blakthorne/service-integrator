@@ -108,6 +108,18 @@ describe("getPlanItems", () => {
         }
     });
 
+    test("a song item renamed in the plan still gets its song, by PCO ID", async () => {
+        stubFetchRoutes({
+            [itemsUrl]: listPage(
+                [itemResource("1", { title: "Amazing Grace (Acoustic)" }, songLink("77"))],
+                { included: [songResource("77", { title: "Amazing Grace" })] }
+            ),
+        });
+        const { items } = await getPlanItems(ST, PLAN);
+        expect(items[0].title).toBe("Amazing Grace (Acoustic)");
+        expect(items[0].song).toMatchObject({ id: "77", title: "Amazing Grace" });
+    });
+
     test("a song item with no included song has song: null", async () => {
         stubFetchRoutes({
             [itemsUrl]: listPage([itemResource("1", { title: "Not In Library" })]),

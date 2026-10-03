@@ -177,7 +177,7 @@ describe("joinItemsToSongs", () => {
     const grace = songResource("77", { title: "Amazing Grace" });
     const holy = songResource("88", { title: "Holy, Holy, Holy" });
 
-    test("joins a song item to the included song with the same title", () => {
+    test("joins a song item to the included song it links to", () => {
         const item = planItem({ id: "1", title: "Amazing Grace", songId: "77" });
         const [joined] = joinItemsToSongs([item], [grace, holy]);
         expect(joined).toStrictEqual({ ...item, song: toSong(grace) });
@@ -211,7 +211,7 @@ describe("joinItemsToSongs", () => {
         }
     });
 
-    test("the first included song with the item's title wins", () => {
+    test("without a songId, the first included song with the item's title wins", () => {
         const twin = songResource("99", { title: "Amazing Grace", author: "Twin" });
         const item = planItem({ title: "Amazing Grace" });
         expect(joinItemsToSongs([item], [grace, twin])[0].song?.id).toBe("77");
@@ -227,9 +227,32 @@ describe("joinItemsToSongs", () => {
         expect(joinItemsToSongs([item], [arrangement])[0].song).toBeNull();
     });
 
-    test("QUIRK (pinned): a renamed song item gets no song, even though its songId names one (flips when songs are joined by PCO ID)", () => {
+    test("a renamed song item is joined to its song by songId", () => {
         const renamed = planItem({ title: "Amazing Grace (Acoustic)", songId: "77" });
-        expect(joinItemsToSongs([renamed], [grace])[0].song).toBeNull();
+        expect(joinItemsToSongs([renamed], [grace])[0].song).toStrictEqual(
+            toSong(grace)
+        );
+    });
+
+    test("songId wins over a song whose title matches the item", () => {
+        // Titled like song 77, but PCO links it to song 88.
+        const item = planItem({ title: "Amazing Grace", songId: "88" });
+        expect(joinItemsToSongs([item], [grace, holy])[0].song?.id).toBe("88");
+    });
+
+    test("without a songId, the exact title is still used", () => {
+        const item = planItem({ title: "Holy, Holy, Holy", songId: null });
+        expect(joinItemsToSongs([item], [grace, holy])[0].song?.id).toBe("88");
+    });
+
+    test("a songId whose song was not included falls back to the exact title", () => {
+        const item = planItem({ title: "Amazing Grace", songId: "404" });
+        expect(joinItemsToSongs([item], [grace])[0].song?.id).toBe("77");
+    });
+
+    test("a non-song item gets no song, even with a songId", () => {
+        const header = planItem({ title: "Offertory", itemType: "header", songId: "77" });
+        expect(joinItemsToSongs([header], [grace])[0].song).toBeNull();
     });
 
     test("does not modify the items passed in", () => {
