@@ -484,8 +484,8 @@ describe("buildScheduleCopyText: matching items to hymns", () => {
     });
 
     test.each([
-        ["modifier letter apostrophe U+02BC", "ʼ"],
-        ["prime U+2032", "′"],
+        ["modifier letter apostrophe U+02BC", "\u02BC"],
+        ["prime U+2032", "\u2032"],
     ])("a %s matches a straight apostrophe", (_name, apostrophe) => {
         const straight = hymn("In Jordan's Stream", BOTH);
         const fancy = `In Jordan${apostrophe}s Stream`;
@@ -498,17 +498,17 @@ describe("buildScheduleCopyText: matching items to hymns", () => {
     });
 
     test("a double prime U+2033 matches a straight double quote", () => {
-        const title = "Say ″Amen″";
+        const title = "Say \u2033Amen\u2033";
         expect(textFor([songItem(title, 1)], [hymn('Say "Amen"', BOTH)])).toBe(
             `${title} (R-12/G-34)`
         );
     });
 
     test.each([
-        ["left single quotation mark U+2018", "‘", "'"],
-        ["right single quotation mark U+2019", "’", "'"],
-        ["left double quotation mark U+201C", "“", '"'],
-        ["right double quotation mark U+201D", "”", '"'],
+        ["left single quotation mark U+2018", "\u2018", "'"],
+        ["right single quotation mark U+2019", "\u2019", "'"],
+        ["left double quotation mark U+201C", "\u201C", '"'],
+        ["right double quotation mark U+201D", "\u201D", '"'],
     ])(
         "a %s matches its straight form, either way round",
         (_name, curly, straight) => {

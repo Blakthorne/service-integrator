@@ -75,11 +75,11 @@ const withoutTrailingPunctuation = (title: string): string =>
     title.replace(trailingPunctuation, "");
 
 // U+2018 / U+2019 curly single quotes and U+201C / U+201D curly double quotes.
-const curlyQuote = /[‘’“”]/;
+const curlyQuote = /[\u2018\u2019\u201C\u201D]/;
 const toStraightQuotes = (title: string): string =>
-    title.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+    title.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"');
 const toCurlyApostrophe = (title: string): string =>
-    title.replace(/'/g, "’");
+    title.replace(/'/g, "\u2019");
 
 describe("real catalog examples", () => {
     test("the catalog has the shapes the other tests rely on", () => {
