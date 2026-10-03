@@ -14,9 +14,8 @@ export default function PlanNotFound() {
                 title="Plan not found"
                 description="This plan does not exist, or it may have been deleted in Planning Center."
                 action={
-                    // TODO(Phase 4): routes.plans()
                     <Link
-                        href={routes.home()}
+                        href={routes.plans()}
                         className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
                     >
                         Back to Plans

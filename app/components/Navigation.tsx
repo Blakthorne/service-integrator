@@ -15,7 +15,7 @@ export default function Navigation() {
                     <div className="flex items-center">
                         <div className="flex-shrink-0 flex items-center">
                             <Link
-                                href={routes.home()}
+                                href={routes.plans()}
                                 className="text-lg font-semibold text-gray-900 dark:text-gray-100"
                             >
                                 Service Integrator

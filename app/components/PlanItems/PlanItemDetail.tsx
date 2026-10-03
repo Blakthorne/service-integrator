@@ -49,8 +49,7 @@ export default function PlanItemDetail({ itemId }: PlanItemDetailProps) {
             <PageHeader
                 title={item.title}
                 breadcrumbs={[
-                    // TODO(Phase 4): routes.plans()
-                    { label: "Plans", href: routes.home() },
+                    { label: "Plans", href: routes.plans() },
                     { label: heading, href: planHref },
                     { label: item.title },
                 ]}

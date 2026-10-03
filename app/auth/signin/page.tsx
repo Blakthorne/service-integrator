@@ -11,15 +11,15 @@ export default async function SignIn({
 }) {
     const { callbackUrl } = await searchParams;
     // Where to go after signing in: the page the visitor asked for, if it is a
-    // safe path on this site, otherwise home.
+    // safe path on this site, otherwise the plans list.
     const target: string =
         safeCallbackUrl(
             Array.isArray(callbackUrl) ? callbackUrl[0] : callbackUrl
-        ) ?? routes.home(); // TODO(Phase 4): routes.plans()
+        ) ?? routes.plans();
 
     const session = await auth();
 
-    // Redirect to the requested page (or home) if already signed in
+    // Redirect to the requested page (or the plans list) if already signed in
     if (session?.user) {
         // A runtime path cannot be checked against the route table.
         redirect(target as Route);

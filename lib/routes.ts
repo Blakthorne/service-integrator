@@ -41,8 +41,7 @@ function isAtOrBelow(pathname: string, base: string): boolean {
 /** The top navigation bar, in display order. A new section adds its folder plus an entry here. */
 export const NAV_ITEMS: readonly NavItem[] = [
     {
-        // TODO(Phase 4): routes.plans()
-        href: routes.home(),
+        href: routes.plans(),
         label: "Plans",
         isActive: (pathname) =>
             pathname === routes.home() || isAtOrBelow(pathname, routes.plans()),

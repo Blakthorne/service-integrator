@@ -26,8 +26,7 @@ export default function PlanHeader() {
         <PageHeader
             title={heading}
             breadcrumbs={[
-                // TODO(Phase 4): routes.plans()
-                { label: "Plans", href: routes.home() },
+                { label: "Plans", href: routes.plans() },
                 { label: heading },
             ]}
             actions={

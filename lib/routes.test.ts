@@ -51,8 +51,7 @@ describe("NAV_ITEMS", () => {
     });
 
     test("hrefs come from the route builders", () => {
-        // TODO(Phase 4): Plans links to routes.plans() once /plans exists.
-        expect(plans.href).toBe(routes.home());
+        expect(plans.href).toBe(routes.plans());
         expect(unusedHymns.href).toBe(routes.unusedHymns());
     });
 
@@ -93,9 +92,9 @@ describe("navAriaCurrent", () => {
     type Current = "page" | "true" | undefined;
     // [pathname, Plans, Unused Hymns]
     const cases: [string, Current, Current][] = [
-        // TODO(Phase 4): Plans links to /plans, so "/" and "/plans" change here.
-        ["/", "page", undefined],
-        ["/plans", "true", undefined],
+        // "/" only redirects to /plans, which is the Plans item's own page.
+        ["/", "true", undefined],
+        ["/plans", "page", undefined],
         ["/plans/1405391/98765", "true", undefined],
         ["/plans/1405391/98765/schedule", "true", undefined],
         ["/plans/1405391/98765/items/4321", "true", undefined],
