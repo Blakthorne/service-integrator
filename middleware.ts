@@ -21,13 +21,16 @@ export default auth((req) => {
 export const config = {
     matcher: [
         /*
-         * Match all request paths except for the ones starting with:
-         * - auth (auth pages)
-         * - api/auth (auth API routes)
+         * Match all request paths except:
+         * - /auth and everything under /auth/ (auth pages)
+         * - /api/auth and everything under /api/auth/ (auth API routes)
          * - _next/static (static files)
          * - _next/image (image optimization files)
          * - favicon.ico (favicon file)
+         * "auth" and "api/auth" must be whole path segments, so paths that
+         * only start with those letters (/authors, /api/authorize) stay
+         * protected.
          */
-        "/((?!auth|api/auth|_next/static|_next/image|favicon.ico).*)"
+        "/((?!auth/|auth$|api/auth/|api/auth$|_next/static|_next/image|favicon\\.ico).*)"
     ]
 }
