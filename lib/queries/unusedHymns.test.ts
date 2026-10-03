@@ -103,7 +103,7 @@ describe("getUnusedHymns", () => {
         expect(fetchAllSongs).toHaveBeenCalledTimes(2);
     });
 
-    test("a refreshed result is what later calls get", async () => {
+    test("a successful refresh replaces the cached result", async () => {
         const { getUnusedHymns } = await loadQueries();
         const before = await getUnusedHymns();
         expect(before.unused.map((hymn) => hymn.songTitle)).not.toContain(
@@ -167,16 +167,46 @@ describe("getUnusedHymns", () => {
         expect(fetchAllSongs).toHaveBeenCalledTimes(2);
     });
 
-    test("propagates a failure from a refresh, and the next call retries", async () => {
+    test("a failed refresh rejects and keeps the previous result for later calls", async () => {
         const { getUnusedHymns } = await loadQueries();
-        await getUnusedHymns();
+        const before = await getUnusedHymns();
 
         fetchAllSongs.mockRejectedValueOnce(new Error("PCO down"));
         await expect(getUnusedHymns({ refresh: true })).rejects.toThrow(
             "PCO down"
         );
 
-        await expect(getUnusedHymns()).resolves.toHaveProperty("unused");
+        // Later plain calls are still served the earlier result, with no fetch.
+        await expect(getUnusedHymns()).resolves.toBe(before);
+        expect(fetchAllSongs).toHaveBeenCalledTimes(2); // the load and the failed refresh
+    });
+
+    test("a failed refresh does not extend the previous result's hour", async () => {
+        const { getUnusedHymns } = await loadQueries();
+        await getUnusedHymns();
+
+        vi.setSystemTime(Date.now() + HOUR_MS - 1);
+        fetchAllSongs.mockRejectedValueOnce(new Error("PCO down"));
+        await expect(getUnusedHymns({ refresh: true })).rejects.toThrow(
+            "PCO down"
+        );
+
+        vi.setSystemTime(Date.now() + 1); // the original hour is up
+        await getUnusedHymns();
         expect(fetchAllSongs).toHaveBeenCalledTimes(3);
+    });
+
+    test("a failed refresh in one copy of the module leaves what the other serves", async () => {
+        const page = await loadQueries();
+        const action = await loadAnotherCopy();
+        const before = await page.getUnusedHymns();
+
+        fetchAllSongs.mockRejectedValueOnce(new Error("PCO down"));
+        await expect(action.getUnusedHymns({ refresh: true })).rejects.toThrow(
+            "PCO down"
+        );
+
+        await expect(page.getUnusedHymns()).resolves.toBe(before);
+        expect(fetchAllSongs).toHaveBeenCalledTimes(2);
     });
 });

@@ -186,3 +186,155 @@ describe("createTtlCache", () => {
         }
     });
 });
+
+describe("TtlCache.refresh", () => {
+    test("loads a new value even while a fresh one is cached, and replaces it", async () => {
+        const { cache } = setup();
+        await cache.get("k", async () => "old");
+
+        await expect(cache.refresh("k", async () => "new")).resolves.toBe("new");
+
+        const load = vi.fn(async () => "unused");
+        await expect(cache.get("k", load)).resolves.toBe("new");
+        expect(load).not.toHaveBeenCalled();
+    });
+
+    test("loads and caches a key that was empty", async () => {
+        const { cache } = setup();
+        await expect(cache.refresh("k", async () => "first")).resolves.toBe("first");
+
+        const load = vi.fn(async () => "unused");
+        await expect(cache.get("k", load)).resolves.toBe("first");
+        expect(load).not.toHaveBeenCalled();
+    });
+
+    test("counts the TTL from when the refresh finished", async () => {
+        const { cache, advance } = setup();
+        await cache.get("k", async () => "old");
+        advance(TTL - 1); // the old value is about to expire
+        await cache.refresh("k", async () => "new");
+
+        advance(TTL - 1); // past the old expiry, inside the new one
+        const load = vi.fn(async () => "reloaded");
+        await expect(cache.get("k", load)).resolves.toBe("new");
+        expect(load).not.toHaveBeenCalled();
+
+        advance(1);
+        await expect(cache.get("k", load)).resolves.toBe("reloaded");
+    });
+
+    test("a failed refresh rejects and keeps the previous value", async () => {
+        const { cache } = setup();
+        await cache.get("k", async () => "old");
+
+        await expect(
+            cache.refresh("k", () => Promise.reject(new Error("PCO down")))
+        ).rejects.toThrow("PCO down");
+
+        const load = vi.fn(async () => "unused");
+        await expect(cache.get("k", load)).resolves.toBe("old");
+        expect(load).not.toHaveBeenCalled();
+    });
+
+    test("a load that throws synchronously is a failed refresh too", async () => {
+        const { cache } = setup();
+        await cache.get("k", async () => "old");
+
+        const load = vi.fn((): Promise<string> => {
+            throw new Error("sync boom");
+        });
+        await expect(cache.refresh("k", load)).rejects.toThrow("sync boom");
+
+        await expect(cache.get("k", async () => "unused")).resolves.toBe("old");
+    });
+
+    test("a failed refresh does not extend the previous value's life", async () => {
+        const { cache, advance } = setup();
+        await cache.get("k", async () => "old");
+        advance(TTL - 1);
+        await expect(
+            cache.refresh("k", () => Promise.reject(new Error("boom")))
+        ).rejects.toThrow("boom");
+
+        advance(1); // the old value's original expiry
+        await expect(cache.get("k", async () => "reloaded")).resolves.toBe("reloaded");
+    });
+
+    test("a failed refresh of an empty key caches nothing", async () => {
+        const { cache } = setup();
+        await expect(
+            cache.refresh("k", () => Promise.reject(new Error("boom")))
+        ).rejects.toThrow("boom");
+
+        await expect(cache.get("k", async () => "loaded")).resolves.toBe("loaded");
+    });
+
+    test("get keeps serving the previous value while a refresh loads", async () => {
+        const { cache } = setup();
+        await cache.get("k", async () => "old");
+        const pending = deferred<string>();
+        const refreshing = cache.refresh("k", () => pending.promise);
+
+        const load = vi.fn(async () => "unused");
+        await expect(cache.get("k", load)).resolves.toBe("old");
+        expect(load).not.toHaveBeenCalled();
+
+        pending.resolve("new");
+        await expect(refreshing).resolves.toBe("new");
+        await expect(cache.get("k", load)).resolves.toBe("new");
+    });
+
+    test("a get with nothing fresh cached joins a refresh in flight, and its failure", async () => {
+        const { cache } = setup();
+        const pending = deferred<string>();
+        const refreshing = cache.refresh("k", () => pending.promise);
+        const load = vi.fn(async () => "unused");
+        const joined = cache.get("k", load);
+
+        pending.reject(new Error("boom"));
+
+        await expect(refreshing).rejects.toThrow("boom");
+        await expect(joined).rejects.toThrow("boom");
+        expect(load).not.toHaveBeenCalled();
+    });
+
+    test("always loads: it supersedes a load already in flight", async () => {
+        const { cache } = setup();
+        const stale = deferred<string>();
+        const before = cache.get("k", () => stale.promise);
+        const load = vi.fn(async () => "fresh");
+
+        await expect(cache.refresh("k", load)).resolves.toBe("fresh");
+        expect(load).toHaveBeenCalledTimes(1);
+
+        // The older load finishes last. Its caller still gets its result...
+        stale.resolve("stale");
+        await expect(before).resolves.toBe("stale");
+        // ...but the cache keeps the newer one.
+        await expect(cache.get("k", async () => "unused")).resolves.toBe("fresh");
+    });
+
+    test("keeps keys apart", async () => {
+        const { cache } = setup();
+        await cache.get("a", async () => "A");
+        await cache.get("b", async () => "B");
+
+        await cache.refresh("a", async () => "A2");
+
+        await expect(cache.get("a", async () => "unused")).resolves.toBe("A2");
+        await expect(cache.get("b", async () => "unused")).resolves.toBe("B");
+    });
+
+    test("an invalidate during a refresh drops its result", async () => {
+        const { cache } = setup();
+        await cache.get("k", async () => "old");
+        const pending = deferred<string>();
+        const refreshing = cache.refresh("k", () => pending.promise);
+
+        cache.invalidate("k");
+        pending.resolve("new");
+
+        await expect(refreshing).resolves.toBe("new"); // its caller still gets it
+        await expect(cache.get("k", async () => "reloaded")).resolves.toBe("reloaded");
+    });
+});

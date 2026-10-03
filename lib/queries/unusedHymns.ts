@@ -35,7 +35,7 @@ const cache = sharedCache();
 
 /** Options for getUnusedHymns. */
 export interface GetUnusedHymnsOptions {
-    /** Drop the cached result and recompute it from Planning Center now. */
+    /** Recompute from Planning Center now and, if that works, replace the cached result. */
     refresh?: boolean;
 }
 
@@ -44,22 +44,20 @@ export interface GetUnusedHymnsOptions {
  * computed from the whole PCO song library. The result is cached for an hour,
  * and concurrent calls share one load.
  *
- * `refresh: true` invalidates the cache first, so the result is always newly
- * computed and is what later calls get. Errors from PCO pass through and are
- * never cached, so the next call tries again. Note that a failed refresh has
- * already dropped the previous result.
+ * `refresh: true` always recomputes, and replaces the cached result only once
+ * that succeeds: a failed refresh throws and leaves the previous result in
+ * place, so page loads are still served from it while Planning Center is
+ * down. Errors from PCO pass through and are never cached, so after a failed
+ * plain call (nothing cached to serve) the next call tries again.
  */
 export async function getUnusedHymns({
     refresh = false,
 }: GetUnusedHymnsOptions = {}): Promise<UnusedHymnsResult> {
-    if (refresh) {
-        cache.invalidate(CACHE_KEY);
-    }
-    return cache.get(CACHE_KEY, async () =>
+    const load = async () =>
         computeUnusedHymns(
             hymnCatalog,
             await fetchAllSongs(),
             new Date().toISOString()
-        )
-    );
+        );
+    return refresh ? cache.refresh(CACHE_KEY, load) : cache.get(CACHE_KEY, load);
 }
