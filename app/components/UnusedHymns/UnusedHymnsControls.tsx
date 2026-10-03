@@ -1,5 +1,7 @@
 "use client";
 
+import LocalTime from "@/app/components/ui/LocalTime";
+
 export type BookFilter = "all" | "rejoice" | "great";
 export type SortKey = "title" | "number";
 
@@ -74,13 +76,6 @@ export default function UnusedHymnsControls({
     onSortChange,
     onRefresh,
 }: UnusedHymnsControlsProps) {
-    const asOf = computedAt
-        ? new Date(computedAt).toLocaleString("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short",
-          })
-        : null;
-
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mb-6 space-y-4">
             <div className="flex flex-wrap items-center gap-4">
@@ -112,9 +107,9 @@ export default function UnusedHymnsControls({
                     {summary}
                 </p>
                 <div className="flex items-center gap-3">
-                    {asOf && (
+                    {computedAt && (
                         <span className="text-xs text-gray-500 dark:text-gray-400">
-                            As of {asOf}
+                            As of <LocalTime iso={computedAt} />
                         </span>
                     )}
                     <button
