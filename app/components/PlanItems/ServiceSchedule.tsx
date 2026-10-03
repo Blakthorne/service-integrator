@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import CopyButton from "./CopyButton";
+import CopyButton from "../ui/CopyButton";
 import { normalizeTitle } from "@/lib/normalizeTitle";
 import {
     buildScheduleCopyText,
@@ -30,8 +30,6 @@ export default function ServiceSchedule({
     serviceTypeName: string;
     date: Date;
 }) {
-    const [showCopyTooltip, setShowCopyTooltip] = useState<boolean>(false);
-
     const onChooseOption = (
         item: ItemWithSelection,
         option: "Leave blank" | "Custom" | undefined,
@@ -200,8 +198,6 @@ export default function ServiceSchedule({
                                 serviceTypeName,
                                 date,
                             })}
-                            showTooltip={showCopyTooltip}
-                            setShowTooltip={setShowCopyTooltip}
                         />
                     </div>
                 </div>

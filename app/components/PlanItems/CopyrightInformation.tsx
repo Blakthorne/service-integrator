@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import CopyButton from "./CopyButton";
+import CopyButton from "../ui/CopyButton";
 import SongCopyright from "../SongCopyright";
 import {
     buildCopyrightCopyAllText,
@@ -16,8 +15,6 @@ export default function CopyrightInformation({
     items: PlanItem[];
     includedSongs: Song[];
 }): React.ReactNode {
-    const [showCopyTooltip, setShowCopyTooltip] = useState<boolean>(false);
-
     return (
         <div>
             <div className="flex items-center justify-between mb-6">
@@ -27,8 +24,6 @@ export default function CopyrightInformation({
                 <div className="flex items-center gap-4">
                     <CopyButton
                         text={buildCopyrightCopyAllText(items, includedSongs)}
-                        showTooltip={showCopyTooltip}
-                        setShowTooltip={setShowCopyTooltip}
                     />
                 </div>
             </div>
