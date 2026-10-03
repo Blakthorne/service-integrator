@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import CopyButton from "../ui/CopyButton";
+import { createDebouncedSave } from "@/lib/debouncedSave";
 import { normalizeTitle } from "@/lib/normalizeTitle";
 import type { ChooseOption, SetCustomText } from "@/lib/scheduleSelections";
 import {
@@ -29,7 +30,7 @@ const CUSTOM_TEXT_DEBOUNCE_MS = 500;
 /**
  * The custom-text box. It keeps what is typed locally and saves it 500 ms
  * after typing pauses, or straight away when the box loses focus (so a radio
- * or the copy button clicked right after typing sees the text).
+ * or the copy button clicked right after typing sees the text) or unmounts.
  */
 function CustomTextInput({
     item,
@@ -39,48 +40,46 @@ function CustomTextInput({
     onCustomTextChange: SetCustomText;
 }) {
     const [inputValue, setInputValue] = useState(item.customText || "");
-    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // The saver's timer and the unmount cleanup outlive the render that
+    // scheduled them, so they save through the latest callback and item ID.
+    const saveRef = useRef<(text: string) => void>(() => {});
+    useEffect(() => {
+        saveRef.current = (text) => onCustomTextChange(item.id, text);
+    });
+    const [saver] = useState(() =>
+        createDebouncedSave<string>(
+            (text) => saveRef.current(text),
+            CUSTOM_TEXT_DEBOUNCE_MS
+        )
+    );
 
     // Follow the saved text when it changes elsewhere (picking a hymn version
     // clears it), unless an edit is still waiting to be saved: the box stays
     // mounted now, so an older save landing mid-typing must not overwrite it.
     useEffect(() => {
-        if (timeoutRef.current === null) {
+        if (!saver.isPending()) {
             setInputValue(item.customText || "");
         }
-    }, [item.customText]);
+    }, [item.customText, saver]);
 
-    // Cleanup timeout on unmount
+    // Leaving the tab while an edit waits (Back, Cmd+[, a swipe) unmounts the
+    // box with no blur event, since React dispatches none during the commit,
+    // so the unmount saves the edit instead of dropping it with the timer.
     useEffect(() => {
         return () => {
-            if (timeoutRef.current) {
-                clearTimeout(timeoutRef.current);
-            }
+            saver.flush();
         };
-    }, []);
+    }, [saver]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newValue = e.target.value;
         setInputValue(newValue);
-
-        // Clear existing timeout
-        if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-        }
-
-        // Set new timeout to save the text
-        timeoutRef.current = setTimeout(() => {
-            timeoutRef.current = null;
-            onCustomTextChange(item.id, newValue);
-        }, CUSTOM_TEXT_DEBOUNCE_MS);
+        saver.schedule(newValue);
     };
 
     const handleBlur = () => {
-        if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-            timeoutRef.current = null;
-            onCustomTextChange(item.id, inputValue);
-        }
+        saver.flush();
     };
 
     return (
