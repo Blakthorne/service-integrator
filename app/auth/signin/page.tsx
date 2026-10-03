@@ -15,7 +15,7 @@ export default async function SignIn({
     const target: string =
         safeCallbackUrl(
             Array.isArray(callbackUrl) ? callbackUrl[0] : callbackUrl
-        ) ?? routes.home();
+        ) ?? routes.home(); // TODO(Phase 4): routes.plans()
 
     const session = await auth();
 
