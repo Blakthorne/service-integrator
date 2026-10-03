@@ -88,6 +88,7 @@ function CustomTextInput({
             value={inputValue}
             onChange={handleChange}
             onBlur={handleBlur}
+            aria-label={`Custom text for ${item.title}`}
             className="flex-1 px-2 py-1 text-sm border w-full rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             placeholder="Enter custom text..."
         />
