@@ -221,9 +221,9 @@ export default function ServiceSchedule({
     return (
         <div>
             <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                     Service Schedule
-                </h3>
+                </h2>
                 <div className="flex items-center gap-4">
                     <div className="relative">
                         <CopyButton
@@ -253,9 +253,9 @@ export default function ServiceSchedule({
                             >
                                 <div className="flex flex-col space-y-2">
                                     <div className="flex justify-between items-start">
-                                        <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
                                             {item.title}
-                                        </h4>
+                                        </h3>
                                     </div>
                                     {!hymn ? (
                                         <div className="space-y-2">

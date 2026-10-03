@@ -22,9 +22,9 @@ export default function CopyrightInformation({
     return (
         <div>
             <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                     Copyright Information
-                </h3>
+                </h2>
                 <div className="flex items-center gap-4">
                     <CopyButton text={buildCopyrightCopyAllText(items)} />
                 </div>
