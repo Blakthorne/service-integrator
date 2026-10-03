@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { withSearchParams } from "@/lib/urlState";
+import { urlWithSearchParams } from "@/lib/urlState";
 
 /** How an update touches the browser history. */
 export interface SetSearchParamsOptions {
@@ -28,8 +28,10 @@ export interface SetSearchParamsOptions {
  * `pushState` with a `null` state. Next.js patches both, keeps its own history
  * state and updates `useSearchParams()`, so there is no navigation. It starts
  * from the live URL (not the last render), so two calls in a row both apply,
- * and it keeps the pathname and hash. A call that would not change the URL is
- * ignored, so repeating an action does not stack identical history entries.
+ * and it keeps the pathname and hash. A call that would not change the query
+ * string is ignored (a different spelling of the same parameters, such as
+ * `a%20b` for `a+b`, does not count), so repeating an action does not stack
+ * identical history entries.
  *
  * Call it only from event handlers, or from effects that react to later
  * changes. Next installs its history patch in an effect of its router, which
@@ -47,9 +49,8 @@ export function useUrlState() {
             updates: Record<string, string | null>,
             options: SetSearchParamsOptions = { history: "replace" }
         ): void => {
-            const { pathname, search, hash } = window.location;
-            const url = pathname + withSearchParams(search, updates) + hash;
-            if (url === pathname + search + hash) {
+            const url = urlWithSearchParams(window.location, updates);
+            if (url === null) {
                 return;
             }
             if (options.history === "push") {

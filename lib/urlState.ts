@@ -61,3 +61,31 @@ export function withSearchParams(
     const next = params.toString();
     return next === "" ? "" : `?${next}`;
 }
+
+/** The parts of a location (`window.location` has them) that make up a URL on this site. */
+export interface UrlParts {
+    pathname: string;
+    search: string;
+    hash: string;
+}
+
+/**
+ * The URL (pathname, query string and hash) that results from applying
+ * `updates` to the query string of `location`, or `null` when that would leave
+ * the query string as it is.
+ *
+ * "As it is" is judged on the re-serialized query string, not the raw one: a
+ * query that only spells the same parameters differently (`?q=a%20b`, a
+ * trailing `&`) counts as unchanged, so callers do not write the URL, or push
+ * a history entry, for nothing.
+ */
+export function urlWithSearchParams(
+    location: UrlParts,
+    updates: Record<string, string | null>
+): string | null {
+    const next = withSearchParams(location.search, updates);
+    if (next === withSearchParams(location.search, {})) {
+        return null;
+    }
+    return location.pathname + next + location.hash;
+}

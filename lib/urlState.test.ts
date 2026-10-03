@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { parseEnum, parsePage, withSearchParams } from "./urlState";
+import {
+    parseEnum,
+    parsePage,
+    urlWithSearchParams,
+    withSearchParams,
+} from "./urlState";
 
 describe("parsePage", () => {
     test.each([
@@ -184,5 +189,80 @@ describe("withSearchParams", () => {
 
     test("deleting a key that appears several times removes them all", () => {
         expect(withSearchParams("?t=a&u=1&t=b", { t: null })).toBe("?u=1");
+    });
+});
+
+describe("urlWithSearchParams", () => {
+    const at = (search: string, hash = "", pathname = "/unused-hymns") => ({
+        pathname,
+        search,
+        hash,
+    });
+
+    test("applies the updates and keeps the pathname and hash", () => {
+        expect(
+            urlWithSearchParams(at("?book=great", "#top"), { page: "2" })
+        ).toBe("/unused-hymns?book=great&page=2#top");
+        expect(
+            urlWithSearchParams(at("?book=great&page=2"), { page: null })
+        ).toBe("/unused-hymns?book=great");
+    });
+
+    test("drops the question mark when the last parameter goes, and keeps the hash", () => {
+        expect(urlWithSearchParams(at("?page=2", "#top"), { page: null })).toBe(
+            "/unused-hymns#top"
+        );
+    });
+
+    test("works from an empty query string", () => {
+        expect(urlWithSearchParams(at(""), { book: "rejoice" })).toBe(
+            "/unused-hymns?book=rejoice"
+        );
+    });
+
+    test.each([
+        ["a value that is already set", "?a=1&b=2", { a: "1" }],
+        ["no updates", "?a=1", {}],
+        ["no updates and no query string", "", {}],
+        ["a key that is not there being removed", "?a=1", { z: null }],
+        ["a key removed from an empty query string", "", { z: null }],
+        ["an empty value that is already empty", "?q=", { q: "" }],
+        ["a space already spelled %20", "?q=a%20b", { q: "a b" }],
+        ["a space already spelled +", "?q=a+b", { q: "a b" }],
+        ["a trailing ampersand", "?a=1&", { a: "1" }],
+        ["an empty pair in the middle", "?a=1&&b=2", { a: "1" }],
+        ["a lone question mark", "?", {}],
+        ["a lone question mark and a key that is not there", "?", { a: null }],
+    ])("returns null for %s, so nothing is written", (_name, search, updates) => {
+        expect(urlWithSearchParams(at(search), updates)).toBeNull();
+    });
+
+    test("a different value is a change", () => {
+        expect(urlWithSearchParams(at("?a=1"), { a: "2" })).toBe(
+            "/unused-hymns?a=2"
+        );
+    });
+
+    test("an update that collapses a repeated key is a change", () => {
+        expect(urlWithSearchParams(at("?t=a&t=b"), { t: "b" })).toBe(
+            "/unused-hymns?t=b"
+        );
+    });
+
+    test("a real change also normalizes how the other parameters are spelled", () => {
+        expect(urlWithSearchParams(at("?q=a%20b&"), { x: "1" })).toBe(
+            "/unused-hymns?q=a+b&x=1"
+        );
+    });
+
+    test("accepts window.location itself", () => {
+        const location: Pick<Location, "pathname" | "search" | "hash"> = {
+            pathname: "/plans",
+            search: "?page=2",
+            hash: "",
+        };
+        expect(urlWithSearchParams(location, { page: "3" })).toBe(
+            "/plans?page=3"
+        );
     });
 });
