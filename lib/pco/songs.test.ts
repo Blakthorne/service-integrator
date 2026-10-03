@@ -4,6 +4,7 @@ import {
     PCO_AUTH,
     PCO_BASE,
     calledUrls,
+    json,
     listPage,
     songResource,
     stubFetchRoutes,
@@ -43,5 +44,20 @@ describe("fetchAllSongs", () => {
                 headers: { Authorization: PCO_AUTH },
             });
         }
+    });
+
+    test("reads up to 100 pages (10,000 songs) before giving up", async () => {
+        const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+            const offset = Number(new URL(url).searchParams.get("offset") ?? 0);
+            return json(
+                listPage([songResource(String(offset + 1))], {
+                    next: `${PCO_BASE}/songs?offset=${offset + 1}&per_page=100`,
+                })
+            );
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(fetchAllSongs()).rejects.toThrow(/more than 100 pages/);
+        expect(fetchMock).toHaveBeenCalledTimes(100);
     });
 });
