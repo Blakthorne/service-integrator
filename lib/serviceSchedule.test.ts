@@ -403,18 +403,20 @@ describe("buildScheduleCopyText: matching items to hymns", () => {
         ["left double quotation mark U+201C", "“", '"'],
         ["right double quotation mark U+201D", "”", '"'],
     ])(
-        "QUIRK: the %s is not straightened by normalizeTitle, so it does not match its straight form (flips when normalizeTitle is fixed)",
+        "a %s matches its straight form, either way round",
         (_name, curly, straight) => {
-            const fromCatalog = hymn(`In Jordan${curly}s Stream`, BOTH);
-            const straightTitle = `In Jordan${straight}s Stream`;
-            expect(textFor([songItem(straightTitle, 1)], [fromCatalog])).toBe(
-                straightTitle
-            );
-            // The same character on both sides still matches.
             const curlyTitle = `In Jordan${curly}s Stream`;
-            expect(textFor([songItem(curlyTitle, 1)], [fromCatalog])).toBe(
-                `${curlyTitle} (R-12/G-34)`
-            );
+            const straightTitle = `In Jordan${straight}s Stream`;
+            expect(
+                textFor([songItem(straightTitle, 1)], [hymn(curlyTitle, BOTH)])
+            ).toBe(`${straightTitle} (R-12/G-34)`);
+            expect(
+                textFor([songItem(curlyTitle, 1)], [hymn(straightTitle, BOTH)])
+            ).toBe(`${curlyTitle} (R-12/G-34)`);
+            // The same character on both sides still matches.
+            expect(
+                textFor([songItem(curlyTitle, 1)], [hymn(curlyTitle, BOTH)])
+            ).toBe(`${curlyTitle} (R-12/G-34)`);
         }
     );
 

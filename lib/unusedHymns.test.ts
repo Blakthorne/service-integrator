@@ -104,6 +104,20 @@ describe("computeUnusedHymns", () => {
         expect(result.review[0].matchedPcoTitle).toBe("Blesed Assurance");
     });
 
+    test("titles that differ only by curly vs straight quotes are the same song (used, not near-match)", () => {
+        const hymns: RawHymn[] = [
+            rejoice("In Jordan’s Stream", "BRIDGEWATER", 1),
+            rejoice("Jesus' Name", "X", 2),
+        ];
+        const songs: PcoSong[] = [
+            { title: "In Jordan's Stream", lastScheduledAt: AT },
+            { title: "Jesus’ Name", lastScheduledAt: AT },
+        ];
+        const result = computeUnusedHymns(hymns, songs, AT);
+        expect(result.unused).toEqual([]);
+        expect(result.review).toEqual([]);
+    });
+
     test("maps -1 to null and counts per-book totals", () => {
         const hymns: RawHymn[] = [
             { song_title: "Both Books", tune_name: "X", rejoice_hymns: 5, great_hymns_of_the_faith: 9 },
