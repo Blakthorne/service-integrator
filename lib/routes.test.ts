@@ -1,5 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { NAV_ITEMS, PLAN_TABS, pcoWebUrls, routes } from "./routes";
+import {
+    NAV_ITEMS,
+    PLAN_TABS,
+    navAriaCurrent,
+    pcoWebUrls,
+    routes,
+} from "./routes";
 
 describe("routes", () => {
     test("static routes", () => {
@@ -78,6 +84,53 @@ describe("NAV_ITEMS", () => {
     test("tolerates a trailing slash", () => {
         expect(plans.isActive("/plans/")).toBe(true);
         expect(unusedHymns.isActive("/unused-hymns/")).toBe(true);
+    });
+});
+
+describe("navAriaCurrent", () => {
+    const [plans, unusedHymns] = NAV_ITEMS;
+
+    type Current = "page" | "true" | undefined;
+    // [pathname, Plans, Unused Hymns]
+    const cases: [string, Current, Current][] = [
+        // TODO(Phase 4): Plans links to /plans, so "/" and "/plans" change here.
+        ["/", "page", undefined],
+        ["/plans", "true", undefined],
+        ["/plans/1405391/98765", "true", undefined],
+        ["/plans/1405391/98765/schedule", "true", undefined],
+        ["/plans/1405391/98765/items/4321", "true", undefined],
+        ["/plansx", undefined, undefined],
+        ["/unused-hymns", undefined, "page"],
+        ["/unused-hymns/anything", undefined, "true"],
+        ["/unused-hymnsx", undefined, undefined],
+        ["/auth/signin", undefined, undefined],
+    ];
+
+    test.each(cases)(
+        "%j: Plans %s, Unused Hymns %s",
+        (pathname, plansValue, unusedValue) => {
+            expect(navAriaCurrent(plans, pathname)).toBe(plansValue);
+            expect(navAriaCurrent(unusedHymns, pathname)).toBe(unusedValue);
+        }
+    );
+
+    test("is set exactly when the item is active", () => {
+        for (const item of NAV_ITEMS) {
+            for (const [pathname] of cases) {
+                expect(navAriaCurrent(item, pathname) !== undefined).toBe(
+                    item.isActive(pathname)
+                );
+            }
+        }
+    });
+
+    test("never marks two items as the current page at once", () => {
+        for (const [pathname] of cases) {
+            const pages = NAV_ITEMS.filter(
+                (item) => navAriaCurrent(item, pathname) === "page"
+            );
+            expect(pages.length).toBeLessThanOrEqual(1);
+        }
     });
 });
 

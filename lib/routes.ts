@@ -54,6 +54,24 @@ export const NAV_ITEMS: readonly NavItem[] = [
     },
 ];
 
+/**
+ * The `aria-current` value for a nav item at `pathname`: "page" on the item's
+ * own page, "true" anywhere else in its section, and undefined outside it.
+ *
+ * Inside a section the page's own breadcrumb is the one marked
+ * `aria-current="page"`, so the nav item only says "true"; that way a plan page
+ * does not announce both as the current page.
+ */
+export function navAriaCurrent(
+    item: NavItem,
+    pathname: string
+): "page" | "true" | undefined {
+    if (!item.isActive(pathname)) {
+        return undefined;
+    }
+    return pathname === item.href ? "page" : "true";
+}
+
 /** A tab of the plan page. Each tab is a nested route. */
 export interface PlanTab {
     /** What `useSelectedLayoutSegment()` returns for the tab: `null` for the default tab. */
