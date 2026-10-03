@@ -144,6 +144,69 @@ describe("redirects", () => {
     });
 });
 
+describe("unread error bodies", () => {
+    /** A response whose body stream records whether it was cancelled. */
+    function trackedResponse(
+        status: number,
+        headers: Record<string, string> = {},
+        onCancel: () => void = () => {}
+    ) {
+        const state = { cancelled: false };
+        const body = new ReadableStream({
+            cancel() {
+                state.cancelled = true;
+                onCancel();
+            },
+        });
+        return { response: new Response(body, { status, headers }), state };
+    }
+
+    test("cancels a failed response's body before throwing, freeing the socket", async () => {
+        const failed = trackedResponse(404);
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(failed.response));
+
+        await expect(pcoFetch("/service_types/1", "serviceTypes")).rejects.toMatchObject({
+            name: "PcoError",
+            status: 404,
+        });
+        expect(failed.state.cancelled).toBe(true);
+    });
+
+    test("cancels a 429's body before waiting to retry, and a failed retry's too", async () => {
+        vi.useFakeTimers();
+        const first = trackedResponse(429, { "Retry-After": "1" });
+        const second = trackedResponse(429, { "Retry-After": "1" });
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(first.response)
+            .mockResolvedValueOnce(second.response);
+        vi.stubGlobal("fetch", fetchMock);
+
+        const result = pcoFetch("/service_types/1", "serviceTypes");
+        const settled = expect(result).rejects.toMatchObject({ status: 429 });
+        await vi.advanceTimersByTimeAsync(0);
+        // Released while waiting, before the retry goes out.
+        expect(first.state.cancelled).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        await settled;
+        expect(second.state.cancelled).toBe(true);
+    });
+
+    test("a body that fails to cancel does not hide the PcoError", async () => {
+        const failed = trackedResponse(500, {}, () => {
+            throw new Error("socket already gone");
+        });
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(failed.response));
+
+        await expect(pcoFetch("/service_types/1", "serviceTypes")).rejects.toMatchObject({
+            name: "PcoError",
+            status: 500,
+        });
+    });
+});
+
 describe("URL guard", () => {
     test.each([
         // The attack from the plan: an unchecked ID climbing into another PCO API.
