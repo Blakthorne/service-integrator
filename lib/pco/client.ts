@@ -98,11 +98,17 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Release the connection behind a response whose body will not be read. */
-async function discardBody(response: Response): Promise<void> {
-    // Optional chaining: bare test doubles ({ ok, status }) have no body. A
-    // failed cancel must not hide the error the caller is about to throw.
-    await response.body?.cancel().catch(() => {});
+/**
+ * Release the connection behind a response whose body will not be read,
+ * without waiting for it. In a Next server render, fetch responses are
+ * memoized and their body is teed; cancelling one branch of a tee does not
+ * settle until the other (unread in React's request cache) is cancelled too,
+ * so awaiting this could hang the render forever.
+ */
+function discardBody(response: Response): void {
+    // Optional chaining: bare test doubles ({ ok, status }) have no body. The
+    // catch keeps a failed cancel from becoming an unhandled rejection.
+    void response.body?.cancel().catch(() => {});
 }
 
 /** One guarded request, retrying a short 429 once. Resolves to the JSON body. */
@@ -119,12 +125,12 @@ async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
         // Headers are read only here: success mocks are bare { ok, json }.
         const delay = response.status === 429 ? retryDelayMs(response) : null;
         if (delay !== null) {
-            await discardBody(response);
+            discardBody(response);
             await sleep(delay);
             response = await fetch(url.href, init);
         }
         if (!response.ok) {
-            await discardBody(response);
+            discardBody(response);
             throw new PcoError(response.status, url.pathname + url.search);
         }
     }

@@ -194,6 +194,55 @@ describe("unread error bodies", () => {
         expect(second.state.cancelled).toBe(true);
     });
 
+    /**
+     * A failed response whose body never finishes cancelling, like a teed
+     * (memoized) fetch body in a Next server render whose twin is unread.
+     */
+    function stuckResponse(status: number, headers: Record<string, string> = {}) {
+        const body = new ReadableStream({ cancel: () => new Promise<void>(() => {}) });
+        return new Response(body, { status, headers });
+    }
+
+    /** `promise`, or a rejection if it is still pending after `ms` of real time. */
+    function within<T>(promise: Promise<T>, ms = 250): Promise<T> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`still pending after ${ms} ms`)), ms);
+        });
+        return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+    }
+
+    test.each([
+        ["a 404", () => stuckResponse(404), 404],
+        ["a 429 with too long a Retry-After", () => stuckResponse(429, { "Retry-After": "60" }), 429],
+        ["a 429 without Retry-After", () => stuckResponse(429), 429],
+    ])(
+        "never waits for the body to cancel: %s still rejects promptly with PcoError",
+        async (_case, makeResponse, status) => {
+            vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => makeResponse()));
+            const error = await within(pcoFetch("/service_types/1", "serviceTypes")).catch(
+                (e: unknown) => e
+            );
+            expect(error).toBeInstanceOf(PcoError);
+            expect(error).toMatchObject({ status });
+        }
+    );
+
+    test("never waits for the body to cancel before retrying a 429", async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi
+            .fn()
+            .mockImplementationOnce(async () => stuckResponse(429, { "Retry-After": "1" }))
+            .mockImplementationOnce(async () => json({ data: { id: "1" } }));
+        vi.stubGlobal("fetch", fetchMock);
+
+        const result = pcoFetch("/service_types/1", "serviceTypes");
+        await vi.advanceTimersByTimeAsync(1000);
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        await expect(result).resolves.toEqual({ data: { id: "1" } });
+    });
+
     test("a body that fails to cancel does not hide the PcoError", async () => {
         const failed = trackedResponse(500, {}, () => {
             throw new Error("socket already gone");
