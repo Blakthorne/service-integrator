@@ -103,6 +103,9 @@ async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
     const init: RequestInit = {
         headers: pcoAuthHeaders(),
         ...PCO_CACHE_POLICY[kind],
+        // Following a redirect would re-send the token to an unguarded URL
+        // (even same-origin, e.g. /people/v2), so a 3xx makes fetch reject.
+        redirect: "error",
     };
     let response = await fetch(url.href, init);
     if (!response.ok) {

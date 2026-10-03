@@ -112,6 +112,38 @@ describe("pcoFetch", () => {
     });
 });
 
+describe("redirects", () => {
+    // fetch follows redirects by default, re-sending the Authorization header
+    // to wherever PCO points, which would bypass the URL guard.
+    test("every request refuses redirects: first page, next page and a 429 retry", async () => {
+        vi.useFakeTimers();
+        const fetchMock = stubFetch((_url, call) => {
+            if (call === 0) return json(page([{ id: "1" }], { next: `${BASE}/songs?offset=1` }));
+            if (call === 1) return tooManyRequests("1");
+            return json(page([{ id: "2" }]));
+        });
+
+        const result = pcoFetchAll("/songs", "songs");
+        await vi.advanceTimersByTimeAsync(1000);
+        await expect(result).resolves.toMatchObject({ data: [{ id: "1" }, { id: "2" }] });
+
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+        for (const [, init] of fetchMock.mock.calls) {
+            expect(init).toMatchObject({ redirect: "error", cache: "no-store" });
+        }
+    });
+
+    test("a fetch that rejects, as it does on a redirect, surfaces as an error without a retry", async () => {
+        const failure = new TypeError("fetch failed");
+        const fetchMock = vi.fn().mockRejectedValue(failure);
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(pcoFetch("/service_types/1", "serviceTypes")).rejects.toBe(failure);
+        await expect(pcoFetchAll("/songs", "songs")).rejects.toBe(failure);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+});
+
 describe("URL guard", () => {
     test.each([
         // The attack from the plan: an unchecked ID climbing into another PCO API.
