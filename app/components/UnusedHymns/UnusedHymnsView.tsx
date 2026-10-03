@@ -112,7 +112,12 @@ export default function UnusedHymnsView({
     // transitions, so one held open across the action would stall every
     // navigation (a <Link> click, Back) until the refresh returned.
     async function handleRefresh() {
-        const pathAtClick = window.location.pathname;
+        // Back to page 1 now, before the await, and no URL writes after it.
+        // Next updates window.location only when a navigation commits, and a
+        // replaceState while one is pending discards it, so a write after the
+        // await could lose a click on a link, or overwrite a ?page= the viewer
+        // pushed meanwhile. parsePage clamps the page to the new result.
+        setSearchParams({ page: null }, { history: "replace" });
         setRefreshing(true);
         setRefreshError(null);
         let next: UnusedHymnsResult;
@@ -127,11 +132,6 @@ export default function UnusedHymnsView({
             setRefreshing(false);
         }
         setResult(next);
-        // The URL belongs to whichever page is showing now, so leave it alone
-        // if the viewer navigated away while refreshing.
-        if (window.location.pathname === pathAtClick) {
-            setSearchParams({ page: null }, { history: "replace" });
-        }
     }
 
     const filteredUnused: HymnEntry[] = result.unused.filter((entry) =>
