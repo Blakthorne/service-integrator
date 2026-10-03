@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import type { HymnEntry, ReviewEntry, UnusedHymnsResult } from "@/lib/unusedHymns";
 import UnusedHymnsControls, {
     type BookFilter,
@@ -154,7 +155,7 @@ export default function UnusedHymnsView() {
         (key: string, value: string) => {
             const params = new URLSearchParams(searchParams.toString());
             params.set(key, value);
-            router.replace(`${pathname}?${params.toString()}`);
+            router.replace(`${pathname}?${params.toString()}` as Route);
             setPage(1);
         },
         [pathname, router, searchParams]
