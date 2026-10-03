@@ -13,7 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: "Service Integrator",
+    title: {
+        default: "Service Integrator",
+        template: "%s · Service Integrator",
+    },
     description:
         "A web app that integrates with Planning Center's public Services API to aggregate data and generate song copyright data",
 };
