@@ -1,23 +1,27 @@
 import "server-only";
 import { cache } from "react";
 import type { Plan, PlanSummary } from "../domain";
-import { pcoFetch } from "./client";
+import { pcoFetch, pcoFetchAll } from "./client";
 import { assertPcoId } from "./ids";
 import { toPlan } from "./mappers";
-import type {
-    PcoListResponse,
-    PcoPlanResource,
-    PcoSingleResponse,
-} from "./resources";
+import type { PcoPlanResource, PcoSingleResponse } from "./resources";
 import { getServiceTypes } from "./serviceTypes";
 
-/** A service type's plans, newest first (one page of up to 100, as today). */
+/** Up to 2,000 plans per service type; beyond that the fetch fails loudly. */
+const MAX_PLAN_PAGES = 20;
+
+/**
+ * All of a service type's plans, newest first, paging 100 at a time through
+ * links.next. Throws InvalidPcoIdError, PcoError, or an error if the type
+ * has more than MAX_PLAN_PAGES pages of plans.
+ */
 export const getPlansForServiceType = cache(
     async (serviceTypeId: string): Promise<Plan[]> => {
         const id = assertPcoId(serviceTypeId);
-        const { data } = await pcoFetch<PcoListResponse<PcoPlanResource>>(
+        const { data } = await pcoFetchAll<PcoPlanResource>(
             `/service_types/${id}/plans?order=-sort_date&per_page=100`,
-            "plans"
+            "plans",
+            { maxPages: MAX_PLAN_PAGES }
         );
         return data.map((plan) => toPlan(plan, id));
     }

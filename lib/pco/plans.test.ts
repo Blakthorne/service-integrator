@@ -57,6 +57,49 @@ describe("getPlansForServiceType", () => {
         );
     });
 
+    test("follows links.next to return all of a type's plans, not just the newest 100", async () => {
+        // The spike found 121 Sunday Morning plans: 100 on page 1, 21 on page 2.
+        const plan = (n: number) =>
+            planResource({ id: String(1000 + n) }, { sort_date: `2026-01-01T08:00:${String(n % 60).padStart(2, "0")}Z` });
+        const nextUrl = `${PCO_BASE}/service_types/${MORNING}/plans?offset=100&order=-sort_date&per_page=100`;
+        const fetchMock = stubFetchRoutes({
+            [plansUrl(MORNING)]: listPage(
+                Array.from({ length: 100 }, (_, i) => plan(i)),
+                { next: nextUrl, total: 121 }
+            ),
+            [nextUrl]: listPage(
+                Array.from({ length: 21 }, (_, i) => plan(100 + i)),
+                { total: 121 }
+            ),
+        });
+
+        const plans = await getPlansForServiceType(MORNING);
+
+        expect(calledUrls(fetchMock)).toEqual([plansUrl(MORNING), nextUrl]);
+        expect(plans).toHaveLength(121);
+        // API order (newest first) is kept across pages.
+        expect(plans.map((p) => p.id)).toEqual(
+            Array.from({ length: 121 }, (_, i) => String(1000 + i))
+        );
+    });
+
+    test("gives up with an error after 20 pages rather than return a partial list", async () => {
+        const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+            const offset = Number(new URL(url).searchParams.get("offset") ?? 0);
+            return json(
+                listPage([planResource({ id: String(offset + 1) })], {
+                    next: `${PCO_BASE}/service_types/${MORNING}/plans?offset=${offset + 1}&order=-sort_date&per_page=100`,
+                })
+            );
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        await expect(getPlansForServiceType(MORNING)).rejects.toThrow(
+            /more than 20 pages/
+        );
+        expect(fetchMock).toHaveBeenCalledTimes(20);
+    });
+
     test("rejects an invalid service type ID before any fetch", async () => {
         const fetchMock = stubFetchRoutes({});
         await expect(
