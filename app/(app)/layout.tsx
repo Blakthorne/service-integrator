@@ -1,5 +1,8 @@
 import Navigation from "@/app/components/Navigation";
 
+// CI builds without PCO credentials, and every page here is per-request.
+export const dynamic = "force-dynamic";
+
 export default function AppLayout({
     children,
 }: Readonly<{
