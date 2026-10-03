@@ -54,8 +54,9 @@ export interface GetUnusedHymnsOptions {
  * `refresh: true` always recomputes, and replaces the cached result only once
  * that succeeds: a failed refresh throws and leaves the previous result in
  * place, so page loads are still served from it while Planning Center is
- * down. Errors from PCO pass through and are never cached, so after a failed
- * plain call (nothing cached to serve) the next call tries again.
+ * down. Overlapping refreshes (two tabs) share one load, and its failure.
+ * Errors from PCO pass through and are never cached, so after a failed plain
+ * call (nothing cached to serve) the next call tries again.
  */
 export async function getUnusedHymns({
     refresh = false,

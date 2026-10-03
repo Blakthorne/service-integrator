@@ -298,7 +298,88 @@ describe("TtlCache.refresh", () => {
         expect(load).not.toHaveBeenCalled();
     });
 
-    test("always loads: it supersedes a load already in flight", async () => {
+    test("overlapping refreshes share one load", async () => {
+        const { cache } = setup();
+        await cache.get("k", async () => "old");
+        const pending = deferred<string>();
+        const first = vi.fn(() => pending.promise);
+        const second = vi.fn(async () => "unused");
+
+        const a = cache.refresh("k", first);
+        const b = cache.refresh("k", second);
+        pending.resolve("new");
+
+        await expect(a).resolves.toBe("new");
+        await expect(b).resolves.toBe("new");
+        expect(first).toHaveBeenCalledTimes(1);
+        expect(second).not.toHaveBeenCalled();
+
+        const load = vi.fn(async () => "unused");
+        await expect(cache.get("k", load)).resolves.toBe("new");
+        expect(load).not.toHaveBeenCalled();
+    });
+
+    test("overlapping refreshes share a failure, and the previous value stays", async () => {
+        const { cache } = setup();
+        await cache.get("k", async () => "old");
+        const pending = deferred<string>();
+        const second = vi.fn(async () => "unused");
+
+        const a = cache.refresh("k", () => pending.promise);
+        const b = cache.refresh("k", second);
+        pending.reject(new Error("PCO down"));
+
+        await expect(a).rejects.toThrow("PCO down");
+        await expect(b).rejects.toThrow("PCO down");
+        expect(second).not.toHaveBeenCalled();
+        await expect(cache.get("k", async () => "unused")).resolves.toBe("old");
+    });
+
+    test("a refresh joins only a refresh still in flight: once it settles, the next loads again", async () => {
+        const { cache } = setup();
+        await cache.refresh("k", async () => "first");
+
+        const load = vi.fn(async () => "second");
+        await expect(cache.refresh("k", load)).resolves.toBe("second");
+        expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    test("a refresh after a failed refresh loads again", async () => {
+        const { cache } = setup();
+        await expect(
+            cache.refresh("k", () => Promise.reject(new Error("boom")))
+        ).rejects.toThrow("boom");
+
+        await expect(cache.refresh("k", async () => "recovered")).resolves.toBe("recovered");
+    });
+
+    test("an invalidate ends the refresh in flight: the next refresh starts its own", async () => {
+        const { cache } = setup();
+        const stale = deferred<string>();
+        const before = cache.refresh("k", () => stale.promise);
+
+        cache.invalidate("k");
+        const load = vi.fn(async () => "fresh");
+        await expect(cache.refresh("k", load)).resolves.toBe("fresh");
+        expect(load).toHaveBeenCalledTimes(1);
+
+        // The dropped refresh finishes last: its caller gets its result, the cache keeps the newer one.
+        stale.resolve("stale");
+        await expect(before).resolves.toBe("stale");
+        await expect(cache.get("k", async () => "unused")).resolves.toBe("fresh");
+    });
+
+    test("overlapping refreshes of different keys do not share", async () => {
+        const { cache } = setup();
+        const a = vi.fn(async () => "A");
+        const b = vi.fn(async () => "B");
+
+        await expect(Promise.all([cache.refresh("a", a), cache.refresh("b", b)])).resolves.toEqual(["A", "B"]);
+        expect(a).toHaveBeenCalledTimes(1);
+        expect(b).toHaveBeenCalledTimes(1);
+    });
+
+    test("a refresh does not join a plain load in flight: it starts its own and supersedes it", async () => {
         const { cache } = setup();
         const stale = deferred<string>();
         const before = cache.get("k", () => stale.promise);

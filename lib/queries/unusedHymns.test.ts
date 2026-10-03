@@ -202,6 +202,35 @@ describe("getUnusedHymns", () => {
         expect(fetchAllSongs).toHaveBeenCalledTimes(2); // the load and the failed refresh
     });
 
+    test("overlapping refreshes share one fetch", async () => {
+        const { getUnusedHymns } = await loadQueries();
+        await getUnusedHymns();
+
+        const [first, second] = await Promise.all([
+            getUnusedHymns({ refresh: true }),
+            getUnusedHymns({ refresh: true }),
+        ]);
+
+        expect(second).toBe(first);
+        expect(fetchAllSongs).toHaveBeenCalledTimes(2); // the load, and one refresh for both
+    });
+
+    test("overlapping refreshes share a failure, and the previous result stays", async () => {
+        const { getUnusedHymns } = await loadQueries();
+        const before = await getUnusedHymns();
+
+        // Only the first fetch fails: a second refresh that fetched again would succeed.
+        fetchAllSongs.mockRejectedValueOnce(new Error("PCO down"));
+        const results = await Promise.allSettled([
+            getUnusedHymns({ refresh: true }),
+            getUnusedHymns({ refresh: true }),
+        ]);
+
+        expect(results.map((result) => result.status)).toEqual(["rejected", "rejected"]);
+        await expect(getUnusedHymns()).resolves.toBe(before);
+        expect(fetchAllSongs).toHaveBeenCalledTimes(2);
+    });
+
     test("a failed refresh does not extend the previous result's hour", async () => {
         const { getUnusedHymns } = await loadQueries();
         await getUnusedHymns();

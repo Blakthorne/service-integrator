@@ -22,9 +22,11 @@ export interface TtlCache<K, V> {
      * own TTL is up. While the refresh loads, `get` still serves that previous
      * value; a `get` with nothing fresh to serve joins the refresh.
      *
-     * A refresh never joins a load already in flight: it starts its own and
-     * supersedes the earlier one, whose callers still get its result but whose
-     * result is not stored.
+     * Overlapping refreshes share one load: a refresh that finds another one
+     * for the key still in flight joins it, getting its result or its failure
+     * without calling `load`. It never joins a plain `get` load, though: it
+     * starts its own and supersedes that one, whose callers still get its
+     * result but whose result is not stored.
      */
     refresh(key: K, load: () => Promise<V>): Promise<V>;
     /** Forget `key`. A load already in flight for it will not be stored. */
@@ -45,6 +47,8 @@ export function createTtlCache<K, V>({
 }: TtlCacheOptions): TtlCache<K, V> {
     const values = new Map<K, { value: V; expiresAt: number }>();
     const inFlight = new Map<K, Promise<V>>();
+    // The in-flight loads that refresh() started, which another refresh joins.
+    const refreshLoads = new WeakSet<Promise<V>>();
 
     function store(key: K, value: V): void {
         const time = now();
@@ -96,7 +100,13 @@ export function createTtlCache<K, V>({
             return inFlight.get(key) ?? startLoad(key, load);
         },
         refresh(key, load) {
-            return startLoad(key, load);
+            const current = inFlight.get(key);
+            if (current !== undefined && refreshLoads.has(current)) {
+                return current;
+            }
+            const promise = startLoad(key, load);
+            refreshLoads.add(promise);
+            return promise;
         },
         invalidate(key) {
             values.delete(key);
