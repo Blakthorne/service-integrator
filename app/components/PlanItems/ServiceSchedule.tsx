@@ -22,13 +22,14 @@ export default function ServiceSchedule({
     setItems,
     hymnData,
     serviceTypeName,
-    date,
+    planDate,
 }: {
     items: ItemWithSelection[];
     setItems: (items: ItemWithSelection[]) => void;
     hymnData: HymnData[];
     serviceTypeName: string;
-    date: Date;
+    /** The plan's calendar date as `YYYY-MM-DD`, or null when it is unknown. */
+    planDate: string | null;
 }) {
     const onChooseOption = (
         item: ItemWithSelection,
@@ -196,7 +197,7 @@ export default function ServiceSchedule({
                                 items,
                                 hymnData,
                                 serviceTypeName,
-                                date,
+                                planDate,
                             })}
                         />
                     </div>

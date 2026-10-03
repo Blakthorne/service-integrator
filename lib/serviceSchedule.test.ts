@@ -1,4 +1,5 @@
-import { describe, expect, test } from "vitest";
+import { afterAll, describe, expect, test } from "vitest";
+import { planDateFromSortDate } from "./format";
 import {
     buildScheduleCopyText,
     formatHymnNumbers,
@@ -11,8 +12,8 @@ import {
 // ServiceSchedule.tsx, quirks included. A test marked QUIRK documents behavior
 // that looks wrong but is deliberately kept; fix commits flip those assertions.
 
-// Built from local-time parts so the header reads "6/15/25" in every time zone.
-const SUNDAY = new Date(2025, 5, 15, 10, 30);
+// The plan's calendar date, as buildScheduleCopyText takes it.
+const PLAN_DATE = "2025-06-15";
 const HEADER_AM = "Sunday AM 6/15/25\n\n";
 const HEADER_PM = "Sunday PM 6/15/25\n\n";
 
@@ -38,7 +39,7 @@ function textFor(items: ScheduleItem[], hymnData: ScheduleHymn[] = []): string {
         items,
         hymnData,
         serviceTypeName: "Midweek",
-        date: SUNDAY,
+        planDate: PLAN_DATE,
     });
 }
 
@@ -92,7 +93,7 @@ describe("buildScheduleCopyText: header", () => {
             items: [songItem("T", 1)],
             hymnData: [],
             serviceTypeName: "Sunday Morning",
-            date: SUNDAY,
+            planDate: PLAN_DATE,
         });
         expect(text).toBe(HEADER_AM + "T");
     });
@@ -102,7 +103,7 @@ describe("buildScheduleCopyText: header", () => {
             items: [songItem("T", 1)],
             hymnData: [],
             serviceTypeName: "Sunday Evening",
-            date: SUNDAY,
+            planDate: PLAN_DATE,
         });
         expect(text).toBe(HEADER_PM + "T");
     });
@@ -112,13 +113,13 @@ describe("buildScheduleCopyText: header", () => {
             items: [],
             hymnData: [],
             serviceTypeName: "Sunday Morning",
-            date: SUNDAY,
+            planDate: PLAN_DATE,
         });
         const evening = buildScheduleCopyText({
             items: [{ title: "Welcome", itemType: "header", sequence: 1 }],
             hymnData: [],
             serviceTypeName: "Sunday Evening",
-            date: SUNDAY,
+            planDate: PLAN_DATE,
         });
         expect(morning).toBe("Sunday AM 6/15/25\n\n");
         expect(evening).toBe("Sunday PM 6/15/25\n\n");
@@ -138,7 +139,7 @@ describe("buildScheduleCopyText: header", () => {
                 items: [songItem("T", 1)],
                 hymnData: [],
                 serviceTypeName,
-                date: SUNDAY,
+                planDate: PLAN_DATE,
             });
             expect(text).toBe("T");
         }
@@ -149,17 +150,124 @@ describe("buildScheduleCopyText: header", () => {
             items: [],
             hymnData: [],
             serviceTypeName: "Sunday Morning",
-            date: new Date(2025, 0, 5, 10, 30),
+            planDate: "2025-01-05",
         });
         const december = buildScheduleCopyText({
             items: [],
             hymnData: [],
             serviceTypeName: "Sunday Evening",
-            date: new Date(2030, 11, 25, 18, 0),
+            planDate: "2030-12-25",
         });
         expect(january).toBe("Sunday AM 1/5/25\n\n");
         expect(december).toBe("Sunday PM 12/25/30\n\n");
     });
+});
+
+describe("buildScheduleCopyText: header without a plan date", () => {
+    // Before, an unknown date printed "Invalid Date" in the header.
+    test("the header has no date, and no stray space after AM or PM", () => {
+        const morning = buildScheduleCopyText({
+            items: [songItem("T", 1)],
+            hymnData: [],
+            serviceTypeName: "Sunday Morning",
+            planDate: null,
+        });
+        const evening = buildScheduleCopyText({
+            items: [songItem("T", 1)],
+            hymnData: [],
+            serviceTypeName: "Sunday Evening",
+            planDate: null,
+        });
+        expect(morning).toBe("Sunday AM\n\nT");
+        expect(evening).toBe("Sunday PM\n\nT");
+    });
+
+    test("with no songs the output is just the header and its blank line", () => {
+        expect(
+            buildScheduleCopyText({
+                items: [],
+                hymnData: [],
+                serviceTypeName: "Sunday Morning",
+                planDate: null,
+            })
+        ).toBe("Sunday AM\n\n");
+        expect(
+            buildScheduleCopyText({
+                items: [],
+                hymnData: [],
+                serviceTypeName: "Sunday Evening",
+                planDate: null,
+            })
+        ).toBe("Sunday PM\n\n");
+    });
+
+    test("never prints 'Invalid Date'", () => {
+        const text = buildScheduleCopyText({
+            items: [songItem("T", 1)],
+            hymnData: [],
+            serviceTypeName: "Sunday Morning",
+            planDate: planDateFromSortDate("not a date"),
+        });
+        expect(text).not.toContain("Invalid");
+        expect(text).toBe("Sunday AM\n\nT");
+    });
+
+    test("service types without a header are unaffected", () => {
+        expect(
+            buildScheduleCopyText({
+                items: [songItem("T", 1)],
+                hymnData: [],
+                serviceTypeName: "Midweek",
+                planDate: null,
+            })
+        ).toBe("T");
+    });
+});
+
+describe("buildScheduleCopyText: header date and time zones", () => {
+    // The header used to format `new Date(plan.sortDate)` in the viewer's zone,
+    // so an early or late service landed on the previous or next day.
+    const originalTimeZone = process.env.TZ;
+
+    afterAll(() => {
+        if (originalTimeZone === undefined) {
+            delete process.env.TZ;
+        } else {
+            process.env.TZ = originalTimeZone;
+        }
+    });
+
+    const oldHeaderDate = (sortDate: string): string =>
+        new Date(sortDate).toLocaleDateString("en-US", {
+            month: "numeric",
+            day: "numeric",
+            year: "2-digit",
+        });
+
+    test.each([
+        // zone, its UTC offset in minutes on 2025-06-15, sort_date, what the old code printed
+        ["Pacific/Pago_Pago", 660, "2025-06-15T08:00:00Z", "6/14/25"],
+        ["Pacific/Kiritimati", -840, "2025-06-15T18:00:00Z", "6/16/25"],
+        ["America/New_York", 240, "2025-06-15T02:00:00Z", "6/14/25"],
+    ])(
+        "in %s the header shows the plan's own date",
+        (zone, utcOffsetMinutes, sortDate, oldDate) => {
+            process.env.TZ = zone;
+            // Guard: if this runtime ignored the change, the test would prove nothing.
+            expect(
+                new Date(Date.UTC(2025, 5, 15, 12)).getTimezoneOffset()
+            ).toBe(utcOffsetMinutes);
+            expect(oldHeaderDate(sortDate)).toBe(oldDate);
+
+            const text = buildScheduleCopyText({
+                items: [],
+                hymnData: [],
+                serviceTypeName: "Sunday Morning",
+                planDate: planDateFromSortDate(sortDate),
+            });
+            expect(text).toBe("Sunday AM 6/15/25\n\n");
+        }
+    );
 });
 
 describe("buildScheduleCopyText: which lines appear", () => {
@@ -187,7 +295,7 @@ describe("buildScheduleCopyText: which lines appear", () => {
             items: [songItem("A", 2), songItem("B", 1)],
             hymnData: [],
             serviceTypeName: "Sunday Evening",
-            date: SUNDAY,
+            planDate: PLAN_DATE,
         });
         expect(text).toBe("Sunday PM 6/15/25\n\nB\nA");
     });

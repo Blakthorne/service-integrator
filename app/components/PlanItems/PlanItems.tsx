@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import ServiceSchedule from "./ServiceSchedule";
 import CopyrightInformation from "./CopyrightInformation";
+import { planDateFromSortDate } from "@/lib/format";
 import type {
     HymnData,
     HymnVersion,
@@ -369,7 +370,7 @@ export default function PlanItems({
                         setItems={setItems}
                         hymnData={hymnData}
                         serviceTypeName={serviceTypeName}
-                        date={new Date(plan.sortDate)}
+                        planDate={planDateFromSortDate(plan.sortDate)}
                     />
                 )}
             </div>

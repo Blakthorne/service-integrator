@@ -5,6 +5,7 @@ import type {
     ScheduleSelection,
     ServiceType,
 } from "./domain";
+import { formatShortDate } from "./format";
 import { normalizeTitle } from "./normalizeTitle";
 
 /**
@@ -30,7 +31,11 @@ export interface ScheduleCopyInput {
     items: ScheduleItem[];
     hymnData: ScheduleHymn[];
     serviceTypeName: ServiceType["name"];
-    date: Date;
+    /**
+     * The plan's calendar date as `YYYY-MM-DD` (see `planDateFromSortDate`), or
+     * null when it is not known.
+     */
+    planDate: string | null;
 }
 
 /**
@@ -56,15 +61,16 @@ export function formatHymnNumbers(version: ScheduleHymnVersion): string {
  * "Sunday AM/PM <date>" header followed by one line per song item, in
  * sequence order.
  *
- * Moved verbatim from ServiceSchedule.tsx; serviceSchedule.test.ts pins its
- * behavior, quirks included. `date` is formatted in the runtime's local time
- * zone for now.
+ * Moved from ServiceSchedule.tsx; serviceSchedule.test.ts pins its behavior,
+ * quirks included. The header date is the plan's calendar date, formatted
+ * from its `YYYY-MM-DD` text (see `formatShortDate`), so it reads the same in
+ * every time zone. With no `planDate` the header has no date ("Sunday AM").
  */
 export function buildScheduleCopyText({
     items,
     hymnData,
     serviceTypeName,
-    date,
+    planDate,
 }: ScheduleCopyInput): string {
     let result: string = "";
 
@@ -74,12 +80,8 @@ export function buildScheduleCopyText({
     ) {
         result +=
             "Sunday" +
-            (serviceTypeName === "Sunday Morning" ? " AM " : " PM ") +
-            date.toLocaleDateString("en-US", {
-                month: "numeric",
-                day: "numeric",
-                year: "2-digit",
-            }) +
+            (serviceTypeName === "Sunday Morning" ? " AM" : " PM") +
+            (planDate === null ? "" : " " + formatShortDate(planDate)) +
             "\n\n";
     }
 
