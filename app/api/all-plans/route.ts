@@ -2,22 +2,10 @@ import { NextResponse } from "next/server";
 import { ServiceTypeData } from "../service-types/route";
 import { PlanData } from "../plans/route";
 import { groupPlansByDate } from "@/lib/plansByDate";
+import type { PlanSummary } from "@/lib/domain";
 
-interface Plan {
-    id: string;
-    dates: string;
-    shortDates: string;
-    planningCenterUrl: string;
-    itemsCount: number;
-    title: string | null;
-    sortDate: string;
-    createdAt: string;
-    updatedAt: string;
-    serviceType: {
-        id: string;
-        name: string;
-    };
-}
+/** This legacy route's plans carry `serviceType` but no `serviceTypeId`. */
+type Plan = Omit<PlanSummary, "serviceTypeId">;
 
 export async function GET() {
     try {

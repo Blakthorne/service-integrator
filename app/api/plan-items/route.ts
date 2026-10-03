@@ -1,4 +1,15 @@
 import { NextResponse } from 'next/server';
+import type { PlanItem, Song } from '@/lib/domain';
+
+/** This legacy route's items have no `songId`; the old UI joins songs by title. */
+type LegacyPlanItem = Omit<PlanItem, 'songId'>;
+
+/** This legacy route's songs carry a few fields that the domain Song drops. */
+type LegacySong = Song & {
+	createdAt: string;
+	updatedAt: string;
+	planningCenterUrl: string;
+};
 
 interface ItemAttributes {
 	created_at: string;
@@ -101,18 +112,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 		const data: PlanItemsResponse = await response.json();
 		
 		// Extract and format items
-		const items: Array<{
-			id: string;
-			title: string;
-			itemType: string;
-			sequence: number;
-			servicePosition: string;
-			keyName: string | null;
-			length: number;
-			description: string | null;
-			createdAt: string;
-			updatedAt: string;
-		}> = data.data.map((item: ItemData) => ({
+		const items: LegacyPlanItem[] = data.data.map((item: ItemData) => ({
 			id: item.id,
 			title: item.attributes.title,
 			itemType: item.attributes.item_type,
@@ -126,33 +126,10 @@ export async function GET(request: Request): Promise<NextResponse> {
 		}));
 
 		// Sort items by sequence
-		const sortedItems: Array<{
-			id: string;
-			title: string;
-			itemType: string;
-			sequence: number;
-			servicePosition: string;
-			keyName: string | null;
-			length: number;
-			description: string | null;
-			createdAt: string;
-			updatedAt: string;
-		}> = items.sort((a, b) => a.sequence - b.sequence);
+		const sortedItems: LegacyPlanItem[] = items.sort((a, b) => a.sequence - b.sequence);
 
 		// Extract and format included songs/items
-		const included: Array<{
-			id: string;
-			title: string;
-			author: string;
-			admin: string | null;
-			ccliNumber: number;
-			copyright: string;
-			notes: string;
-			themes: string;
-			createdAt: string;
-			updatedAt: string;
-			planningCenterUrl: string;
-		}> = (data.included || []).map((song: SongData) => ({
+		const included: LegacySong[] = (data.included || []).map((song: SongData) => ({
 			id: song.id,
 			title: song.attributes.title,
 			author: song.attributes.author,

@@ -31,11 +31,9 @@ function copyrightLineFor(
     copyright: string | null | undefined,
     admin?: string | null
 ): string {
-    // PCO can hand over a null copyright at runtime even though the component
-    // types say `string`, so the null/undefined cases need a cast.
-    return formatCopyrightText(
-        song({ copyright: copyright as string, admin })
-    ).split("\n")[1];
+    // PCO can hand over a null copyright, and `undefined` stands in for a
+    // field missing from the JSON.
+    return formatCopyrightText(song({ copyright, admin })).split("\n")[1];
 }
 
 describe("formatCopyrightText: author line", () => {

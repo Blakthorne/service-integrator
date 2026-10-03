@@ -3,56 +3,25 @@
 import { useState } from "react";
 import PlansTable from "../components/PlansTable";
 import PlanItems from "../components/PlanItems/PlanItems";
-import SongDetails, { SongDetailsType } from "../components/SongDetails";
+import SongDetails from "../components/SongDetails";
+import type { PlanItem, PlanSummary, Song } from "@/lib/domain";
 
 type View = "plans-table" | "plan-items" | "item-details";
 
-interface Plan {
-    id: string;
-    dates: string;
-    shortDates: string;
-    planningCenterUrl: string;
-    itemsCount: number;
-    title: string | null;
-    sortDate: string;
-    createdAt: string;
-    updatedAt: string;
-    serviceType: {
-        id: string;
-        name: string;
-    };
-}
-
-interface PlanItem {
-    id: string;
-    title: string;
-    itemType: string;
-    sequence: number;
-    servicePosition: string;
-    keyName: string | null;
-    length: number;
-    description: string | null;
-    createdAt: string;
-    updatedAt: string;
-}
-
 export default function Home() {
     const [currentView, setCurrentView] = useState<View>("plans-table");
-    const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+    const [selectedPlan, setSelectedPlan] = useState<PlanSummary | null>(null);
     const [selectedItem, setSelectedItem] = useState<PlanItem | null>(null);
     const [selectedSongDetails, setSelectedSongDetails] = useState<
-        SongDetailsType | undefined
+        Song | undefined
     >(undefined);
 
-    const handlePlanSelect = (plan: Plan): void => {
+    const handlePlanSelect = (plan: PlanSummary): void => {
         setSelectedPlan(plan);
         setCurrentView("plan-items");
     };
 
-    const handleItemSelect = (
-        item: PlanItem,
-        songDetails?: SongDetailsType
-    ): void => {
+    const handleItemSelect = (item: PlanItem, songDetails?: Song): void => {
         setSelectedItem(item);
         setSelectedSongDetails(songDetails);
         setCurrentView("item-details");

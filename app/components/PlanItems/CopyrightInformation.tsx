@@ -2,20 +2,19 @@
 
 import { useState } from "react";
 import CopyButton from "./CopyButton";
-import { PlanItem } from "./PlanItems";
-import { SongDetailsType } from "../SongDetails";
 import SongCopyright from "../SongCopyright";
 import {
     buildCopyrightCopyAllText,
     getItemCopyrightInfo,
 } from "@/lib/copyright";
+import type { PlanItem, Song } from "@/lib/domain";
 
 export default function CopyrightInformation({
     items,
     includedSongs,
 }: {
     items: PlanItem[];
-    includedSongs: SongDetailsType[];
+    includedSongs: Song[];
 }): React.ReactNode {
     const [showCopyTooltip, setShowCopyTooltip] = useState<boolean>(false);
 

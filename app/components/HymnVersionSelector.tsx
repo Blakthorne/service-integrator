@@ -1,6 +1,6 @@
 "use client";
 
-import { HymnVersion } from "./PlanItems/PlanItems";
+import type { HymnVersion } from "@/lib/domain";
 
 interface HymnVersionSelectorProps {
     version: HymnVersion;

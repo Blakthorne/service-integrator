@@ -3,37 +3,11 @@
 import React, { useState } from "react";
 import SongCopyright from "./SongCopyright";
 import { formatCopyrightText } from "@/lib/copyright";
-
-export interface SongDetailsType {
-    id: string;
-    title: string;
-    author: string;
-    ccliNumber: number;
-    copyright: string;
-    notes: string;
-    themes: string;
-    createdAt: string;
-    updatedAt: string;
-    planningCenterUrl: string;
-    admin: string | null;
-}
-
-interface PlanItem {
-    id: string;
-    title: string;
-    itemType: string;
-    sequence: number;
-    servicePosition: string;
-    keyName: string | null;
-    length: number;
-    description: string | null;
-    createdAt: string;
-    updatedAt: string;
-}
+import type { PlanItem, Song } from "@/lib/domain";
 
 interface SongDetailsProps {
     item: PlanItem;
-    songDetails: SongDetailsType | undefined;
+    songDetails: Song | undefined;
     onBack: () => void;
 }
 

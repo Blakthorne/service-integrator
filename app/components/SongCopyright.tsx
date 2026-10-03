@@ -1,16 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { formatCopyrightText } from "@/lib/copyright";
+import { formatCopyrightText, type CopyrightSong } from "@/lib/copyright";
 
-interface SongCopyrightProps {
-    title: string;
-    author: string;
-    copyright: string;
-    admin?: string | null;
+type SongCopyrightProps = CopyrightSong & {
     showContainer?: boolean;
     showCopyButton?: boolean;
-}
+};
 
 export default function SongCopyright({
     title,

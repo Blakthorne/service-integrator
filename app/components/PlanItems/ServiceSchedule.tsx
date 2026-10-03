@@ -2,12 +2,20 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import CopyButton from "./CopyButton";
-import { HymnData, HymnVersion, PlanItem } from "./PlanItems";
 import { normalizeTitle } from "@/lib/normalizeTitle";
 import {
     buildScheduleCopyText,
     formatHymnNumbers,
 } from "@/lib/serviceSchedule";
+import type {
+    HymnData,
+    HymnVersion,
+    PlanItem,
+    ScheduleSelection,
+} from "@/lib/domain";
+
+/** A plan item together with its Schedule-tab selections. */
+type ItemWithSelection = PlanItem & ScheduleSelection;
 
 export default function ServiceSchedule({
     items,
@@ -16,8 +24,8 @@ export default function ServiceSchedule({
     serviceTypeName,
     date,
 }: {
-    items: PlanItem[];
-    setItems: (items: PlanItem[]) => void;
+    items: ItemWithSelection[];
+    setItems: (items: ItemWithSelection[]) => void;
     hymnData: HymnData[];
     serviceTypeName: string;
     date: Date;
@@ -25,7 +33,7 @@ export default function ServiceSchedule({
     const [showCopyTooltip, setShowCopyTooltip] = useState<boolean>(false);
 
     const onChooseOption = (
-        item: PlanItem,
+        item: ItemWithSelection,
         option: "Leave blank" | "Custom" | undefined,
         versionIndex?: number
     ) => {
@@ -45,7 +53,7 @@ export default function ServiceSchedule({
 
     // CustomTextInput component with independent state management
     const CustomTextInput: React.FC<{
-        item: PlanItem;
+        item: ItemWithSelection;
     }> = ({ item }) => {
         const inputRef = useRef<HTMLInputElement>(null);
         const [inputValue, setInputValue] = useState(item.customText || "");
@@ -108,7 +116,7 @@ export default function ServiceSchedule({
     };
 
     const CustomOption: React.FC<{
-        item: PlanItem;
+        item: ItemWithSelection;
     }> = ({ item }) => (
         <div className="flex items-center space-x-3 mx-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
             <label className="flex items-center space-x-3 cursor-pointer">
@@ -138,7 +146,7 @@ export default function ServiceSchedule({
     );
 
     const HymnVersionOption: React.FC<{
-        item: PlanItem;
+        item: ItemWithSelection;
         hymnVersion: HymnVersion;
         versionIndex: number;
     }> = ({ item, hymnVersion, versionIndex }) => (
@@ -158,7 +166,7 @@ export default function ServiceSchedule({
     );
 
     const LeaveBlankOption: React.FC<{
-        item: PlanItem;
+        item: ItemWithSelection;
     }> = ({ item }) => (
         <label className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input

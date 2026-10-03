@@ -1,17 +1,11 @@
+import type { PlanItem, Song } from "./domain";
+
 /** The song fields the copyright text is built from. */
-export interface CopyrightSong {
-    title: string;
-    author: string;
-    copyright: string;
-    admin?: string | null;
-}
+export type CopyrightSong = Pick<Song, "title" | "author" | "copyright"> &
+    Partial<Pick<Song, "admin">>;
 
 /** The plan-item fields the copyright views read. */
-export interface CopyrightItem {
-    title: string;
-    itemType: string;
-    sequence: number;
-}
+export type CopyrightItem = Pick<PlanItem, "title" | "itemType" | "sequence">;
 
 /**
  * Build the attribution block shown (and copied) for a song:
@@ -22,8 +16,12 @@ export interface CopyrightItem {
  * author that already ends in a period).
  */
 export function formatCopyrightText(song: CopyrightSong): string {
+    // PCO can send a null author. It still throws below, as it always has
+    // (copyright.test.ts pins that), until null is treated as "Unknown".
+    const author = song.author as string;
+
     // First split by comma to check if there are three authors
-    const commaAuthors = song.author.split(",").map((a) => a.trim());
+    const commaAuthors = author.split(",").map((a) => a.trim());
     let authorLine: string;
 
     if (commaAuthors.length >= 3) {
@@ -33,7 +31,7 @@ export function formatCopyrightText(song: CopyrightSong): string {
         authorLine = `Words by ${wordsAuthors}. Music by ${musicAuthor}`;
     } else {
         // If not three authors, split by "and"
-        const authors = song.author.split(" and ").map((a) => a.trim());
+        const authors = author.split(" and ").map((a) => a.trim());
         if (authors.length === 1) {
             // Single author case
             authorLine = `Words and Music by ${authors[0] || "Unknown"}`;

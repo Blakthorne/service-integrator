@@ -1,35 +1,35 @@
+import type {
+    HymnData,
+    HymnVersion,
+    PlanItem,
+    ScheduleSelection,
+    ServiceType,
+} from "./domain";
 import { normalizeTitle } from "./normalizeTitle";
 
 /**
  * The hymn-book numbers of one tune version, as strings. A number of "-1"
  * means the hymn is not in that book.
  */
-export interface ScheduleHymnVersion {
-    rejoice_hymns_number: string;
-    great_hymns_number: string;
-}
+export type ScheduleHymnVersion = Pick<
+    HymnVersion,
+    "rejoice_hymns_number" | "great_hymns_number"
+>;
 
 /** A hymn catalog entry: a song title and its tune versions. */
-export interface ScheduleHymn {
-    song_title: string;
+export type ScheduleHymn = Pick<HymnData, "song_title"> & {
     versions: ScheduleHymnVersion[];
-}
+};
 
 /** A plan item together with the selections made for it on the Schedule tab. */
-export interface ScheduleItem {
-    title: string;
-    itemType: string;
-    sequence: number;
-    selectedOption?: "Leave blank" | "Custom";
-    customText?: string;
-    selectedVersionIndex?: number;
-}
+export type ScheduleItem = Pick<PlanItem, "title" | "itemType" | "sequence"> &
+    ScheduleSelection;
 
 /** Everything buildScheduleCopyText reads. */
 export interface ScheduleCopyInput {
     items: ScheduleItem[];
     hymnData: ScheduleHymn[];
-    serviceTypeName: string;
+    serviceTypeName: ServiceType["name"];
     date: Date;
 }
 

@@ -1,57 +1,23 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SongDetailsType } from "../SongDetails";
 import ServiceSchedule from "./ServiceSchedule";
 import CopyrightInformation from "./CopyrightInformation";
-
-export interface PlanItem {
-    id: string;
-    title: string;
-    itemType: string;
-    sequence: number;
-    servicePosition: string;
-    keyName: string | null;
-    length: number;
-    description: string | null;
-    createdAt: string;
-    updatedAt: string;
-    selectedOption?: "Leave blank" | "Custom";
-    customText?: string;
-    selectedVersionIndex?: number;
-}
-
-interface Plan {
-    id: string;
-    dates: string;
-    shortDates: string;
-    planningCenterUrl: string;
-    itemsCount: number;
-    title: string | null;
-    sortDate: string;
-    createdAt: string;
-    updatedAt: string;
-}
-
-export interface HymnVersion {
-    id: string;
-    tune_name: string;
-    rejoice_hymns_number: string;
-    great_hymns_number: string;
-    selected: boolean;
-}
-
-export interface HymnData {
-    song_title: string;
-    versions: HymnVersion[];
-}
+import type {
+    HymnData,
+    HymnVersion,
+    Plan,
+    PlanItem,
+    ScheduleSelection,
+    Song,
+} from "@/lib/domain";
 
 interface PlanItemsProps {
     plan: Plan;
     serviceTypeId: string;
     serviceTypeName: string;
     onBack: () => void;
-    onItemSelect: (item: PlanItem, songDetails?: SongDetailsType) => void;
+    onItemSelect: (item: PlanItem, songDetails?: Song) => void;
 }
 
 export default function PlanItems({
@@ -61,8 +27,8 @@ export default function PlanItems({
     onBack,
     onItemSelect,
 }: PlanItemsProps): React.ReactElement {
-    const [items, setItems] = useState<PlanItem[]>([]);
-    const [includedSongs, setIncludedSongs] = useState<SongDetailsType[]>([]);
+    const [items, setItems] = useState<(PlanItem & ScheduleSelection)[]>([]);
+    const [includedSongs, setIncludedSongs] = useState<Song[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<"copyright" | "schedule">(
@@ -88,9 +54,11 @@ export default function PlanItems({
                     );
                 }
 
+                // The legacy route sends items without `songId`, which this
+                // view never reads: it matches songs by title.
                 const data: {
                     items: PlanItem[];
-                    included: SongDetailsType[];
+                    included: Song[];
                     totalCount: number;
                 } = await response.json();
 

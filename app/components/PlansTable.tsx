@@ -3,33 +3,20 @@
 import { useState, useEffect } from "react";
 import Pagination from "./ui/Pagination";
 import { formatPlanDateHeading, sortPlanDates } from "@/lib/plansByDate";
-
-interface Plan {
-    id: string;
-    dates: string;
-    shortDates: string;
-    planningCenterUrl: string;
-    itemsCount: number;
-    title: string | null;
-    sortDate: string;
-    createdAt: string;
-    updatedAt: string;
-    serviceType: {
-        id: string;
-        name: string;
-    };
-}
+import type { PlanSummary } from "@/lib/domain";
 
 interface PlansTableProps {
-    onPlanSelect: (plan: Plan, serviceTypeId: string) => void;
+    onPlanSelect: (plan: PlanSummary, serviceTypeId: string) => void;
 }
 
 export default function PlansTable({
     onPlanSelect,
 }: PlansTableProps): React.ReactElement {
-    const [plansByDate, setPlansByDate] = useState<{ [key: string]: Plan[] }>(
-        {}
-    );
+    // /api/all-plans omits `serviceTypeId` and sends the API URL as
+    // `planningCenterUrl`; this view reads neither.
+    const [plansByDate, setPlansByDate] = useState<{
+        [key: string]: PlanSummary[];
+    }>({});
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState<number>(1);
@@ -131,7 +118,7 @@ export default function PlansTable({
                                 </tr>
                             </thead>
                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                {plansByDate[date].map((plan: Plan) => (
+                                {plansByDate[date].map((plan: PlanSummary) => (
                                     <tr
                                         key={plan.id}
                                         onClick={() =>

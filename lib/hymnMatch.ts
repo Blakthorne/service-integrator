@@ -1,17 +1,5 @@
+import type { HymnData } from "./domain";
 import type { RawHymn } from "./unusedHymns";
-
-export interface HymnVersion {
-    id: string;
-    tune_name: string;
-    rejoice_hymns_number: string;
-    great_hymns_number: string;
-    selected: boolean;
-}
-
-export interface HymnData {
-    song_title: string;
-    versions: HymnVersion[];
-}
 
 /**
  * Group a hymnbook catalog by lowercased song title so every tune variant of a
