@@ -4,8 +4,8 @@ import Link from "next/link";
 import EmptyState from "../ui/EmptyState";
 import PageHeader from "../ui/PageHeader";
 import SongDetails from "../SongDetails";
+import { planLabel } from "@/lib/planLabel";
 import { pcoWebUrls, routes } from "@/lib/routes";
-import { planHeading } from "./PlanHeader";
 import { usePlan } from "./PlanProvider";
 import ViewInPlanningCenterLink from "./ViewInPlanningCenterLink";
 
@@ -24,7 +24,7 @@ interface PlanItemDetailProps {
 export default function PlanItemDetail({ itemId }: PlanItemDetailProps) {
     const { plan, serviceType, items } = usePlan();
     const item = items.find((candidate) => candidate.id === itemId);
-    const heading = planHeading(plan, serviceType);
+    const label = planLabel(plan, serviceType);
     const planHref = routes.plan(serviceType.id, plan.id);
 
     if (!item) {
@@ -37,7 +37,7 @@ export default function PlanItemDetail({ itemId }: PlanItemDetailProps) {
                         href={planHref}
                         className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
                     >
-                        Back to {heading}
+                        Back to {label}
                     </Link>
                 }
             />
@@ -50,7 +50,7 @@ export default function PlanItemDetail({ itemId }: PlanItemDetailProps) {
                 title={item.title}
                 breadcrumbs={[
                     { label: "Plans", href: routes.plans() },
-                    { label: heading, href: planHref },
+                    { label, href: planHref },
                     { label: item.title },
                 ]}
                 actions={
