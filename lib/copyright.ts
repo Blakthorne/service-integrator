@@ -16,9 +16,8 @@ export type CopyrightItem = Pick<PlanItem, "title" | "itemType" | "sequence">;
  * author that already ends in a period).
  */
 export function formatCopyrightText(song: CopyrightSong): string {
-    // PCO can send a null author. It still throws below, as it always has
-    // (copyright.test.ts pins that), until null is treated as "Unknown".
-    const author = song.author as string;
+    // PCO can send a null author; treat it like an empty one ("Unknown").
+    const author = song.author ?? "";
 
     // First split by comma to check if there are three authors
     const commaAuthors = author.split(",").map((a) => a.trim());

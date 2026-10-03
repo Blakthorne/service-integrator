@@ -111,15 +111,13 @@ describe("formatCopyrightText: author line", () => {
         );
     });
 
-    test("QUIRK: a null or undefined author throws (author.split); flips when null means 'Unknown'", () => {
-        expect(() =>
-            formatCopyrightText(song({ author: null as unknown as string }))
-        ).toThrow(TypeError);
-        expect(() =>
-            formatCopyrightText(
-                song({ author: undefined as unknown as string })
-            )
-        ).toThrow(TypeError);
+    test("a null or undefined author becomes 'Unknown', like an empty one", () => {
+        expect(formatCopyrightText(song({ author: null })).split("\n")[0]).toBe(
+            '"T" Words and Music by Unknown.'
+        );
+        expect(
+            formatCopyrightText(song({ author: undefined })).split("\n")[0]
+        ).toBe('"T" Words and Music by Unknown.');
     });
 });
 
@@ -411,6 +409,20 @@ describe("buildCopyrightCopyAllText", () => {
             [first, second]
         );
         expect(text.split("\n")[0]).toBe('"Same" Words and Music by First.');
+    });
+
+    test("a song with a null author no longer breaks Copy All", () => {
+        const anonymous = song({ title: "Anonymous Hymn", author: null, copyright: null });
+        const items = [songItem("Anonymous Hymn", 1), songItem("Amazing Grace", 2)];
+        expect(buildCopyrightCopyAllText(items, [anonymous, amazing])).toBe(
+            [
+                '"Anonymous Hymn" Words and Music by Unknown.',
+                "Public Domain.",
+                FOOTER,
+            ].join("\n") +
+                "\n\n" +
+                amazingBlock
+        );
     });
 
     test("a song used twice in the plan gets one block per item", () => {
