@@ -1,7 +1,6 @@
 "use client";
 
-import { startTransition, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import ErrorState from "@/app/components/ui/ErrorState";
 
 // The shell-level error boundary: it catches errors below the (app) layout, so
@@ -13,8 +12,6 @@ export default function AppError({
     error: Error & { digest?: string };
     reset: () => void;
 }) {
-    const router = useRouter();
-
     useEffect(() => {
         console.error(error);
     }, [error]);
@@ -22,14 +19,7 @@ export default function AppError({
     return (
         <ErrorState
             message="Something went wrong while loading this page."
-            onRetry={() => {
-                // reset() alone only re-renders with the cached server data;
-                // refresh() makes the server render the page again.
-                startTransition(() => {
-                    router.refresh();
-                    reset();
-                });
-            }}
+            reset={reset}
         />
     );
 }
