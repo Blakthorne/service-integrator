@@ -12,8 +12,19 @@ const sampleSongs: PcoSong[] = [
     { title: "Amazing Grace", lastScheduledAt: "2025-01-01T00:00:00Z" },
 ];
 
-// Where the module keeps its cache: see sharedCache in unusedHymns.ts.
-const CACHE_GLOBAL = "__unusedHymnsCache";
+/**
+ * Empty the cache the module keeps on globalThis (see sharedCache in
+ * unusedHymns.ts). It is keyed by a versioned symbol, so this clears every
+ * version and survives a bump.
+ */
+function clearSharedCache() {
+    const scope = globalThis as unknown as Record<symbol, unknown>;
+    for (const symbol of Object.getOwnPropertySymbols(globalThis)) {
+        if (symbol.description?.startsWith("service-integrator.unusedHymnsCache.")) {
+            delete scope[symbol];
+        }
+    }
+}
 
 /** Another copy of the module, which shares whatever cache is already in place. */
 async function loadAnotherCopy() {
@@ -23,7 +34,7 @@ async function loadAnotherCopy() {
 
 /** A fresh copy of the module with an empty cache, so each test starts clean. */
 async function loadQueries() {
-    delete (globalThis as unknown as Record<string, unknown>)[CACHE_GLOBAL];
+    clearSharedCache();
     return loadAnotherCopy();
 }
 
@@ -146,6 +157,16 @@ describe("getUnusedHymns", () => {
         expect(refreshed).not.toBe(first);
         await expect(page.getUnusedHymns()).resolves.toBe(refreshed);
         expect(fetchAllSongs).toHaveBeenCalledTimes(2);
+    });
+
+    test("keeps its cache in one versioned slot on globalThis", async () => {
+        const { getUnusedHymns } = await loadQueries();
+        await getUnusedHymns();
+
+        const slots = Object.getOwnPropertySymbols(globalThis).filter((symbol) =>
+            /^service-integrator\.unusedHymnsCache\.v\d+$/.test(symbol.description ?? "")
+        );
+        expect(slots).toHaveLength(1);
     });
 
     test("refresh: false is the same as no options", async () => {

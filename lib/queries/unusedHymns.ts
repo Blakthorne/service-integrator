@@ -8,7 +8,14 @@ const UNUSED_HYMNS_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 const CACHE_KEY = "unused-hymns";
 
-const CACHE_GLOBAL = "__unusedHymnsCache";
+/**
+ * Where the shared cache lives on globalThis. Whichever copy of this module
+ * loads first creates it, and it is kept for the life of the process, so a
+ * cache of a different shape (a TtlCache method added, the TTL changed) would
+ * never replace an older one, and neither would a dev server's hot reload.
+ * Bump the version whenever the cache's shape or settings change.
+ */
+const CACHE_GLOBAL = Symbol.for("service-integrator.unusedHymnsCache.v2");
 
 /**
  * The cache is process-local, so shared by every request on a single
