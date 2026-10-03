@@ -72,8 +72,8 @@ export default function Home() {
     };
 
     return (
-        <div className="font-sans min-h-screen flex flex-col">
-            <main className="flex-1 flex flex-col items-center">
+        <div className="font-sans">
+            <div className="flex flex-col items-center">
                 {/* Always show the title */}
                 <div className="text-center mb-12 w-full cursor-pointer">
                     <h1
@@ -93,13 +93,7 @@ export default function Home() {
                 <div className="w-full max-w-4xl mx-auto">
                     {renderCurrentView()}
                 </div>
-            </main>
-
-            <footer className="w-full px-4 pt-4 text-center border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 mt-8">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                    © {new Date().getFullYear()} David Polar
-                </span>
-            </footer>
+            </div>
         </div>
     );
 }
