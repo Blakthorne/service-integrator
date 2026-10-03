@@ -11,6 +11,8 @@ interface UnusedHymnsControlsProps {
     summary: string;
     computedAt: string | null;
     refreshing: boolean;
+    /** Set when the last refresh failed. The results shown are then the previous ones. */
+    refreshError: string | null;
     onBookChange: (book: BookFilter) => void;
     onSortChange: (sort: SortKey) => void;
     onRefresh: () => void;
@@ -72,6 +74,7 @@ export default function UnusedHymnsControls({
     summary,
     computedAt,
     refreshing,
+    refreshError,
     onBookChange,
     onSortChange,
     onRefresh,
@@ -122,6 +125,11 @@ export default function UnusedHymnsControls({
                     </button>
                 </div>
             </div>
+            {refreshError && (
+                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                    {refreshError}
+                </p>
+            )}
         </div>
     );
 }

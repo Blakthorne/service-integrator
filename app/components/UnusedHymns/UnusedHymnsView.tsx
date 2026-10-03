@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
+import { refreshUnusedHymns } from "@/app/(app)/unused-hymns/actions";
 import type { HymnEntry, ReviewEntry, UnusedHymnsResult } from "@/lib/unusedHymns";
 import UnusedHymnsControls, {
     type BookFilter,
@@ -72,7 +73,18 @@ function buildSummary(
     return `${unusedCount} hymnbook entries never used`;
 }
 
-export default function UnusedHymnsView() {
+interface UnusedHymnsViewProps {
+    /** The result the server rendered the page with. A refresh replaces it. */
+    initialResult: UnusedHymnsResult;
+}
+
+/**
+ * The controls and table of the unused hymns page. Filtering, sorting and
+ * paging happen here, in the browser, on the result the server loaded.
+ */
+export default function UnusedHymnsView({
+    initialResult,
+}: UnusedHymnsViewProps) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -80,76 +92,33 @@ export default function UnusedHymnsView() {
     const book = parseBook(searchParams.get("book"));
     const sort = parseSort(searchParams.get("sort"));
 
-    const [result, setResult] = useState<UnusedHymnsResult | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [result, setResult] = useState(initialResult);
+    const [refreshError, setRefreshError] = useState<string | null>(null);
+    const [refreshing, startRefresh] = useTransition();
     const [page, setPage] = useState(1);
 
-    const mountedRef = useRef(true);
-    const controllerRef = useRef<AbortController | null>(null);
-
-    const runLoad = useCallback((refresh: boolean) => {
-        controllerRef.current?.abort();
-        const controller = new AbortController();
-        controllerRef.current = controller;
-        if (refresh) {
-            setRefreshing(true);
-        } else {
-            setLoading(true);
-        }
-
-        const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-        const url = `${baseUrl}/api/unused-hymns${refresh ? "?refresh=1" : ""}`;
-
-        fetch(url, { signal: controller.signal })
-            .then(async (response) => {
-                if (!response.ok) {
-                    throw new Error(
-                        `Failed to load unused hymns: ${response.status}`
-                    );
-                }
-                return (await response.json()) as UnusedHymnsResult;
-            })
-            .then((data) => {
-                if (!mountedRef.current) return;
-                setResult(data);
-                setError(null);
+    function handleRefresh() {
+        setRefreshError(null);
+        startRefresh(async () => {
+            let next: UnusedHymnsResult;
+            try {
+                next = await refreshUnusedHymns();
+            } catch (error) {
+                // Keep showing the current results; Refresh is the retry.
+                console.error("Error refreshing unused hymns:", error);
+                // Updates after an await are only part of the transition if
+                // they are wrapped in startRefresh again.
+                startRefresh(() => {
+                    setRefreshError("Failed to refresh unused hymns");
+                });
+                return;
+            }
+            startRefresh(() => {
+                setResult(next);
                 setPage(1);
-            })
-            .catch((err: unknown) => {
-                if ((err as Error).name === "AbortError") return;
-                if (!mountedRef.current) return;
-                console.error("Error loading unused hymns:", err);
-                setError(
-                    refresh
-                        ? "Failed to refresh unused hymns"
-                        : "Failed to load unused hymns"
-                );
-            })
-            .finally(() => {
-                if (!mountedRef.current) return;
-                if (refresh) {
-                    setRefreshing(false);
-                } else {
-                    setLoading(false);
-                }
             });
-    }, []);
-
-    useEffect(() => {
-        mountedRef.current = true;
-        runLoad(false);
-        return () => {
-            mountedRef.current = false;
-            controllerRef.current?.abort();
-        };
-    }, [runLoad]);
-
-    const handleRefresh = useCallback(() => {
-        runLoad(true);
-    }, [runLoad]);
+        });
+    }
 
     const updateParam = useCallback(
         (key: string, value: string) => {
@@ -160,33 +129,6 @@ export default function UnusedHymnsView() {
         },
         [pathname, router, searchParams]
     );
-
-    if (loading) {
-        return (
-            <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p className="text-gray-600 dark:text-gray-300">
-                    Loading unused hymns…
-                </p>
-            </div>
-        );
-    }
-
-    if (error || !result) {
-        return (
-            <div className="text-center py-12">
-                <p className="text-red-600 dark:text-red-400 mb-4">
-                    {error ?? "No data"}
-                </p>
-                <button
-                    onClick={() => runLoad(false)}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                    Try Again
-                </button>
-            </div>
-        );
-    }
 
     const filteredUnused: HymnEntry[] = result.unused.filter((entry) =>
         inBook(entry, book)
@@ -209,6 +151,7 @@ export default function UnusedHymnsView() {
                 summary={buildSummary(book, sortedUnused.length, result.meta.totals)}
                 computedAt={result.meta.computedAt}
                 refreshing={refreshing}
+                refreshError={refreshError}
                 onBookChange={(next) => updateParam("book", next)}
                 onSortChange={(next) => updateParam("sort", next)}
                 onRefresh={handleRefresh}
