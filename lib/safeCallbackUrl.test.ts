@@ -113,11 +113,11 @@ describe("safeCallbackUrl", () => {
             ["/unused-hymns?book=great&sort=number", "/unused-hymns?book=great&sort=number"],
             ["/plans/a b/c?q=x y", "/plans/a%20b/c?q=x%20y"],
             [
-                "/plans/日本語?q=é&r=日",
+                "/plans/\u65e5\u672c\u8a9e?q=\u00e9&r=\u65e5",
                 "/plans/%E6%97%A5%E6%9C%AC%E8%AA%9E?q=%C3%A9&r=%E6%97%A5",
             ],
-            ["/plans/ x", "/plans/%E2%80%A8x"],
-            ["/plans/／", "/plans/%EF%BC%8F"],
+            ["/plans/\u2028x", "/plans/%E2%80%A8x"],
+            ["/plans/\uff0f", "/plans/%EF%BC%8F"],
             ["/plans/%E6%97%A5", "/plans/%E6%97%A5"],
             ["/plans/a%2Fb?q=%26", "/plans/a%2Fb?q=%26"],
             ["/plans/\\evil", "/plans//evil"],
@@ -273,19 +273,19 @@ describe("safeCallbackUrl", () => {
         // Node throws ERR_INVALID_CHAR for a character above U+00FF in a
         // Location header, so redirect() would answer with a 500.
         const refused: [string, string][] = [
-            ["a Japanese character", "/日"],
-            ["U+2028 line separator", "/ "],
-            ["a full-width solidus", "/／"],
-            ["a full-width solidus pair that reads as //", "／／evil.com"],
-            ["a full-width solidus after the slash", "/／evil.com"],
-            ["an emoji", "/😀"],
+            ["a Japanese character", "/\u65e5"],
+            ["U+2028 line separator", "/\u2028"],
+            ["a full-width solidus", "/\uff0f"],
+            ["a full-width solidus pair that reads as //", "\uff0f\uff0fevil.com"],
+            ["a full-width solidus after the slash", "/\uff0fevil.com"],
+            ["an emoji", "/\u{1f600}"],
             ["a lone surrogate", "/\ud800"],
-            ["U+0100", "/Ā"],
-            ["a zero-width space", "/pl​ans"],
-            ["a right-to-left override", "/‮plans"],
-            ["a Latin-1 letter (Node would accept it, browsers would garble it)", "/café"],
-            ["U+00FF", "/ÿ"],
-            ["a no-break space", "/pl ans"],
+            ["U+0100", "/\u0100"],
+            ["a zero-width space", "/pl\u200bans"],
+            ["a right-to-left override", "/\u202eplans"],
+            ["a Latin-1 letter (Node would accept it, browsers would garble it)", "/caf\u00e9"],
+            ["U+00FF", "/\u00ff"],
+            ["a no-break space", "/pl\u00a0ans"],
             ["a space", "/plans/a b"],
             ["a space right after the slash", "/ plans"],
             ["a trailing space", "/plans "],
@@ -296,9 +296,9 @@ describe("safeCallbackUrl", () => {
         });
 
         test.each([
-            ["a Japanese character", "/日"],
-            ["U+2028 line separator", "/ "],
-            ["a full-width solidus", "/／"],
+            ["a Japanese character", "/\u65e5"],
+            ["U+2028 line separator", "/\u2028"],
+            ["a full-width solidus", "/\uff0f"],
         ])("Node cannot write %s into a Location header", (_name, value) => {
             expect(canBeLocationHeader(value)).toBe(false);
         });

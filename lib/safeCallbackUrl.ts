@@ -26,7 +26,7 @@ const AUTH_PAGES = /^\/auth(?:[/?#]|$)/i;
  * - browsers strip tabs and newlines from URLs, so "/\t/host" would turn into
  *   "//host";
  * - Node refuses to write a character above U+00FF (a Japanese character,
- *   U+2028, a full-width "／") into the Location header, so `redirect()` would
+ *   U+2028, the full-width solidus U+FF0F) into the Location header, so `redirect()` would
  *   fail with a 500.
  *
  * Also rejected:
