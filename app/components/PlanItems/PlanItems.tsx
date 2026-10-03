@@ -1,15 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useReducer } from "react";
 import ServiceSchedule from "./ServiceSchedule";
 import CopyrightInformation from "./CopyrightInformation";
 import { planDateFromSortDate } from "@/lib/format";
+import {
+    mergeScheduleSelections,
+    scheduleSelectionsReducer,
+    type ChooseOption,
+    type SetCustomText,
+} from "@/lib/scheduleSelections";
 import type {
     HymnData,
     HymnVersion,
     Plan,
     PlanItem,
-    ScheduleSelection,
     Song,
 } from "@/lib/domain";
 
@@ -28,7 +33,8 @@ export default function PlanItems({
     onBack,
     onItemSelect,
 }: PlanItemsProps): React.ReactElement {
-    const [items, setItems] = useState<(PlanItem & ScheduleSelection)[]>([]);
+    const [items, setItems] = useState<PlanItem[]>([]);
+    const [selections, dispatch] = useReducer(scheduleSelectionsReducer, {});
     const [includedSongs, setIncludedSongs] = useState<Song[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -63,16 +69,8 @@ export default function PlanItems({
                     totalCount: number;
                 } = await response.json();
 
-                // Initialize selectedVersionIndex for song items
-                const processedItems = (data.items || []).map(
-                    (item: PlanItem) => ({
-                        ...item,
-                        selectedVersionIndex:
-                            item.itemType === "song" ? 0 : undefined,
-                    })
-                );
-
-                setItems(processedItems);
+                // Songs start on version 0 through mergeScheduleSelections.
+                setItems(data.items || []);
                 setIncludedSongs(data.included || []);
 
                 // After fetching items, get the hymn data for songs
@@ -122,6 +120,17 @@ export default function PlanItems({
 
         fetchData();
     }, [plan.id, serviceTypeId]);
+
+    const chooseOption = useCallback<ChooseOption>(
+        (itemId, option, versionIndex) =>
+            dispatch({ type: "chooseOption", itemId, option, versionIndex }),
+        []
+    );
+
+    const setCustomText = useCallback<SetCustomText>(
+        (itemId, text) => dispatch({ type: "setCustomText", itemId, text }),
+        []
+    );
 
     // Helper function to get author for an item
     const getAuthorForItem = (item: PlanItem): string => {
@@ -366,11 +375,12 @@ export default function PlanItems({
                 )}
                 {activeTab === "schedule" && (
                     <ServiceSchedule
-                        items={items}
-                        setItems={setItems}
+                        items={mergeScheduleSelections(items, selections)}
                         hymnData={hymnData}
                         serviceTypeName={serviceTypeName}
                         planDate={planDateFromSortDate(plan.sortDate)}
+                        onChooseOption={chooseOption}
+                        onCustomTextChange={setCustomText}
                     />
                 )}
             </div>

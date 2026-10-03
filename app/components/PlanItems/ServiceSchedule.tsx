@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import CopyButton from "../ui/CopyButton";
 import { normalizeTitle } from "@/lib/normalizeTitle";
+import type { ChooseOption, SetCustomText } from "@/lib/scheduleSelections";
 import {
     buildScheduleCopyText,
     formatHymnNumbers,
@@ -17,138 +18,136 @@ import type {
 /** A plan item together with its Schedule-tab selections. */
 type ItemWithSelection = PlanItem & ScheduleSelection;
 
-export default function ServiceSchedule({
-    items,
-    setItems,
-    hymnData,
-    serviceTypeName,
-    planDate,
+/** How long typing has to pause before the custom text is saved. */
+const CUSTOM_TEXT_DEBOUNCE_MS = 500;
+
+// The option components below live at module scope. Defined inside
+// ServiceSchedule's render, each re-render made them new component types, so
+// React remounted them, and the text box lost focus whenever a saved change
+// re-rendered the tab (about half a second after typing paused).
+
+/**
+ * The custom-text box. It keeps what is typed locally and saves it 500 ms
+ * after typing pauses, or straight away when the box loses focus (so a radio
+ * or the copy button clicked right after typing sees the text).
+ */
+function CustomTextInput({
+    item,
+    onCustomTextChange,
 }: {
-    items: ItemWithSelection[];
-    setItems: (items: ItemWithSelection[]) => void;
-    hymnData: HymnData[];
-    serviceTypeName: string;
-    /** The plan's calendar date as `YYYY-MM-DD`, or null when it is unknown. */
-    planDate: string | null;
+    item: ItemWithSelection;
+    onCustomTextChange: SetCustomText;
 }) {
-    const onChooseOption = (
-        item: ItemWithSelection,
-        option: "Leave blank" | "Custom" | undefined,
-        versionIndex?: number
-    ) => {
-        const updatedItems = items.map((i) =>
-            i.id === item.id
-                ? {
-                      ...i,
-                      selectedOption: option,
-                      customText:
-                          option === "Custom" ? i.customText || "" : undefined,
-                      selectedVersionIndex: versionIndex,
-                  }
-                : i
-        );
-        setItems(updatedItems);
-    };
+    const [inputValue, setInputValue] = useState(item.customText || "");
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // CustomTextInput component with independent state management
-    const CustomTextInput: React.FC<{
-        item: ItemWithSelection;
-    }> = ({ item }) => {
-        const inputRef = useRef<HTMLInputElement>(null);
-        const [inputValue, setInputValue] = useState(item.customText || "");
-        const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-        // Update local state if item changes
-        useEffect(() => {
+    // Follow the saved text when it changes elsewhere (picking a hymn version
+    // clears it), unless an edit is still waiting to be saved: the box stays
+    // mounted now, so an older save landing mid-typing must not overwrite it.
+    useEffect(() => {
+        if (timeoutRef.current === null) {
             setInputValue(item.customText || "");
-        }, [item.customText]);
+        }
+    }, [item.customText]);
 
-        const updateParentState = useCallback(
-            (value: string) => {
-                const updatedItems = items.map((i) =>
-                    i.id === item.id
-                        ? {
-                              ...i,
-                              customText: value,
-                          }
-                        : i
-                );
-                setItems(updatedItems);
-            },
-            [item.id]
-        );
-
-        const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-            const newValue = e.target.value;
-            setInputValue(newValue);
-
-            // Clear existing timeout
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
             }
-
-            // Set new timeout to update parent state
-            timeoutRef.current = setTimeout(() => {
-                updateParentState(newValue);
-            }, 500);
         };
+    }, []);
 
-        // Cleanup timeout on unmount
-        useEffect(() => {
-            return () => {
-                if (timeoutRef.current) {
-                    clearTimeout(timeoutRef.current);
-                }
-            };
-        }, []);
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newValue = e.target.value;
+        setInputValue(newValue);
 
-        return (
-            <input
-                ref={inputRef}
-                type="text"
-                value={inputValue}
-                onChange={handleChange}
-                className="flex-1 px-2 py-1 text-sm border w-full rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
-                placeholder="Enter custom text..."
-            />
-        );
+        // Clear existing timeout
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+
+        // Set new timeout to save the text
+        timeoutRef.current = setTimeout(() => {
+            timeoutRef.current = null;
+            onCustomTextChange(item.id, newValue);
+        }, CUSTOM_TEXT_DEBOUNCE_MS);
     };
 
-    const CustomOption: React.FC<{
-        item: ItemWithSelection;
-    }> = ({ item }) => (
+    const handleBlur = () => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+            onCustomTextChange(item.id, inputValue);
+        }
+    };
+
+    return (
+        <input
+            type="text"
+            value={inputValue}
+            onChange={handleChange}
+            onBlur={handleBlur}
+            className="flex-1 px-2 py-1 text-sm border w-full rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            placeholder="Enter custom text..."
+        />
+    );
+}
+
+function CustomOption({
+    item,
+    onChooseOption,
+    onCustomTextChange,
+}: {
+    item: ItemWithSelection;
+    onChooseOption: ChooseOption;
+    onCustomTextChange: SetCustomText;
+}) {
+    return (
         <div className="flex items-center space-x-3 mx-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
             <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                     type="radio"
                     name={`hymn-${item.id}`}
                     checked={item.selectedOption === "Custom"}
-                    onChange={() => onChooseOption(item, "Custom")}
+                    onChange={() => onChooseOption(item.id, "Custom")}
                     className="text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm text-gray-900 dark:text-gray-100">
                     Custom:
                 </span>
             </label>
-            <CustomTextInput item={item} />
+            <CustomTextInput
+                item={item}
+                onCustomTextChange={onCustomTextChange}
+            />
         </div>
     );
+}
 
-    const HymnNumbers: React.FC<{
-        hymnVersion: HymnVersion;
-    }> = ({ hymnVersion }) => (
+function HymnNumbers({ hymnVersion }: { hymnVersion: HymnVersion }) {
+    return (
         <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">
             {hymnVersion.tune_name + " "}(
             {formatHymnNumbers(hymnVersion)}
             )
         </span>
     );
+}
 
-    const HymnVersionOption: React.FC<{
-        item: ItemWithSelection;
-        hymnVersion: HymnVersion;
-        versionIndex: number;
-    }> = ({ item, hymnVersion, versionIndex }) => (
+function HymnVersionOption({
+    item,
+    hymnVersion,
+    versionIndex,
+    onChooseOption,
+}: {
+    item: ItemWithSelection;
+    hymnVersion: HymnVersion;
+    versionIndex: number;
+    onChooseOption: ChooseOption;
+}) {
+    return (
         <label className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
                 type="radio"
@@ -157,16 +156,22 @@ export default function ServiceSchedule({
                     !item.selectedOption &&
                     item.selectedVersionIndex === versionIndex
                 }
-                onChange={() => onChooseOption(item, undefined, versionIndex)}
+                onChange={() => onChooseOption(item.id, undefined, versionIndex)}
                 className="text-blue-600 focus:ring-blue-500"
             />
             <HymnNumbers hymnVersion={hymnVersion} />
         </label>
     );
+}
 
-    const LeaveBlankOption: React.FC<{
-        item: ItemWithSelection;
-    }> = ({ item }) => (
+function LeaveBlankOption({
+    item,
+    onChooseOption,
+}: {
+    item: ItemWithSelection;
+    onChooseOption: ChooseOption;
+}) {
+    return (
         <label className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
                 type="radio"
@@ -175,7 +180,7 @@ export default function ServiceSchedule({
                     item.selectedOption === "Leave blank" ||
                     item.selectedOption === undefined
                 }
-                onChange={() => onChooseOption(item, "Leave blank")}
+                onChange={() => onChooseOption(item.id, "Leave blank")}
                 className="text-blue-600 focus:ring-blue-500"
             />
             <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">
@@ -183,7 +188,37 @@ export default function ServiceSchedule({
             </span>
         </label>
     );
+}
 
+/** Props of ServiceSchedule. */
+export interface ServiceScheduleProps {
+    /** The plan's items with their selections (see `mergeScheduleSelections`). */
+    items: ItemWithSelection[];
+    /** Hymnbook matches for the song items' titles. */
+    hymnData: HymnData[];
+    serviceTypeName: string;
+    /** The plan's calendar date as `YYYY-MM-DD`, or null when it is unknown. */
+    planDate: string | null;
+    /** Called when a song's radio button is picked. */
+    onChooseOption: ChooseOption;
+    /** Called with a song's custom text once typing pauses. */
+    onCustomTextChange: SetCustomText;
+}
+
+/**
+ * The Service Schedule tab: a card per song to pick its hymn version, leave
+ * it blank or give custom text, and a "Copy All" button for the schedule
+ * text. It holds no selections itself; they come in with `items` and changes
+ * go out through the callbacks.
+ */
+export default function ServiceSchedule({
+    items,
+    hymnData,
+    serviceTypeName,
+    planDate,
+    onChooseOption,
+    onCustomTextChange,
+}: ServiceScheduleProps) {
     return (
         <div>
             <div className="flex items-center justify-between mb-6">
@@ -229,8 +264,21 @@ export default function ServiceSchedule({
                                                 Song not found in hymn books
                                             </p>
                                             <div>
-                                                <LeaveBlankOption item={item} />
-                                                <CustomOption item={item} />
+                                                <LeaveBlankOption
+                                                    item={item}
+                                                    onChooseOption={
+                                                        onChooseOption
+                                                    }
+                                                />
+                                                <CustomOption
+                                                    item={item}
+                                                    onChooseOption={
+                                                        onChooseOption
+                                                    }
+                                                    onCustomTextChange={
+                                                        onCustomTextChange
+                                                    }
+                                                />
                                             </div>
                                         </div>
                                     ) : hymn.versions.length > 1 ? (
@@ -251,10 +299,21 @@ export default function ServiceSchedule({
                                                                 version
                                                             }
                                                             versionIndex={index}
+                                                            onChooseOption={
+                                                                onChooseOption
+                                                            }
                                                         />
                                                     )
                                                 )}
-                                                <CustomOption item={item} />
+                                                <CustomOption
+                                                    item={item}
+                                                    onChooseOption={
+                                                        onChooseOption
+                                                    }
+                                                    onCustomTextChange={
+                                                        onCustomTextChange
+                                                    }
+                                                />
                                             </div>
                                         </div>
                                     ) : (
@@ -266,8 +325,19 @@ export default function ServiceSchedule({
                                                         hymn.versions[0]
                                                     }
                                                     versionIndex={0}
+                                                    onChooseOption={
+                                                        onChooseOption
+                                                    }
                                                 />
-                                                <CustomOption item={item} />
+                                                <CustomOption
+                                                    item={item}
+                                                    onChooseOption={
+                                                        onChooseOption
+                                                    }
+                                                    onCustomTextChange={
+                                                        onCustomTextChange
+                                                    }
+                                                />
                                             </div>
                                         </div>
                                     )}
