@@ -4,8 +4,8 @@ import { buildHymnIndex, matchHymns } from "./hymnMatch";
 import { normalizeTitle } from "./normalizeTitle";
 import type { RawHymn } from "./unusedHymns";
 
-// Characterization tests for the hymn lookup (served by /api/hymns at first,
-// now by getPlanDetail). They began by pinning its exact, lowercase-only
+// Characterization tests for the hymn lookup (first behind an API route, now
+// called by getPlanDetail). They began by pinning its exact, lowercase-only
 // lookup; the normalized lookup fix flipped those quirks into the "normalized
 // matching" tests below.
 //

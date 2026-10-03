@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { groupPlansByDate, sortPlanDates } from "./plansByDate";
 
-// Characterization tests: they pin how /api/all-plans orders and groups plans
-// and how PlansTable orders its date headings. (The heading text itself is
+// Characterization tests: they pin how the plans list orders and groups plans
+// and orders its date headings, work that moved from an API route and the
+// browser into getPlansByDate. (The heading text itself is
 // lib/format's formatPlanDateHeading, tested in format.test.ts.)
 
 interface TestPlan {
@@ -51,8 +52,8 @@ describe("groupPlansByDate", () => {
             plan("d", "2025-06-08T08:00:00Z"),
         ]);
 
-        // Keys are inserted newest first, which is also the JSON key order of
-        // the all-plans response.
+        // Keys are inserted newest first, which is also the key order of the
+        // plansByDate that getPlansByDate returns.
         expect(Object.keys(result)).toEqual([
             "2025-06-15",
             "2025-06-08",

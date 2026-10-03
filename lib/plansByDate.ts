@@ -4,8 +4,8 @@ import type { Plan } from "./domain";
  * Sort plans newest first and group them by calendar date. Sorting is a plain
  * string comparison of `sortDate`, done on a copy so `plans` is not mutated.
  * Plans are grouped by the part of `sortDate` before the "T". The sort is
- * stable, so plans with equal `sortDate` keep their input order (the all-plans
- * route passes them in service-type order), and the keys of the result are in
+ * stable, so plans with equal `sortDate` keep their input order (getAllPlans
+ * returns them in service-type order), and the keys of the result are in
  * newest-first order.
  */
 export function groupPlansByDate<T extends Pick<Plan, "sortDate">>(
