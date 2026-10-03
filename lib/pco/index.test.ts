@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { fetchAllSongs, pcoAuthHeaders } from "./pco";
+import { fetchAllSongs, pcoAuthHeaders } from "@/lib/pco";
 
 afterEach(() => {
     vi.unstubAllGlobals();

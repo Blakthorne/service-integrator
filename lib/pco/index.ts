@@ -1,4 +1,4 @@
-import type { PcoSong } from "./unusedHymns";
+import type { PcoSong } from "../unusedHymns";
 
 const PCO_SONGS_URL =
     "https://api.planningcenteronline.com/services/v2/songs?per_page=100";
