@@ -168,12 +168,12 @@ describe("getPlanDetail", () => {
 });
 
 describe("getPlanLabels", () => {
-    test("labels the plan with its service type and dates, and each item with its title", async () => {
+    test("labels the plan with its dates and service type, and each item with its title", async () => {
         stubFetchRoutes(planDetailRoutes());
         const { getPlanLabels } = await loadQueries();
 
         await expect(getPlanLabels(MORNING, PLAN)).resolves.toEqual({
-            plan: "Sunday Morning · October 4, 2026",
+            plan: "October 4, 2026 · Sunday Morning",
             items: {
                 "1": "Amazing Grace",
                 "2": "Come, Thou Fount of Every Blessing",
@@ -246,7 +246,7 @@ describe("getPlanLabels", () => {
         await expect(getPlanLabels(MORNING, PLAN)).resolves.toMatchObject({ plan: "Plan" });
         itemsStatus = 200;
         await expect(getPlanLabels(MORNING, PLAN)).resolves.toEqual({
-            plan: "Sunday Morning · October 4, 2026",
+            plan: "October 4, 2026 · Sunday Morning",
             items: { "1": "Welcome" },
         });
     });

@@ -16,6 +16,7 @@ import {
     getServiceType,
     parsePcoId,
 } from "@/lib/pco";
+import { planLabel } from "@/lib/planLabel";
 import { groupPlansByDate, sortPlanDates } from "@/lib/plansByDate";
 import { createTtlCache } from "@/lib/ttlCache";
 
@@ -79,7 +80,7 @@ export const getPlanDetail = cache(
 
 /** Page-title text for a plan and its items. */
 export interface PlanLabels {
-    /** "<service type name> · <plan dates>", e.g. "Sunday Morning · October 4, 2026". */
+    /** The plan's label (see planLabel), e.g. "October 4, 2026 · Sunday Morning". */
     plan: string;
     /** Each item's title, by item ID. */
     items: Record<string, string>;
@@ -115,7 +116,7 @@ export async function getPlanLabels(
                 planId
             );
             return {
-                plan: `${serviceType.name} · ${plan.dates}`,
+                plan: planLabel(plan, serviceType),
                 items: Object.fromEntries(
                     items.map((item) => [item.id, item.title])
                 ),
