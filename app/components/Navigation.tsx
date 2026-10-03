@@ -13,7 +13,9 @@ export default function Navigation() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-16">
                     <div className="flex items-center">
-                        <div className="flex-shrink-0 flex items-center">
+                        {/* Hidden on phones, where it would crowd the links and
+                            Sign Out. The Plans link goes to the same page. */}
+                        <div className="hidden sm:flex flex-shrink-0 items-center">
                             <Link
                                 href={routes.plans()}
                                 className="text-lg font-semibold text-gray-900 dark:text-gray-100"
@@ -32,11 +34,13 @@ export default function Navigation() {
                         >
                             <button
                                 type="submit"
-                                className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer whitespace-pre"
+                                aria-label="Sign out"
+                                className="inline-flex items-center justify-center size-10 sm:size-auto sm:px-4 sm:py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer whitespace-pre"
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
-                                    className="h-4 w-4 mr-2"
+                                    aria-hidden="true"
+                                    className="h-4 w-4 sm:mr-2"
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
@@ -48,7 +52,7 @@ export default function Navigation() {
                                         d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                                     />
                                 </svg>
-                                Sign Out
+                                <span className="hidden sm:inline">Sign Out</span>
                             </button>
                         </form>
                     </div>
