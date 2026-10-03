@@ -1,11 +1,16 @@
-import type { PlanItem, Song } from "./domain";
+import type { PlanItemWithSong, Song } from "./domain";
 
 /** The song fields the copyright text is built from. */
 export type CopyrightSong = Pick<Song, "title" | "author" | "copyright"> &
     Partial<Pick<Song, "admin">>;
 
-/** The plan-item fields the copyright views read. */
-export type CopyrightItem = Pick<PlanItem, "title" | "itemType" | "sequence">;
+/**
+ * The plan-item fields the copyright views read: its type, its position and
+ * the song it was joined to by PCO ID. A PlanItemWithSong fits.
+ */
+export type CopyrightItem = Pick<PlanItemWithSong, "itemType" | "sequence"> & {
+    song: CopyrightSong | null;
+};
 
 /**
  * Build the attribution block shown (and copied) for a song:
@@ -70,43 +75,33 @@ export function formatCopyrightText(song: CopyrightSong): string {
 }
 
 /**
- * Find the song behind a plan item for the copyright views. Only "song" items
- * qualify, and the song is the first one in `includedSongs` whose title is
- * identical (exact, case-sensitive) to the item's title. Returns null for
- * other item types and for items with no such song.
+ * The song behind a plan item for the copyright views: the song it was joined
+ * to by PCO ID (see joinItemsToSongs), so an item renamed in the plan still
+ * gets its song's copyright. Only "song" items qualify. Returns null for other
+ * item types and for items without a song.
  */
 export function getItemCopyrightInfo(
-    item: CopyrightItem,
-    includedSongs: CopyrightSong[]
+    item: CopyrightItem
 ): CopyrightSong | null {
-    if (item.itemType === "song") {
-        const song = includedSongs.find((song) => song.title === item.title);
-        if (!song) return null;
-        return {
-            title: song.title,
-            author: song.author,
-            copyright: song.copyright,
-            admin: song.admin,
-        };
+    if (item.itemType !== "song" || item.song === null) {
+        return null;
     }
-    return null;
+    const { title, author, copyright, admin } = item.song;
+    return { title, author, copyright, admin };
 }
 
 /**
  * The text the "Copy All" button on the Copyright Information tab copies: the
  * formatted copyright block of every song item, in sequence order, separated
- * by a blank line. Items without a matching song are skipped (see
- * getItemCopyrightInfo for how songs are matched).
+ * by a blank line. Items without a song are skipped (see
+ * getItemCopyrightInfo).
  */
-export function buildCopyrightCopyAllText(
-    items: CopyrightItem[],
-    includedSongs: CopyrightSong[]
-): string {
+export function buildCopyrightCopyAllText(items: CopyrightItem[]): string {
     return items
         .filter((item) => item.itemType === "song")
         .sort((a, b) => a.sequence - b.sequence)
         .map((item) => {
-            const info = getItemCopyrightInfo(item, includedSongs);
+            const info = getItemCopyrightInfo(item);
             return info ? formatCopyrightText(info) : null;
         })
         .filter((info): info is string => info !== null)

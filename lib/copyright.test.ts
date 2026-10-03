@@ -17,8 +17,16 @@ function song(overrides: Partial<CopyrightSong> = {}): CopyrightSong {
     return { title: "T", author: "X", copyright: "2001 Y", ...overrides };
 }
 
-function songItem(title: string, sequence: number): CopyrightItem {
-    return { title, itemType: "song", sequence };
+/**
+ * A "song" item joined to `itemSong`. `title` is the item's own title in the
+ * plan, which the copyright views never read; it defaults to the song's.
+ */
+function songItem(
+    itemSong: CopyrightSong | null,
+    sequence: number,
+    title: string = itemSong?.title ?? "Untitled"
+): CopyrightItem & { title: string } {
+    return { title, itemType: "song", sequence, song: itemSong };
 }
 
 /** Line 1 of the block: `"<title>" <author line>.` for a song titled "T". */
@@ -266,16 +274,14 @@ describe("getItemCopyrightInfo", () => {
         admin: null,
     });
 
-    test("returns exactly the title, author, copyright and admin of the matching song", () => {
+    test("returns exactly the title, author, copyright and admin of the item's song", () => {
         const detailed = {
             id: "42",
             ccliNumber: 22025,
             notes: "n",
             ...amazing,
         };
-        expect(
-            getItemCopyrightInfo(songItem("Amazing Grace", 1), [detailed])
-        ).toStrictEqual({
+        expect(getItemCopyrightInfo(songItem(detailed, 1))).toStrictEqual({
             title: "Amazing Grace",
             author: "John Newton",
             copyright: "Public Domain",
@@ -283,28 +289,22 @@ describe("getItemCopyrightInfo", () => {
         });
     });
 
-    test("is null for an item that is not a song, even when a song has that title", () => {
+    test("is null for an item that is not a song, even when it carries a song", () => {
         const header: CopyrightItem = {
-            title: "Amazing Grace",
             itemType: "header",
             sequence: 1,
+            song: amazing,
         };
-        expect(getItemCopyrightInfo(header, [amazing])).toBeNull();
+        expect(getItemCopyrightInfo(header)).toBeNull();
     });
 
-    test("is null for a song item with no song of that title", () => {
-        const other = songItem("Other", 1);
-        const grace = songItem("Amazing Grace", 1);
-        expect(getItemCopyrightInfo(other, [amazing])).toBeNull();
-        expect(getItemCopyrightInfo(grace, [])).toBeNull();
+    test("is null for a song item without a song", () => {
+        expect(getItemCopyrightInfo(songItem(null, 1, "Amazing Grace"))).toBeNull();
     });
 
-    test("the first song with a matching title wins", () => {
-        const first = song({ title: "Same", author: "First" });
-        const second = song({ title: "Same", author: "Second" });
-        expect(
-            getItemCopyrightInfo(songItem("Same", 1), [first, second])?.author
-        ).toBe("First");
+    test("uses the item's own song, whatever the item is called in the plan", () => {
+        const renamed = songItem(amazing, 1, "Amazing Grace (Acoustic)");
+        expect(getItemCopyrightInfo(renamed)?.title).toBe("Amazing Grace");
     });
 });
 
@@ -333,88 +333,91 @@ describe("buildCopyrightCopyAllText", () => {
     ].join("\n");
 
     test("joins the blocks of song items, in sequence order, with a blank line", () => {
-        const items = [
-            songItem("Amazing Grace", 2),
-            songItem("Holy, Holy, Holy", 1),
-        ];
-        const text = buildCopyrightCopyAllText(items, [amazing, holy]);
-        expect(text).toBe(holyBlock + "\n\n" + amazingBlock);
+        const items = [songItem(amazing, 2), songItem(holy, 1)];
+        expect(buildCopyrightCopyAllText(items)).toBe(
+            holyBlock + "\n\n" + amazingBlock
+        );
     });
 
     test("a single block has no leading or trailing separator", () => {
-        expect(
-            buildCopyrightCopyAllText([songItem("Amazing Grace", 1)], [amazing])
-        ).toBe(amazingBlock);
+        expect(buildCopyrightCopyAllText([songItem(amazing, 1)])).toBe(
+            amazingBlock
+        );
     });
 
     test("keeps only items whose type is exactly 'song'", () => {
         const items: CopyrightItem[] = [
-            { title: "Welcome", itemType: "header", sequence: 1 },
-            { title: "Amazing Grace", itemType: "item", sequence: 2 },
-            { title: "Amazing Grace", itemType: "Song", sequence: 3 },
-            songItem("Holy, Holy, Holy", 4),
+            { itemType: "header", sequence: 1, song: null },
+            { itemType: "item", sequence: 2, song: amazing },
+            { itemType: "Song", sequence: 3, song: amazing },
+            songItem(holy, 4),
         ];
-        expect(buildCopyrightCopyAllText(items, [amazing, holy])).toBe(
-            holyBlock
-        );
+        expect(buildCopyrightCopyAllText(items)).toBe(holyBlock);
     });
 
-    test("skips song items with no matching song, leaving no gap", () => {
+    test("skips song items without a song, leaving no gap", () => {
         const items = [
-            songItem("Holy, Holy, Holy", 1),
-            songItem("Unknown Song", 2),
-            songItem("Amazing Grace", 3),
+            songItem(holy, 1),
+            songItem(null, 2, "Unknown Song"),
+            songItem(amazing, 3),
         ];
-        const text = buildCopyrightCopyAllText(items, [amazing, holy]);
+        const text = buildCopyrightCopyAllText(items);
         expect(text).toBe(holyBlock + "\n\n" + amazingBlock);
         expect(text).not.toContain("\n\n\n");
     });
 
-    test("is empty when there are no items, no songs, or nothing matches", () => {
-        const grace = [songItem("Amazing Grace", 1)];
-        expect(buildCopyrightCopyAllText([], [amazing])).toBe("");
-        expect(buildCopyrightCopyAllText(grace, [])).toBe("");
-        expect(buildCopyrightCopyAllText([songItem("Nope", 1)], [amazing])).toBe(
-            ""
-        );
+    test("is empty when there are no items or no song item has a song", () => {
+        expect(buildCopyrightCopyAllText([])).toBe("");
+        expect(
+            buildCopyrightCopyAllText([songItem(null, 1, "Amazing Grace")])
+        ).toBe("");
     });
 
-    test("RENAMED ITEM: an item whose title differs from its song's title gets NO entry (flips when songs are joined by PCO ID)", () => {
-        const renamed = songItem("Amazing Grace (Acoustic)", 1);
-        expect(buildCopyrightCopyAllText([renamed], [amazing])).toBe("");
-        expect(getItemCopyrightInfo(renamed, [amazing])).toBeNull();
+    test("RENAMED ITEM: an item whose title differs from its song's title gets its song's block (songs are joined by PCO ID)", () => {
+        const renamed = songItem(amazing, 1, "Amazing Grace (Acoustic)");
+        expect(buildCopyrightCopyAllText([renamed])).toBe(amazingBlock);
+        expect(getItemCopyrightInfo(renamed)).toStrictEqual({
+            title: "Amazing Grace",
+            author: "John Newton",
+            copyright: "Public Domain",
+            admin: null,
+        });
 
         // Its exactly-titled neighbour is unaffected.
-        const items = [renamed, songItem("Holy, Holy, Holy", 2)];
-        expect(buildCopyrightCopyAllText(items, [amazing, holy])).toBe(
-            holyBlock
+        const items = [renamed, songItem(holy, 2)];
+        expect(buildCopyrightCopyAllText(items)).toBe(
+            amazingBlock + "\n\n" + holyBlock
         );
     });
 
-    test("titles must match exactly: case and surrounding whitespace matter", () => {
+    test("the item's own title plays no part: the block names the song", () => {
         const items = [
-            songItem("amazing grace", 1),
-            songItem(" Amazing Grace", 2),
-            songItem("Amazing Grace ", 3),
-            songItem("Amazing Grace.", 4),
+            songItem(amazing, 1, "amazing grace"),
+            songItem(amazing, 2, " Amazing Grace"),
+            songItem(amazing, 3, "Something Else Entirely"),
         ];
-        expect(buildCopyrightCopyAllText(items, [amazing])).toBe("");
+        expect(buildCopyrightCopyAllText(items)).toBe(
+            [amazingBlock, amazingBlock, amazingBlock].join("\n\n")
+        );
     });
 
-    test("the first song with a matching title wins", () => {
+    test("two songs with the same title each stay with their own item", () => {
         const first = song({ title: "Same", author: "First" });
         const second = song({ title: "Same", author: "Second" });
-        const text = buildCopyrightCopyAllText(
-            [songItem("Same", 1)],
-            [first, second]
-        );
-        expect(text.split("\n")[0]).toBe('"Same" Words and Music by First.');
+        const text = buildCopyrightCopyAllText([
+            songItem(second, 2),
+            songItem(first, 1),
+        ]);
+        expect(text.split("\n\n").map((block) => block.split("\n")[0])).toEqual([
+            '"Same" Words and Music by First.',
+            '"Same" Words and Music by Second.',
+        ]);
     });
 
     test("a song with a null author no longer breaks Copy All", () => {
         const anonymous = song({ title: "Anonymous Hymn", author: null, copyright: null });
-        const items = [songItem("Anonymous Hymn", 1), songItem("Amazing Grace", 2)];
-        expect(buildCopyrightCopyAllText(items, [anonymous, amazing])).toBe(
+        const items = [songItem(anonymous, 1), songItem(amazing, 2)];
+        expect(buildCopyrightCopyAllText(items)).toBe(
             [
                 '"Anonymous Hymn" Words and Music by Unknown.',
                 "Public Domain.",
@@ -426,33 +429,27 @@ describe("buildCopyrightCopyAllText", () => {
     });
 
     test("a song used twice in the plan gets one block per item", () => {
-        const items = [
-            songItem("Amazing Grace", 1),
-            songItem("Amazing Grace", 5),
-        ];
-        expect(buildCopyrightCopyAllText(items, [amazing])).toBe(
+        const items = [songItem(amazing, 1), songItem(amazing, 5)];
+        expect(buildCopyrightCopyAllText(items)).toBe(
             amazingBlock + "\n\n" + amazingBlock
         );
     });
 
     test("items with equal sequence keep their input order", () => {
-        const items = [
-            songItem("Holy, Holy, Holy", 1),
-            songItem("Amazing Grace", 1),
-        ];
-        expect(buildCopyrightCopyAllText(items, [amazing, holy])).toBe(
+        const items = [songItem(holy, 1), songItem(amazing, 1)];
+        expect(buildCopyrightCopyAllText(items)).toBe(
             holyBlock + "\n\n" + amazingBlock
         );
     });
 
     test("does not reorder the items passed in", () => {
         const items = [
-            songItem("Amazing Grace", 2),
-            { title: "Welcome", itemType: "header", sequence: 0 },
-            songItem("Holy, Holy, Holy", 1),
+            songItem(amazing, 2),
+            { title: "Welcome", itemType: "header", sequence: 0, song: null },
+            songItem(holy, 1),
         ];
         const before = items.map((item) => item.title);
-        buildCopyrightCopyAllText(items, [amazing, holy]);
+        buildCopyrightCopyAllText(items);
         expect(items.map((item) => item.title)).toEqual(before);
     });
 });
