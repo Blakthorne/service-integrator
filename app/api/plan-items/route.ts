@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { PlanItem, Song } from '@/lib/domain';
+import type {
+	PcoItemResource,
+	PcoListResponse,
+	PcoSongResource,
+} from '@/lib/pco/resources';
 
 /** This legacy route's items have no `songId`; the old UI joins songs by title. */
 type LegacyPlanItem = Omit<PlanItem, 'songId'>;
@@ -10,61 +15,6 @@ type LegacySong = Song & {
 	updatedAt: string;
 	planningCenterUrl: string;
 };
-
-interface ItemAttributes {
-	created_at: string;
-	custom_arrangement_sequence: string | null;
-	custom_arrangement_sequence_full: string | null;
-	custom_arrangement_sequence_short: string | null;
-	description: string | null;
-	html_details: string | null;
-	item_type: string;
-	key_name: string | null;
-	length: number;
-	sequence: number;
-	service_position: string;
-	title: string;
-	updated_at: string;
-}
-
-interface ItemData {
-	type: string;
-	id: string;
-	attributes: ItemAttributes;
-}
-
-interface SongAttributes {
-	admin: string | null;
-	author: string;
-	ccli_number: number;
-	copyright: string;
-	created_at: string;
-	hidden: boolean;
-	last_scheduled_at: string;
-	last_scheduled_short_dates: string;
-	notes: string;
-	themes: string;
-	title: string;
-	updated_at: string;
-}
-
-interface SongData {
-	type: string;
-	id: string;
-	attributes: SongAttributes;
-	links: {
-		self: string;
-	};
-}
-
-interface PlanItemsResponse {
-	data: ItemData[];
-	included: SongData[];
-	meta: {
-		total_count: number;
-		count: number;
-	};
-}
 
 export async function GET(request: Request): Promise<NextResponse> {
 	try {
@@ -109,10 +59,10 @@ export async function GET(request: Request): Promise<NextResponse> {
 			throw new Error(`Planning Center API responded with status: ${response.status}`);
 		}
 
-		const data: PlanItemsResponse = await response.json();
+		const data: PcoListResponse<PcoItemResource, PcoSongResource> = await response.json();
 		
 		// Extract and format items
-		const items: LegacyPlanItem[] = data.data.map((item: ItemData) => ({
+		const items: LegacyPlanItem[] = data.data.map((item: PcoItemResource) => ({
 			id: item.id,
 			title: item.attributes.title,
 			itemType: item.attributes.item_type,
@@ -129,7 +79,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 		const sortedItems: LegacyPlanItem[] = items.sort((a, b) => a.sequence - b.sequence);
 
 		// Extract and format included songs/items
-		const included: LegacySong[] = (data.included || []).map((song: SongData) => ({
+		const included: LegacySong[] = (data.included || []).map((song: PcoSongResource) => ({
 			id: song.id,
 			title: song.attributes.title,
 			author: song.attributes.author,

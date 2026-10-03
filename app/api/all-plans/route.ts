@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { ServiceTypeData } from "../service-types/route";
-import { PlanData } from "../plans/route";
 import { groupPlansByDate } from "@/lib/plansByDate";
 import type { PlanSummary } from "@/lib/domain";
+import type {
+    PcoPlanResource,
+    PcoServiceTypeResource,
+} from "@/lib/pco/resources";
 
 /** This legacy route's plans carry `serviceType` but no `serviceTypeId`. */
 type Plan = Omit<PlanSummary, "serviceTypeId">;
@@ -42,7 +44,7 @@ export async function GET() {
         const serviceTypes = serviceTypesData.data;
 
         // Fetch plans for each service type in parallel
-        const plansPromises = serviceTypes.map(async (serviceType: ServiceTypeData) => {
+        const plansPromises = serviceTypes.map(async (serviceType: PcoServiceTypeResource) => {
             const plansResponse = await fetch(
                 `https://api.planningcenteronline.com/services/v2/service_types/${serviceType.id}/plans?order=-sort_date&per_page=500`,
                 {
@@ -61,7 +63,7 @@ export async function GET() {
             }
 
             const plansData = await plansResponse.json();
-            return plansData.data.map((plan: PlanData) => ({
+            return plansData.data.map((plan: PcoPlanResource) => ({
                 id: plan.id,
                 dates: plan.attributes.dates,
                 shortDates: plan.attributes.short_dates,
