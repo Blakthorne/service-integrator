@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Pagination from "./ui/Pagination";
-import { formatPlanDateHeading, sortPlanDates } from "@/lib/plansByDate";
+import { formatPlanDateHeading } from "@/lib/format";
+import { sortPlanDates } from "@/lib/plansByDate";
 import type { PlanSummary } from "@/lib/domain";
 
 interface PlansTableProps {

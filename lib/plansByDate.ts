@@ -34,17 +34,3 @@ export function groupPlansByDate<T extends Pick<Plan, "sortDate">>(
 export function sortPlanDates(plansByDate: Record<string, unknown>): string[] {
     return Object.keys(plansByDate).sort((a, b) => b.localeCompare(a));
 }
-
-/**
- * Heading text for a `YYYY-MM-DD` plan date, e.g. "2025-06-15" becomes
- * "Sunday, June 15, 2025". The date is parsed and formatted in the runtime's
- * local time zone, so it shows the same calendar day everywhere.
- */
-export function formatPlanDateHeading(date: string): string {
-    return new Date(date + "T00:00:00").toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-    });
-}

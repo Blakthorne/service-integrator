@@ -1,5 +1,4 @@
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
-import { formatPlanDateHeading as legacyFormatPlanDateHeading } from "./plansByDate";
 import {
     formatPlanDateHeading,
     formatShortDate,
@@ -16,32 +15,59 @@ function daysBetween(start: string, end: string): string[] {
     return days;
 }
 
-// Month and year boundaries, leap days (and a century that is not a leap
-// year), and days where a clock changed somewhere in the world.
-const BOUNDARY_DATES = [
-    "1999-12-31",
-    "2000-01-01",
-    "2000-02-29",
-    "2018-11-04", // Brazil's DST began at midnight, so local 00:00 did not exist
-    "2023-12-31",
-    "2024-01-01",
-    "2024-02-28",
-    "2024-02-29",
-    "2024-03-01",
-    "2024-12-31",
-    "2025-01-01",
-    "2025-02-28",
-    "2025-03-01",
-    "2025-03-09", // US clocks forward
-    "2025-03-30", // EU clocks forward
-    "2025-09-28", // Chatham clocks forward
-    "2025-10-26", // EU clocks back
-    "2025-11-02", // US clocks back
-    "2025-12-31",
-    "2026-01-01",
-    "2100-02-28",
-    "2100-03-01",
-    "9999-12-31",
+// Fixed texts for dates that stress the formatting: the start and end of every
+// month of a leap year, year boundaries, a century that is not a leap year, the
+// lowest and highest years accepted, and days a clock changed somewhere in the
+// world. They were written out with Python's datetime, not computed by the code
+// under test, and every time zone below must reproduce them exactly.
+// [YYYY-MM-DD, formatPlanDateHeading(...), formatShortDate(...)]
+const FIXED_DATES: [ymd: string, heading: string, short: string][] = [
+    ["1000-01-01", "Wednesday, January 1, 1000", "1/1/00"], // lowest year accepted
+    ["1999-12-31", "Friday, December 31, 1999", "12/31/99"],
+    ["2000-01-01", "Saturday, January 1, 2000", "1/1/00"],
+    ["2000-02-29", "Tuesday, February 29, 2000", "2/29/00"],
+    ["2018-11-04", "Sunday, November 4, 2018", "11/4/18"], // Brazil's DST began at midnight, so local 00:00 did not exist
+    ["2023-12-31", "Sunday, December 31, 2023", "12/31/23"],
+    ["2024-01-01", "Monday, January 1, 2024", "1/1/24"],
+    ["2024-01-31", "Wednesday, January 31, 2024", "1/31/24"],
+    ["2024-02-01", "Thursday, February 1, 2024", "2/1/24"],
+    ["2024-02-29", "Thursday, February 29, 2024", "2/29/24"],
+    ["2024-03-01", "Friday, March 1, 2024", "3/1/24"],
+    ["2024-03-31", "Sunday, March 31, 2024", "3/31/24"],
+    ["2024-04-01", "Monday, April 1, 2024", "4/1/24"],
+    ["2024-04-30", "Tuesday, April 30, 2024", "4/30/24"],
+    ["2024-05-01", "Wednesday, May 1, 2024", "5/1/24"],
+    ["2024-05-31", "Friday, May 31, 2024", "5/31/24"],
+    ["2024-06-01", "Saturday, June 1, 2024", "6/1/24"],
+    ["2024-06-30", "Sunday, June 30, 2024", "6/30/24"],
+    ["2024-07-01", "Monday, July 1, 2024", "7/1/24"],
+    ["2024-07-31", "Wednesday, July 31, 2024", "7/31/24"],
+    ["2024-08-01", "Thursday, August 1, 2024", "8/1/24"],
+    ["2024-08-31", "Saturday, August 31, 2024", "8/31/24"],
+    ["2024-09-01", "Sunday, September 1, 2024", "9/1/24"],
+    ["2024-09-30", "Monday, September 30, 2024", "9/30/24"],
+    ["2024-10-01", "Tuesday, October 1, 2024", "10/1/24"],
+    ["2024-10-31", "Thursday, October 31, 2024", "10/31/24"],
+    ["2024-11-01", "Friday, November 1, 2024", "11/1/24"],
+    ["2024-11-30", "Saturday, November 30, 2024", "11/30/24"],
+    ["2024-12-01", "Sunday, December 1, 2024", "12/1/24"],
+    ["2024-12-31", "Tuesday, December 31, 2024", "12/31/24"],
+    ["2025-01-01", "Wednesday, January 1, 2025", "1/1/25"],
+    ["2025-02-28", "Friday, February 28, 2025", "2/28/25"],
+    ["2025-03-01", "Saturday, March 1, 2025", "3/1/25"],
+    ["2025-03-09", "Sunday, March 9, 2025", "3/9/25"], // US clocks forward
+    ["2025-03-30", "Sunday, March 30, 2025", "3/30/25"], // EU clocks forward
+    ["2025-06-15", "Sunday, June 15, 2025", "6/15/25"],
+    ["2025-09-28", "Sunday, September 28, 2025", "9/28/25"], // Chatham clocks forward
+    ["2025-10-26", "Sunday, October 26, 2025", "10/26/25"], // EU clocks back
+    ["2025-11-02", "Sunday, November 2, 2025", "11/2/25"], // US clocks back
+    ["2025-12-31", "Wednesday, December 31, 2025", "12/31/25"],
+    ["2026-01-01", "Thursday, January 1, 2026", "1/1/26"],
+    ["2026-10-04", "Sunday, October 4, 2026", "10/4/26"],
+    ["2026-12-31", "Thursday, December 31, 2026", "12/31/26"],
+    ["2100-02-28", "Sunday, February 28, 2100", "2/28/00"],
+    ["2100-03-01", "Monday, March 1, 2100", "3/1/00"],
+    ["9999-12-31", "Friday, December 31, 9999", "12/31/99"], // highest 4-digit year
 ];
 
 // Three years, every day, so every month boundary, weekday and DST change is hit.
@@ -203,12 +229,13 @@ describe.each(ZONES)("in the %s time zone", (zone, utcOffsetMinutes) => {
         setTimeZone(zone, utcOffsetMinutes);
     });
 
-    // plansByDate.ts still has its own formatPlanDateHeading, which parses and
-    // formats in local time. Drop this block when that copy is removed.
-    test("formatPlanDateHeading gives the same text as the one in plansByDate", () => {
-        const mismatches = [...BOUNDARY_DATES, ...SWEEP_DATES].filter(
-            (ymd) => formatPlanDateHeading(ymd) !== legacyFormatPlanDateHeading(ymd)
-        );
+    test("formatPlanDateHeading and formatShortDate give the fixed texts", () => {
+        const mismatches = FIXED_DATES.flatMap(([ymd, heading, short]) => {
+            const got = [formatPlanDateHeading(ymd), formatShortDate(ymd)];
+            return got[0] === heading && got[1] === short
+                ? []
+                : [{ ymd, got, expected: [heading, short] }];
+        });
         expect(mismatches).toEqual([]);
     });
 
@@ -219,9 +246,10 @@ describe.each(ZONES)("in the %s time zone", (zone, utcOffsetMinutes) => {
                 day: "numeric",
                 year: "2-digit",
             });
-        const mismatches = [...BOUNDARY_DATES, ...SWEEP_DATES].filter(
-            (ymd) => formatShortDate(ymd) !== localShortDate(ymd)
-        );
+        const mismatches = [
+            ...FIXED_DATES.map(([ymd]) => ymd),
+            ...SWEEP_DATES,
+        ].filter((ymd) => formatShortDate(ymd) !== localShortDate(ymd));
         expect(mismatches).toEqual([]);
     });
 

@@ -1,12 +1,9 @@
 import { describe, expect, test } from "vitest";
-import {
-    formatPlanDateHeading,
-    groupPlansByDate,
-    sortPlanDates,
-} from "./plansByDate";
+import { groupPlansByDate, sortPlanDates } from "./plansByDate";
 
 // Characterization tests: they pin how /api/all-plans orders and groups plans
-// and how PlansTable orders and formats its date headings today.
+// and how PlansTable orders its date headings. (The heading text itself is
+// lib/format's formatPlanDateHeading, tested in format.test.ts.)
 
 interface TestPlan {
     id: string;
@@ -163,25 +160,5 @@ describe("sortPlanDates", () => {
         ]);
 
         expect(sortPlanDates(grouped)).toEqual(Object.keys(grouped));
-    });
-});
-
-describe("formatPlanDateHeading", () => {
-    test("formats a date as weekday, month day, year", () => {
-        expect(formatPlanDateHeading("2025-06-15")).toBe(
-            "Sunday, June 15, 2025"
-        );
-    });
-
-    test("uses the calendar date it was given, at the start and end of a month or year", () => {
-        expect(formatPlanDateHeading("2026-10-04")).toBe(
-            "Sunday, October 4, 2026"
-        );
-        expect(formatPlanDateHeading("2025-12-31")).toBe(
-            "Wednesday, December 31, 2025"
-        );
-        expect(formatPlanDateHeading("2024-02-29")).toBe(
-            "Thursday, February 29, 2024"
-        );
     });
 });
