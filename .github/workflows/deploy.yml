@@ -201,12 +201,13 @@ jobs:
                   AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
                   ALLOWED_EMAIL_1: ${{ secrets.ALLOWED_EMAIL_1 }}
                   ALLOWED_EMAIL_2: ${{ secrets.ALLOWED_EMAIL_2 }}
+                  ALLOWED_EMAIL_3: ${{ secrets.ALLOWED_EMAIL_3 }}
                   PLANNING_CENTER_ID: ${{ secrets.PLANNING_CENTER_ID }}
                   PLANNING_CENTER_TOKEN: ${{ secrets.PLANNING_CENTER_TOKEN }}
               run: |
-                  printf 'AUTH_SECRET=%s\nAUTH_URL=%s\nAUTH_GOOGLE_ID=%s\nAUTH_GOOGLE_SECRET=%s\nALLOWED_EMAIL_1=%s\nALLOWED_EMAIL_2=%s\nPLANNING_CENTER_ID=%s\nPLANNING_CENTER_TOKEN=%s\n' \
+                  printf 'AUTH_SECRET=%s\nAUTH_URL=%s\nAUTH_GOOGLE_ID=%s\nAUTH_GOOGLE_SECRET=%s\nALLOWED_EMAIL_1=%s\nALLOWED_EMAIL_2=%s\nALLOWED_EMAIL_3=%s\nPLANNING_CENTER_ID=%s\nPLANNING_CENTER_TOKEN=%s\n' \
                     "$AUTH_SECRET" "$AUTH_URL" "$AUTH_GOOGLE_ID" "$AUTH_GOOGLE_SECRET" \
-                    "$ALLOWED_EMAIL_1" "$ALLOWED_EMAIL_2" \
+                    "$ALLOWED_EMAIL_1" "$ALLOWED_EMAIL_2" "$ALLOWED_EMAIL_3" \
                     "$PLANNING_CENTER_ID" "$PLANNING_CENTER_TOKEN" \
                   | ssh -F ~/.ssh/config-ci \
                       -p "$DEPLOY_PORT" \
