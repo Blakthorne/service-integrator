@@ -388,6 +388,7 @@ Deviations from the plan, and things found while building it, by phase.
 - The Refresh pending state is plain `useState`, not `useTransition`: a transition held open across the server action stalled every navigation until the action returned.
 - The cache lives on `globalThis`. A client-imported server action is compiled in Next's "action-browser" layer, so the module-level cache was really two caches: Refresh updated one, and the page kept serving the other for up to an hour.
 - A failed refresh keeps the cached data (`TtlCache.refresh` replaces the stored value only when the load succeeds), so page loads still work while Planning Center is down.
+- A failed Refresh now keeps the table and shows an inline alert next to the controls (a visible behavior change). On `main`, an error screen replaced the whole view.
 
 **Phase 6 cleanup**
 - Deleted `HymnVersionSelector.tsx` (no commit ever imported it) and dropped `HymnVersion.selected` (only `matchHymns` set it, and only tests read it).
