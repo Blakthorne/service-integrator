@@ -5,7 +5,7 @@ import { routes } from "@/lib/routes";
 // so there is no navigation bar: this page brings its own full-screen frame.
 export default function NotFound() {
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-2 sm:px-6">
+        <main className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-2 sm:px-6">
             <div className="max-w-md w-full space-y-8">
                 <div>
                     <h1 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
@@ -25,6 +25,6 @@ export default function NotFound() {
                     </Link>
                 </div>
             </div>
-        </div>
+        </main>
     );
 }
