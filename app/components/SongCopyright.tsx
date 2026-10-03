@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatCopyrightText } from "@/lib/copyright";
 
 interface SongCopyrightProps {
     title: string;
@@ -9,62 +10,6 @@ interface SongCopyrightProps {
     admin?: string | null;
     showContainer?: boolean;
     showCopyButton?: boolean;
-}
-
-export function formatCopyrightText(song: {
-    title: string;
-    author: string;
-    copyright: string;
-    admin?: string | null;
-}): string {
-    // First split by comma to check if there are three authors
-    const commaAuthors = song.author.split(",").map((a) => a.trim());
-    let authorLine: string;
-
-    if (commaAuthors.length >= 3) {
-        // If there are three or more authors separated by commas
-        const wordsAuthors = commaAuthors.slice(0, 2).join(" and ");
-        const musicAuthor = commaAuthors[2];
-        authorLine = `Words by ${wordsAuthors}. Music by ${musicAuthor}`;
-    } else {
-        // If not three authors, split by "and"
-        const authors = song.author.split(" and ").map((a) => a.trim());
-        if (authors.length === 1) {
-            // Single author case
-            authorLine = `Words and Music by ${authors[0] || "Unknown"}`;
-        } else {
-            // Two authors case
-            const wordsAuthor = authors[0] || "Unknown";
-            const musicAuthor = authors[1] || wordsAuthor;
-            authorLine = `Words by ${wordsAuthor}. Music by ${musicAuthor}`;
-        }
-    }
-
-    // Format copyright line with conditional © symbol
-    let copyrightLine = song.copyright && song.copyright.trim();
-
-    if (copyrightLine == null || copyrightLine === undefined) {
-        copyrightLine = "Public Domain.";
-    } else {
-        if (!copyrightLine.endsWith(".")) {
-            copyrightLine += ".";
-        }
-
-        if (copyrightLine.toLowerCase() !== "public domain.") {
-            copyrightLine = `© ${copyrightLine}`;
-        }
-
-        // Add admin information if available
-        if (song.admin && song.admin.trim()) {
-            copyrightLine += ` Admin. by ${song.admin}`;
-        }
-
-        if (!copyrightLine.endsWith(".")) {
-            copyrightLine += ".";
-        }
-    }
-
-    return `"${song.title}" ${authorLine}.\n${copyrightLine}\nUsed by permission. CCLI Streaming License 1564484.`;
 }
 
 export default function SongCopyright({

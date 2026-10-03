@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import SongCopyright, { formatCopyrightText } from "./SongCopyright";
+import SongCopyright from "./SongCopyright";
+import { formatCopyrightText } from "@/lib/copyright";
 
 export interface SongDetailsType {
     id: string;

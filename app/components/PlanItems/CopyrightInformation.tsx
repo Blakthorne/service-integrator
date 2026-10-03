@@ -4,7 +4,11 @@ import { useState } from "react";
 import CopyButton from "./CopyButton";
 import { PlanItem } from "./PlanItems";
 import { SongDetailsType } from "../SongDetails";
-import SongCopyright, { formatCopyrightText } from "../SongCopyright";
+import SongCopyright from "../SongCopyright";
+import {
+    buildCopyrightCopyAllText,
+    getItemCopyrightInfo,
+} from "@/lib/copyright";
 
 export default function CopyrightInformation({
     items,
@@ -15,30 +19,6 @@ export default function CopyrightInformation({
 }): React.ReactNode {
     const [showCopyTooltip, setShowCopyTooltip] = useState<boolean>(false);
 
-    // Helper function to get copyright info for an item
-    const getItemCopyrightInfo = (
-        item: PlanItem
-    ): {
-        title: string;
-        author: string;
-        copyright: string;
-        admin: string | null;
-    } | null => {
-        if (item.itemType === "song") {
-            const song = includedSongs.find(
-                (song) => song.title === item.title
-            );
-            if (!song) return null;
-            return {
-                title: song.title,
-                author: song.author,
-                copyright: song.copyright,
-                admin: song.admin,
-            };
-        }
-        return null;
-    };
-
     return (
         <div>
             <div className="flex items-center justify-between mb-6">
@@ -47,15 +27,7 @@ export default function CopyrightInformation({
                 </h3>
                 <div className="flex items-center gap-4">
                     <CopyButton
-                        text={items
-                            .filter((item) => item.itemType === "song")
-                            .sort((a, b) => a.sequence - b.sequence)
-                            .map((item) => {
-                                const info = getItemCopyrightInfo(item);
-                                return info ? formatCopyrightText(info) : null;
-                            })
-                            .filter((info): info is string => info !== null)
-                            .join("\n\n")}
+                        text={buildCopyrightCopyAllText(items, includedSongs)}
                         showTooltip={showCopyTooltip}
                         setShowTooltip={setShowCopyTooltip}
                     />
@@ -66,7 +38,10 @@ export default function CopyrightInformation({
                     .filter((item) => item.itemType === "song")
                     .sort((a, b) => a.sequence - b.sequence)
                     .map((item) => {
-                        const songInfo = getItemCopyrightInfo(item);
+                        const songInfo = getItemCopyrightInfo(
+                            item,
+                            includedSongs
+                        );
                         if (!songInfo) return null;
 
                         return (
