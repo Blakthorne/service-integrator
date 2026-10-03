@@ -7,8 +7,14 @@ export default auth((req) => {
         return NextResponse.next()
     }
  
-    // Not logged in users are redirected to the login page
-    return NextResponse.redirect(new URL("/auth/signin", req.url))
+    // Not logged in users are redirected to the login page, which sends them
+    // back to the page they asked for once they have signed in
+    const signInUrl = new URL("/auth/signin", req.url)
+    signInUrl.searchParams.set(
+        "callbackUrl",
+        req.nextUrl.pathname + req.nextUrl.search
+    )
+    return NextResponse.redirect(signInUrl)
 })
  
 // Configure paths that require authentication
