@@ -1,86 +1,47 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
-import Pagination from "./ui/Pagination";
+import Pagination from "../ui/Pagination";
+import { useUrlState } from "@/app/hooks/useUrlState";
 import { formatPlanDateHeading } from "@/lib/format";
-import { sortPlanDates } from "@/lib/plansByDate";
 import { routes } from "@/lib/routes";
+import { parsePage } from "@/lib/urlState";
 import type { PlanSummary } from "@/lib/domain";
 
+/** How many dates each page of the list shows. */
+const DATES_PER_PAGE = 25;
+
+interface PlansListProps {
+    /** The dates (`YYYY-MM-DD`) that have plans, newest first. */
+    dates: string[];
+    /** The plans on each date, in service-type order. */
+    plansByDate: Record<string, PlanSummary[]>;
+}
+
 /**
- * Every plan, grouped by date, 25 dates a page. Each row links to the plan's
- * page: the service type is a real link stretched over the row.
+ * Every plan, grouped by date, 25 dates a page. The server loads the plans;
+ * this only pages through them. The page number lives in `?page=` (page 1
+ * has none), changed without a server round trip, and each page change adds a
+ * history entry, so Back returns to the previous page. Each row links to the
+ * plan's page: the service type is a real link stretched over the row.
  */
-export default function PlansTable(): React.ReactElement {
-    // /api/all-plans omits `serviceTypeId` and sends the API URL as
-    // `planningCenterUrl`; this view reads neither.
-    const [plansByDate, setPlansByDate] = useState<{
-        [key: string]: PlanSummary[];
-    }>({});
-    const [loading, setLoading] = useState<boolean>(true);
-    const [error, setError] = useState<string | null>(null);
-    const [currentPage, setCurrentPage] = useState<number>(1);
-    const itemsPerPage = 25; // Fixed number of items per page for consistent UX
+export default function PlansList({
+    dates,
+    plansByDate,
+}: PlansListProps): React.ReactElement {
+    const { searchParams, setSearchParams } = useUrlState();
 
-    useEffect(() => {
-        const fetchPlans = async (): Promise<void> => {
-            try {
-                setLoading(true);
-                const baseUrl =
-                    process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-                const response = await fetch(`${baseUrl}/api/all-plans`);
+    const totalPages = Math.ceil(dates.length / DATES_PER_PAGE);
+    const currentPage = parsePage(searchParams.get("page"), totalPages);
 
-                if (!response.ok) {
-                    throw new Error(
-                        `Failed to fetch plans: ${response.status}`
-                    );
-                }
-
-                const data = await response.json();
-                setPlansByDate(data.plansByDate);
-                setCurrentPage(1);
-            } catch (err: unknown) {
-                setError("Failed to fetch plans");
-                console.error("Error fetching plans:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchPlans();
-    }, []);
-
-    const dates = sortPlanDates(plansByDate);
-    const totalDates = dates.length;
-    const totalPages = Math.ceil(totalDates / itemsPerPage);
-
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
+    const startIndex = (currentPage - 1) * DATES_PER_PAGE;
+    const endIndex = startIndex + DATES_PER_PAGE;
     const currentDates = dates.slice(startIndex, endIndex);
 
-    if (loading) {
-        return (
-            <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p className="text-gray-600 dark:text-gray-300">
-                    Loading plans...
-                </p>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="text-center py-12">
-                <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
-                <button
-                    onClick={() => window.location.reload()}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                    Try Again
-                </button>
-            </div>
+    function handlePageChange(page: number) {
+        setSearchParams(
+            { page: page === 1 ? null : String(page) },
+            { history: "push" }
         );
     }
 
@@ -91,7 +52,7 @@ export default function PlansTable(): React.ReactElement {
                     <Pagination
                         currentPage={currentPage}
                         totalPages={totalPages}
-                        onPageChange={setCurrentPage}
+                        onPageChange={handlePageChange}
                     />
                 </div>
             )}
@@ -158,7 +119,7 @@ export default function PlansTable(): React.ReactElement {
                     <Pagination
                         currentPage={currentPage}
                         totalPages={totalPages}
-                        onPageChange={setCurrentPage}
+                        onPageChange={handlePageChange}
                     />
                 </div>
             )}
