@@ -1,18 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import Pagination from "./ui/Pagination";
 import { formatPlanDateHeading } from "@/lib/format";
 import { sortPlanDates } from "@/lib/plansByDate";
+import { routes } from "@/lib/routes";
 import type { PlanSummary } from "@/lib/domain";
 
-interface PlansTableProps {
-    onPlanSelect: (plan: PlanSummary, serviceTypeId: string) => void;
-}
-
-export default function PlansTable({
-    onPlanSelect,
-}: PlansTableProps): React.ReactElement {
+/**
+ * Every plan, grouped by date, 25 dates a page. Each row links to the plan's
+ * page: the service type is a real link stretched over the row.
+ */
+export default function PlansTable(): React.ReactElement {
     // /api/all-plans omits `serviceTypeId` and sends the API URL as
     // `planningCenterUrl`; this view reads neither.
     const [plansByDate, setPlansByDate] = useState<{
@@ -120,18 +120,27 @@ export default function PlansTable({
                             </thead>
                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                 {plansByDate[date].map((plan: PlanSummary) => (
+                                    // `relative` makes the row the box the
+                                    // link's overlay fills; `transform-gpu`
+                                    // does the same in Safari, which ignored
+                                    // `relative` on table rows until 2026
+                                    // (WebKit bug 240961).
                                     <tr
                                         key={plan.id}
-                                        onClick={() =>
-                                            onPlanSelect(
-                                                plan,
-                                                plan.serviceType.id
-                                            )
-                                        }
-                                        className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                                        className="relative transform-gpu hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                                     >
                                         <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {plan.serviceType.name}
+                                            {/* No prefetch: a page of rows would each load a plan from PCO. */}
+                                            <Link
+                                                prefetch={false}
+                                                href={routes.plan(
+                                                    plan.serviceType.id,
+                                                    plan.id
+                                                )}
+                                                className="after:absolute after:inset-0"
+                                            >
+                                                {plan.serviceType.name}
+                                            </Link>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                             {plan.itemsCount} items
