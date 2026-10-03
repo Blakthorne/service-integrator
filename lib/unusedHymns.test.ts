@@ -112,12 +112,12 @@ describe("computeUnusedHymns", () => {
 
     test("titles that differ only by curly vs straight quotes are the same song (used, not near-match)", () => {
         const hymns: RawHymn[] = [
-            rejoice("In Jordan’s Stream", "BRIDGEWATER", 1),
+            rejoice("In Jordan\u2019s Stream", "BRIDGEWATER", 1),
             rejoice("Jesus' Name", "X", 2),
         ];
         const songs: PcoSong[] = [
             { title: "In Jordan's Stream", lastScheduledAt: AT },
-            { title: "Jesus’ Name", lastScheduledAt: AT },
+            { title: "Jesus\u2019 Name", lastScheduledAt: AT },
         ];
         const result = computeUnusedHymns(hymns, songs, AT);
         expect(result.unused).toEqual([]);
