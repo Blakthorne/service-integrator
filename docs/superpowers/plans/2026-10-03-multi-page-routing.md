@@ -382,6 +382,7 @@ Deviations from the plan, and things found while building it, by phase.
 **Phase 4**
 - Added `(overview)/error.tsx`. With `[planId]/error.tsx` alone, a failing tab replaced the whole plan page, header and items table included. Now the header, items table and tab nav stay, and `[planId]/error.tsx` keeps only errors in that layout and in item pages.
 - The middleware matcher exempts only `auth/` and `api/auth/` as whole path segments. It used to exempt every path that merely started with those letters, such as `/authors`.
+- `safeCallbackUrl` refuses only the `/auth` segment itself (`/auth`, `/auth/…`, `/auth?…`, `/auth#…`, any case), the same boundary. It used to refuse anything that merely started with `/auth`, so a signed-out visit to a protected `/authors` lost its deep link. A test reads the matcher from `middleware.ts` and checks the two agree.
 
 **Phase 5 Unused Hymns**
 - The Refresh pending state is plain `useState`, not `useTransition`: a transition held open across the server action stalled every navigation until the action returned.

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { describe, expect, test } from "vitest";
@@ -31,6 +32,27 @@ function callbackUrlAfterMiddleware(pathAndQuery: string): string | null {
     );
 }
 
+/**
+ * The matcher in middleware.ts as a regex: it matches the paths the middleware
+ * protects. The file is read as text because Next needs `config.matcher` to be
+ * a literal, so it cannot come from a shared module, and importing the
+ * middleware would pull in next-auth.
+ */
+function middlewareMatcher(): RegExp {
+    const source = readFileSync(
+        new URL("../middleware.ts", import.meta.url),
+        "utf8"
+    )
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+    const literal = /matcher:\s*\[\s*"((?:[^"\\]|\\.)*)"\s*\]/.exec(source);
+    if (literal === null) {
+        throw new Error("could not find the matcher string in middleware.ts");
+    }
+    const pattern = JSON.parse(`"${literal[1]}"`) as string;
+    return new RegExp(`^${pattern}$`, "i");
+}
+
 describe("safeCallbackUrl", () => {
     describe("accepts site-relative paths", () => {
         const accepted = [
@@ -41,6 +63,12 @@ describe("safeCallbackUrl", () => {
             "/plans/1405391/98765/items/4321",
             "/unused-hymns?book=great",
             "/unused-hymns?book=rejoice&sort=number&page=2",
+            "/authors",
+            "/authorize?x=1",
+            "/Authors/1",
+            "/author/1",
+            "/auth-callback",
+            "/authx/y",
             "/plans#section",
             "/plans?q=a%20b&r=%2F%2Fevil.com",
             "/plans/a%20b",
@@ -93,6 +121,10 @@ describe("safeCallbackUrl", () => {
             ["/plans/%E6%97%A5", "/plans/%E6%97%A5"],
             ["/plans/a%2Fb?q=%26", "/plans/a%2Fb?q=%26"],
             ["/plans/\\evil", "/plans//evil"],
+            // Protected pages whose names merely start with "auth".
+            ["/authors", "/authors"],
+            ["/authorize?x=1", "/authorize?x=1"],
+            ["/authors/1?q=a b", "/authors/1?q=a%20b"],
         ])("a request for %j gives %j", (pathAndQuery, expected) => {
             const callbackUrl = callbackUrlAfterMiddleware(pathAndQuery);
             expect(callbackUrl).toBe(expected);
@@ -102,6 +134,18 @@ describe("safeCallbackUrl", () => {
         test("a request that would be another host is refused", () => {
             expect(callbackUrlAfterMiddleware("//evil.com/x")).toBeNull();
             expect(callbackUrlAfterMiddleware("/\\evil.com")).toBeNull();
+        });
+
+        test("the auth pages are refused: the middleware leaves them public, so they would loop", () => {
+            for (const path of [
+                "/auth",
+                "/auth/signin",
+                "/AUTH/x",
+                "/auth?x=1",
+                "/auth/error?error=AccessDenied",
+            ]) {
+                expect(callbackUrlAfterMiddleware(path)).toBeNull();
+            }
         });
     });
 
@@ -135,20 +179,77 @@ describe("safeCallbackUrl", () => {
     describe("rejects the auth pages, which would loop", () => {
         test.each([
             "/auth",
+            "/auth/",
             "/auth/signin",
             "/auth/signin?callbackUrl=%2Fplans",
             "/auth/error",
+            "/auth/x/y?z=1",
             "/auth?x=1",
+            "/auth#x",
+            "/AUTH",
             "/AUTH/signin",
             "/Auth/signin",
-            "/authors",
+            "/Auth?x",
         ])("rejects %j", (value) => {
             expect(safeCallbackUrl(value)).toBeNull();
         });
 
-        test("allows a path that only contains auth", () => {
+        test("allows a path that only contains auth, or only starts with those letters", () => {
             expect(safeCallbackUrl("/plans/auth")).toBe("/plans/auth");
             expect(safeCallbackUrl("/plans?next=/auth")).toBe("/plans?next=/auth");
+            // These are ordinary pages the middleware protects, so a signed-out
+            // visitor to one of them is sent to sign-in with it as callbackUrl.
+            expect(safeCallbackUrl("/authors")).toBe("/authors");
+            expect(safeCallbackUrl("/authorize?x=1")).toBe("/authorize?x=1");
+            expect(safeCallbackUrl("/auth-callback")).toBe("/auth-callback");
+            expect(safeCallbackUrl("/authx/y")).toBe("/authx/y");
+        });
+    });
+
+    describe("agrees with the middleware matcher", () => {
+        // The middleware sends a signed-out visitor to sign-in with the path as
+        // callbackUrl, except for the paths its matcher leaves public. A
+        // callbackUrl is therefore refused exactly when the matcher leaves the
+        // path public and it is one of the auth pages (accepting one would loop
+        // a signed-in visitor back to sign-in), and accepted for the rest.
+        // /api/auth/..., /_next/... and favicon.ico are public too, but nobody
+        // is sent back to them, so they are not covered here.
+        const protectedByMiddleware = middlewareMatcher();
+        const pathnameOf = (path: string): string => path.split(/[?#]/)[0];
+
+        test("the matcher was read correctly", () => {
+            expect(protectedByMiddleware.test("/")).toBe(true);
+            expect(protectedByMiddleware.test("/plans")).toBe(true);
+            expect(protectedByMiddleware.test("/authors")).toBe(true);
+            expect(protectedByMiddleware.test("/auth")).toBe(false);
+            expect(protectedByMiddleware.test("/auth/signin")).toBe(false);
+            expect(protectedByMiddleware.test("/api/auth/session")).toBe(false);
+        });
+
+        test.each([
+            "/auth",
+            "/auth/",
+            "/auth/signin",
+            "/auth/error?error=AccessDenied",
+            "/auth?x=1",
+            "/auth#x",
+            "/AUTH/x",
+            "/Auth",
+            "/authors",
+            "/authorize",
+            "/authorize?x=1",
+            "/author/1",
+            "/auth-callback",
+            "/authx/y",
+            "/Authors/1",
+            "/plans",
+            "/plans/auth",
+            "/unused-hymns?book=great",
+            "/",
+        ])("%j is accepted exactly when the middleware protects it", (path) => {
+            expect(safeCallbackUrl(path) !== null).toBe(
+                protectedByMiddleware.test(pathnameOf(path))
+            );
         });
     });
 
