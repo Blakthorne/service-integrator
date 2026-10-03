@@ -34,6 +34,9 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
+            - name: Run unit tests
+              run: npm test
+
             - name: Build app
               # Only NEXT_PUBLIC_* vars are needed at build time.
               env:
