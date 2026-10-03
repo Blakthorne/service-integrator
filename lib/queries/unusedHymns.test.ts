@@ -12,10 +12,19 @@ const sampleSongs: PcoSong[] = [
     { title: "Amazing Grace", lastScheduledAt: "2025-01-01T00:00:00Z" },
 ];
 
-/** A fresh copy of the module, so each test starts with an empty cache. */
-async function loadQueries() {
+// Where the module keeps its cache: see sharedCache in unusedHymns.ts.
+const CACHE_GLOBAL = "__unusedHymnsCache";
+
+/** Another copy of the module, which shares whatever cache is already in place. */
+async function loadAnotherCopy() {
     vi.resetModules();
     return import("./unusedHymns");
+}
+
+/** A fresh copy of the module with an empty cache, so each test starts clean. */
+async function loadQueries() {
+    delete (globalThis as unknown as Record<string, unknown>)[CACHE_GLOBAL];
+    return loadAnotherCopy();
 }
 
 beforeEach(() => {
@@ -114,6 +123,28 @@ describe("getUnusedHymns", () => {
         );
         expect(refreshed.meta.computedAt).toBe("2026-10-03T12:00:01.000Z");
         expect(later).toBe(refreshed);
+        expect(fetchAllSongs).toHaveBeenCalledTimes(2);
+    });
+
+    test("copies of the module share one cache, as the page and the refresh action do", async () => {
+        // Next compiles a server action that a client component imports in its
+        // own module layer, so the page and the action each load this module.
+        const page = await loadQueries();
+        const action = await loadAnotherCopy();
+        expect(action).not.toBe(page);
+
+        const first = await page.getUnusedHymns();
+        await expect(action.getUnusedHymns()).resolves.toBe(first);
+        expect(fetchAllSongs).toHaveBeenCalledTimes(1);
+
+        // What the action refreshes is what the page then serves.
+        fetchAllSongs.mockResolvedValue([
+            { title: "Amazing Grace", lastScheduledAt: null },
+        ]);
+        vi.setSystemTime(Date.now() + 1000);
+        const refreshed = await action.getUnusedHymns({ refresh: true });
+        expect(refreshed).not.toBe(first);
+        await expect(page.getUnusedHymns()).resolves.toBe(refreshed);
         expect(fetchAllSongs).toHaveBeenCalledTimes(2);
     });
 
