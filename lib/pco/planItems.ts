@@ -1,14 +1,10 @@
 import "server-only";
 import { cache } from "react";
 import type { PlanItemWithSong } from "../domain";
-import { pcoFetch } from "./client";
+import { pcoFetchAll } from "./client";
 import { assertPcoId } from "./ids";
 import { joinItemsToSongs, toPlanItem } from "./mappers";
-import type {
-    PcoItemResource,
-    PcoListResponse,
-    PcoResourceIdentifier,
-} from "./resources";
+import type { PcoItemResource } from "./resources";
 
 /** What getPlanItems returns. */
 export interface PlanItems {
@@ -19,22 +15,23 @@ export interface PlanItems {
 }
 
 /**
- * A plan's items with their songs (`include=song`), sorted by sequence.
- * Throws InvalidPcoIdError or PcoError (404 if the plan is missing).
+ * All of a plan's items with their songs (`include=song`), sorted by
+ * sequence. Pages 100 at a time through links.next, so long plans are not cut
+ * off at PCO's default page size of 25. Throws InvalidPcoIdError or PcoError
+ * (404 if the plan is missing).
  */
 export const getPlanItems = cache(
     async (serviceTypeId: string, planId: string): Promise<PlanItems> => {
         const st = assertPcoId(serviceTypeId);
         const id = assertPcoId(planId);
-        const page = await pcoFetch<
-            PcoListResponse<PcoItemResource, PcoResourceIdentifier>
-        >(`/service_types/${st}/plans/${id}/items?include=song`, "planItems");
-        const items = page.data
+        const { data, included, totalCount } =
+            await pcoFetchAll<PcoItemResource>(
+                `/service_types/${st}/plans/${id}/items?include=song&per_page=100`,
+                "planItems"
+            );
+        const items = data
             .map(toPlanItem)
             .sort((a, b) => a.sequence - b.sequence);
-        return {
-            items: joinItemsToSongs(items, page.included ?? []),
-            totalCount: page.meta.total_count,
-        };
+        return { items: joinItemsToSongs(items, included), totalCount };
     }
 );
