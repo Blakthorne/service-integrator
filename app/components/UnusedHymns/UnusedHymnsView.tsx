@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { Route } from "next";
+import { useState, useTransition } from "react";
 import { refreshUnusedHymns } from "@/app/(app)/unused-hymns/actions";
+import { useUrlState } from "@/app/hooks/useUrlState";
 import type { HymnEntry, ReviewEntry, UnusedHymnsResult } from "@/lib/unusedHymns";
+import { parseEnum, parsePage } from "@/lib/urlState";
 import UnusedHymnsControls, {
     type BookFilter,
     type SortKey,
@@ -13,13 +13,8 @@ import UnusedHymnsTable from "./UnusedHymnsTable";
 
 const ITEMS_PER_PAGE = 25;
 
-function parseBook(value: string | null): BookFilter {
-    return value === "rejoice" || value === "great" ? value : "all";
-}
-
-function parseSort(value: string | null): SortKey {
-    return value === "number" ? "number" : "title";
-}
+const BOOK_FILTERS: readonly BookFilter[] = ["all", "rejoice", "great"];
+const SORT_KEYS: readonly SortKey[] = ["title", "number"];
 
 function inBook<T extends HymnEntry>(entry: T, book: BookFilter): boolean {
     if (book === "rejoice") return entry.rejoiceNumber !== null;
@@ -80,24 +75,41 @@ interface UnusedHymnsViewProps {
 
 /**
  * The controls and table of the unused hymns page. Filtering, sorting and
- * paging happen here, in the browser, on the result the server loaded.
+ * paging happen here, in the browser, on the result the server loaded. The
+ * hymnbook (`?book=`), sort order (`?sort=`) and page (`?page=`) live in the
+ * URL, so a view can be linked to, and changing them does not re-render the
+ * page on the server.
  */
 export default function UnusedHymnsView({
     initialResult,
 }: UnusedHymnsViewProps) {
-    const router = useRouter();
-    const pathname = usePathname();
-    const searchParams = useSearchParams();
+    const { searchParams, setSearchParams } = useUrlState();
 
-    const book = parseBook(searchParams.get("book"));
-    const sort = parseSort(searchParams.get("sort"));
+    const book = parseEnum(searchParams.get("book"), BOOK_FILTERS, "all");
+    const sort = parseEnum(searchParams.get("sort"), SORT_KEYS, "title");
 
     const [result, setResult] = useState(initialResult);
     const [refreshError, setRefreshError] = useState<string | null>(null);
     const [refreshing, startRefresh] = useTransition();
-    const [page, setPage] = useState(1);
+
+    function handleBookChange(next: BookFilter) {
+        setSearchParams({ book: next, page: null }, { history: "replace" });
+    }
+
+    function handleSortChange(next: SortKey) {
+        setSearchParams({ sort: next, page: null }, { history: "replace" });
+    }
+
+    function handlePageChange(next: number) {
+        // "push", so Back returns to the previous page of results.
+        setSearchParams(
+            { page: next === 1 ? null : String(next) },
+            { history: "push" }
+        );
+    }
 
     function handleRefresh() {
+        const pathAtClick = window.location.pathname;
         setRefreshError(null);
         startRefresh(async () => {
             let next: UnusedHymnsResult;
@@ -115,20 +127,14 @@ export default function UnusedHymnsView({
             }
             startRefresh(() => {
                 setResult(next);
-                setPage(1);
+                // The URL belongs to whichever page is showing now, so leave
+                // it alone if the viewer navigated away while refreshing.
+                if (window.location.pathname === pathAtClick) {
+                    setSearchParams({ page: null }, { history: "replace" });
+                }
             });
         });
     }
-
-    const updateParam = useCallback(
-        (key: string, value: string) => {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set(key, value);
-            router.replace(`${pathname}?${params.toString()}` as Route);
-            setPage(1);
-        },
-        [pathname, router, searchParams]
-    );
 
     const filteredUnused: HymnEntry[] = result.unused.filter((entry) =>
         inBook(entry, book)
@@ -139,8 +145,8 @@ export default function UnusedHymnsView({
     );
 
     const totalPages = Math.max(1, Math.ceil(sortedUnused.length / ITEMS_PER_PAGE));
-    const safePage = Math.min(page, totalPages);
-    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    const page = parsePage(searchParams.get("page"), totalPages);
+    const start = (page - 1) * ITEMS_PER_PAGE;
     const pageRows = sortedUnused.slice(start, start + ITEMS_PER_PAGE);
 
     return (
@@ -152,17 +158,17 @@ export default function UnusedHymnsView({
                 computedAt={result.meta.computedAt}
                 refreshing={refreshing}
                 refreshError={refreshError}
-                onBookChange={(next) => updateParam("book", next)}
-                onSortChange={(next) => updateParam("sort", next)}
+                onBookChange={handleBookChange}
+                onSortChange={handleSortChange}
                 onRefresh={handleRefresh}
             />
             <UnusedHymnsTable
                 rows={pageRows}
                 review={filteredReview}
                 book={book}
-                currentPage={safePage}
+                currentPage={page}
                 totalPages={totalPages}
-                onPageChange={setPage}
+                onPageChange={handlePageChange}
             />
         </div>
     );
