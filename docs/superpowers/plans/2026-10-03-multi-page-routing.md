@@ -357,3 +357,43 @@ client components (interaction only) ── URL state via useUrlState (shallow h
 **Intentionally not fixed (pinned by tests; follow-ups to raise with the user):**
 - "© ." for songs whose copyright is an empty string. What it should say instead is a product decision.
 - The `output: 'standalone'` vs `next start` warning in deploy.
+
+## Implementation notes (2026-10-03)
+
+Deviations from the plan, and things found while building it, by phase.
+
+**PCO data (Phase 1)**
+- The getters first copied today's behavior. Separate `fix:` commits then added what the plan listed as fixes: items past 25 (PCO's default page), the full plan history (Sunday Morning has 121 plans, so the 21 oldest were missing), and the PCO-ID song join (a renamed song item now finds its song, and so its copyright).
+- The hymn lookup lists exact (case-insensitive) matches first and the normalized ones after, so a title that already matched keeps its default version.
+- The `normalizeTitle` curly-quote bug was not on the original list: the quote character classes held straight quotes where curly ones were meant, so curly quotes were never straightened. Fixing it changes Unused Hymns: a curly/straight pair that used to land in the review bucket as a near-match now counts as used. The first fix wrote the literal characters again, so a follow-up wrote the classes as `\u` escapes, in the code and in the tests.
+- A null song author no longer crashes `formatCopyrightText`; it reads as "Unknown".
+- The PCO client is stricter than planned: it refuses redirects (a redirect would re-send the token), cancels unread error bodies, rejects percent-encoded paths and userinfo, and throws past `maxPages` instead of truncating. `fetchAllSongs` passes `maxPages: 100` (the library has 397 songs); the default is 50.
+
+**Phase 2 UI**
+- `LocalTime` uses `useSyncExternalStore`: React 19 keeps the server's text after a suppressed hydration mismatch, so a bare `suppressHydrationWarning` left the server's time zone on screen.
+- `ErrorState` owns the retry (`router.refresh()` then `reset()`, in a transition); an `error.tsx` passes it `reset` and nothing else.
+- `safeCallbackUrl` accepts printable ASCII only: a non-ASCII `callbackUrl` made `redirect()` return a 500, because Node refuses characters above U+00FF in the `Location` header.
+- `aria-current` is "page" on a nav item's own page and "true" elsewhere in its section, so a plan page does not announce both its nav item and its breadcrumb as the current page.
+
+**Phase 3 plan routes**
+- Stretched-link rows carry `transform-gpu` as well as `relative`: older Safari ignores `relative` on `<tr>` (WebKit bug 240961), so the link's overlay would not be sized to the row.
+- `CustomTextInput` also saves on blur, not only 500 ms after typing pauses, so a radio or Copy All clicked right after typing keeps the text. Because the box no longer remounts, a save that lands mid-typing must not overwrite what is still pending; that is handled too.
+
+**Phase 4**
+- Added `(overview)/error.tsx`. With `[planId]/error.tsx` alone, a failing tab replaced the whole plan page, header and items table included. Now the header, items table and tab nav stay, and `[planId]/error.tsx` keeps only errors in that layout and in item pages.
+- The middleware matcher exempts only `auth/` and `api/auth/` as whole path segments. It used to exempt every path that merely started with those letters, such as `/authors`.
+
+**Phase 5 Unused Hymns**
+- The Refresh pending state is plain `useState`, not `useTransition`: a transition held open across the server action stalled every navigation until the action returned.
+- The cache lives on `globalThis`. A client-imported server action is compiled in Next's "action-browser" layer, so the module-level cache was really two caches: Refresh updated one, and the page kept serving the other for up to an hour.
+- A failed refresh keeps the cached data (`TtlCache.refresh` replaces the stored value only when the load succeeds), so page loads still work while Planning Center is down.
+
+**Phase 6 cleanup**
+- Deleted `HymnVersionSelector.tsx` (no commit ever imported it) and dropped `HymnVersion.selected` (only `matchHymns` set it, and only tests read it).
+- Removed `NEXT_PUBLIC_BASE_URL` from `deploy.yml`. The GitHub secret and the `.env.local` line can now be deleted.
+- `typecheck` clears `.next/types` before `next typegen`, which never deletes the types of removed routes; those leftovers broke typecheck three times during this work.
+- Added `docs/architecture.md`, the README update and `CLAUDE.md`.
+
+**Spike facts, confirmed while building**
+- The largest plan has 17 items, so the 25-item truncation never showed on today's data.
+- `sort_date`'s date part is the org-local date, even for an evening plan, so calendar dates are formatted from the `YYYY-MM-DD` part with UTC math and no org time zone is needed.
