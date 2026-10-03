@@ -45,3 +45,6 @@ next-env.d.ts
 
 # agent git worktrees
 .claude/worktrees/
+
+# Playwright MCP session artifacts
+.playwright-mcp/
