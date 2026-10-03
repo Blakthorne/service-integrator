@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { refreshUnusedHymns } from "@/app/(app)/unused-hymns/actions";
 import { useUrlState } from "@/app/hooks/useUrlState";
-import type { HymnEntry, ReviewEntry, UnusedHymnsResult } from "@/lib/unusedHymns";
+import {
+    newerResult,
+    type HymnEntry,
+    type ReviewEntry,
+    type UnusedHymnsResult,
+} from "@/lib/unusedHymns";
 import { parseEnum, parsePage } from "@/lib/urlState";
 import UnusedHymnsControls, {
     type BookFilter,
@@ -69,7 +74,12 @@ function buildSummary(
 }
 
 interface UnusedHymnsViewProps {
-    /** The result the server rendered the page with. A refresh replaces it. */
+    /**
+     * The result the server rendered the page with. It is not copied into
+     * state: the page is not remounted when the viewer navigates to it again,
+     * and the server then passes a newer result (its cache recomputes hourly).
+     * A result the viewer refreshed is shown instead only while it is newer.
+     */
     initialResult: UnusedHymnsResult;
 }
 
@@ -88,7 +98,8 @@ export default function UnusedHymnsView({
     const book = parseEnum(searchParams.get("book"), BOOK_FILTERS, "all");
     const sort = parseEnum(searchParams.get("sort"), SORT_KEYS, "title");
 
-    const [result, setResult] = useState(initialResult);
+    const [refreshed, setRefreshed] = useState<UnusedHymnsResult | null>(null);
+    const result = newerResult(initialResult, refreshed);
     const [refreshing, setRefreshing] = useState(false);
     const [refreshError, setRefreshError] = useState<string | null>(null);
 
@@ -131,7 +142,7 @@ export default function UnusedHymnsView({
         } finally {
             setRefreshing(false);
         }
-        setResult(next);
+        setRefreshed(next);
     }
 
     const filteredUnused: HymnEntry[] = result.unused.filter((entry) =>

@@ -35,7 +35,13 @@ describe("isNearMatch", () => {
     });
 });
 
-import { computeUnusedHymns, type PcoSong, type RawHymn } from "./unusedHymns";
+import {
+    computeUnusedHymns,
+    newerResult,
+    type PcoSong,
+    type RawHymn,
+    type UnusedHymnsResult,
+} from "./unusedHymns";
 
 const AT = "2026-06-13T00:00:00.000Z";
 
@@ -155,5 +161,52 @@ describe("computeUnusedHymns", () => {
         expect(result.review).toHaveLength(1);
         expect(result.review[0].tuneName).toBe("ABBA, FATHER");
         expect(result.review[0].reason).toBe("ambiguous-tune");
+    });
+});
+
+describe("newerResult", () => {
+    /** A result with no hymns in it, with the given computedAt and song count. */
+    function resultAt(computedAt: string, songsScanned = 0): UnusedHymnsResult {
+        const songs: PcoSong[] = Array.from({ length: songsScanned }, () => ({
+            title: "x",
+            lastScheduledAt: null,
+        }));
+        return computeUnusedHymns([], songs, computedAt);
+    }
+
+    test("keeps the current result when there is no candidate", () => {
+        const current = resultAt("2026-10-03T12:00:00.000Z");
+        expect(newerResult(current, null)).toBe(current);
+    });
+
+    test("takes a candidate that was computed later", () => {
+        const current = resultAt("2026-10-03T12:00:00.000Z");
+        const candidate = resultAt("2026-10-03T12:00:00.001Z");
+        expect(newerResult(current, candidate)).toBe(candidate);
+    });
+
+    test("keeps the current result when the candidate is older", () => {
+        const current = resultAt("2026-10-03T13:00:00.000Z");
+        const candidate = resultAt("2026-10-03T12:59:59.999Z");
+        expect(newerResult(current, candidate)).toBe(current);
+    });
+
+    test("keeps the current result on a tie", () => {
+        const current = resultAt("2026-10-03T12:00:00.000Z", 1);
+        const candidate = resultAt("2026-10-03T12:00:00.000Z", 2);
+        expect(newerResult(current, candidate)).toBe(current);
+    });
+
+    test("compares instants, not strings, so another UTC offset still orders correctly", () => {
+        const current = resultAt("2026-10-03T12:00:00.000Z");
+        const later = resultAt("2026-10-03T09:00:00.000-04:00"); // 13:00Z
+        const earlier = resultAt("2026-10-03T09:00:00.000-02:00"); // 11:00Z
+        expect(newerResult(current, later)).toBe(later);
+        expect(newerResult(current, earlier)).toBe(current);
+    });
+
+    test("a candidate whose timestamp cannot be parsed never displaces the current result", () => {
+        const current = resultAt("2026-10-03T12:00:00.000Z");
+        expect(newerResult(current, resultAt("not a date"))).toBe(current);
     });
 });
