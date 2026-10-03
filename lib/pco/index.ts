@@ -1,21 +1,23 @@
+/**
+ * The server-only Planning Center data layer. App code imports from here
+ * (`@/lib/pco`), never from the files behind it, so `vi.mock("@/lib/pco")`
+ * always applies.
+ */
+import "server-only";
 import type { PcoSong } from "../unusedHymns";
+import { pcoAuthHeaders } from "./client";
+
+export { PcoError, PcoUrlError, pcoAuthHeaders } from "./client";
+export {
+    InvalidPcoIdError,
+    assertPcoId,
+    parsePcoId,
+    type PcoId,
+} from "./ids";
+export { orNotFound } from "./next";
 
 const PCO_SONGS_URL =
     "https://api.planningcenteronline.com/services/v2/songs?per_page=100";
-
-/** Build the PCO Basic Auth headers from env credentials. Throws if missing. */
-export function pcoAuthHeaders(): Record<string, string> {
-    const id = process.env.PLANNING_CENTER_ID;
-    const token = process.env.PLANNING_CENTER_TOKEN;
-    if (!id || !token) {
-        throw new Error("Planning Center credentials not configured");
-    }
-    const credentials = Buffer.from(`${id}:${token}`).toString("base64");
-    return {
-        Authorization: `Basic ${credentials}`,
-        "Content-Type": "application/json",
-    };
-}
 
 interface PcoSongResource {
     attributes: {
