@@ -11,6 +11,12 @@ const MAX_RETRY_AFTER_SECONDS = 5;
 /** pcoFetchAll's default page limit: 5,000 rows at per_page=100. */
 const DEFAULT_MAX_PAGES = 50;
 
+/**
+ * Each attempt (a 429 retry included) is abandoned after this long, so a
+ * stalled PCO response can never pin a render or a TTL-cache entry.
+ */
+const PCO_TIMEOUT_MS = 15_000;
+
 /** Build the PCO Basic Auth headers from env credentials. Throws if missing. */
 export function pcoAuthHeaders(): Record<string, string> {
     const id = process.env.PLANNING_CENTER_ID;
@@ -111,6 +117,12 @@ function discardBody(response: Response): void {
     void response.body?.cancel().catch(() => {});
 }
 
+/** True for what fetch (or a body read) rejects with when its signal fires. */
+function isAbortError(error: unknown): boolean {
+    const name = (error as { name?: unknown } | null)?.name;
+    return name === "TimeoutError" || name === "AbortError";
+}
+
 /** One guarded request, retrying a short 429 once. Resolves to the JSON body. */
 async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
     const init: RequestInit = {
@@ -120,21 +132,37 @@ async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
         // (even same-origin, e.g. /people/v2), so a 3xx makes fetch reject.
         redirect: "error",
     };
-    let response = await fetch(url.href, init);
-    if (!response.ok) {
-        // Headers are read only here: success mocks are bare { ok, json }.
-        const delay = response.status === 429 ? retryDelayMs(response) : null;
-        if (delay !== null) {
-            discardBody(response);
-            await sleep(delay);
-            response = await fetch(url.href, init);
-        }
+    const path = url.pathname + url.search;
+    // A fresh timeout for each attempt; it also bounds reading the body.
+    const attempt = () =>
+        fetch(url.href, { ...init, signal: AbortSignal.timeout(PCO_TIMEOUT_MS) });
+
+    try {
+        let response = await attempt();
         if (!response.ok) {
-            discardBody(response);
-            throw new PcoError(response.status, url.pathname + url.search);
+            // Headers are read only here: success mocks are bare { ok, json }.
+            const delay = response.status === 429 ? retryDelayMs(response) : null;
+            if (delay !== null) {
+                discardBody(response);
+                await sleep(delay);
+                response = await attempt();
+            }
+            if (!response.ok) {
+                discardBody(response);
+                throw new PcoError(response.status, path);
+            }
         }
+        return await response.json();
+    } catch (error) {
+        if (isAbortError(error)) {
+            // The path only: init holds the Authorization header.
+            throw new Error(
+                `Planning Center did not respond within ${PCO_TIMEOUT_MS / 1000} s (${path})`,
+                { cause: error }
+            );
+        }
+        throw error;
     }
-    return response.json();
 }
 
 /**

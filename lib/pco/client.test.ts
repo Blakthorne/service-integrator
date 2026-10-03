@@ -56,6 +56,7 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
 });
@@ -141,6 +142,110 @@ describe("redirects", () => {
         await expect(pcoFetch("/service_types/1", "serviceTypes")).rejects.toBe(failure);
         await expect(pcoFetchAll("/songs", "songs")).rejects.toBe(failure);
         expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe("timeouts", () => {
+    const TIMEOUT_MESSAGE =
+        "Planning Center did not respond within 15 s (/services/v2/service_types/1)";
+
+    test("each attempt gets its own 15-second timeout signal, the 429 retry included", async () => {
+        vi.useFakeTimers();
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0 ? tooManyRequests("1") : json({ data: {} })
+        );
+
+        const result = pcoFetch("/service_types/1", "serviceTypes");
+        await vi.advanceTimersByTimeAsync(1000);
+        await expect(result).resolves.toEqual({ data: {} });
+
+        expect(timeout.mock.calls).toEqual([[15_000], [15_000]]);
+        const signals = fetchMock.mock.calls.map(
+            ([, init]) => (init as RequestInit).signal
+        );
+        expect(signals).toHaveLength(2);
+        for (const signal of signals) {
+            expect(signal).toBeInstanceOf(AbortSignal);
+        }
+        expect(signals[1]).not.toBe(signals[0]);
+    });
+
+    test("a request that never answers is abandoned when its timeout fires", async () => {
+        vi.useFakeTimers();
+        // Drive AbortSignal.timeout from the fake clock.
+        vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+            const controller = new AbortController();
+            setTimeout(
+                () =>
+                    controller.abort(
+                        new DOMException("The operation was aborted due to timeout", "TimeoutError")
+                    ),
+                ms
+            );
+            return controller.signal;
+        });
+        // Like the real fetch: never answers, but rejects when its signal fires.
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockImplementation(
+                (_url: string, init: RequestInit) =>
+                    new Promise((_resolve, reject) => {
+                        init.signal?.addEventListener("abort", () =>
+                            reject(init.signal?.reason)
+                        );
+                    })
+            )
+        );
+
+        const outcome = pcoFetch("/service_types/1", "serviceTypes").then(
+            () => "resolved",
+            (error: unknown) => error
+        );
+        let done = false;
+        void outcome.then(() => {
+            done = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(14_999);
+        expect(done).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        const error = await outcome;
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe(TIMEOUT_MESSAGE);
+    });
+
+    test.each([
+        ["TimeoutError", "The operation was aborted due to timeout"],
+        ["AbortError", "This operation was aborted"],
+    ])(
+        "a fetch rejected with %s surfaces as an error naming the path, not the headers",
+        async (name, message) => {
+            const abort = new DOMException(message, name);
+            vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abort));
+
+            const error = await pcoFetch("/service_types/1", "serviceTypes").catch(
+                (e: unknown) => e
+            );
+
+            expect(error).toBeInstanceOf(Error);
+            expect(error).not.toBeInstanceOf(PcoError);
+            expect((error as Error).message).toBe(TIMEOUT_MESSAGE);
+            expect((error as Error).cause).toBe(abort);
+            expect((error as Error).message).not.toContain("Basic");
+            expect(Object.keys(error as object)).toEqual([]);
+        }
+    );
+
+    test("a timeout while reading the body surfaces the same way", async () => {
+        const abort = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({ ok: true, json: () => Promise.reject(abort) })
+        );
+        await expect(pcoFetch("/service_types/1", "serviceTypes")).rejects.toThrow(
+            TIMEOUT_MESSAGE
+        );
     });
 });
 
