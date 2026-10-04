@@ -37,10 +37,16 @@ import {
     editCatalogEntry,
     editCatalogHymn,
     editCatalogTune,
+    getHymnOptions,
     getMirroredPcoSong,
     getNewSongBooks,
     getNewSongFormData,
+    getTuneOptions,
+    mergeCatalogHymns,
+    mergeCatalogTunes,
     moveCatalogEntry,
+    previewCatalogHymnMerge,
+    previewCatalogTuneMerge,
     removeCatalogHymnAlias,
     removeCatalogTuneAlias,
     unlinkCatalogSong,
@@ -408,5 +414,41 @@ describe("the hymn and tune edits, end to end", () => {
             aliases: ["Abba (Father)", "Abba, Father"],
         });
         expect(song?.tune).toMatchObject({ name: "PRITCHARD TUNE", aliases: ["PRITCHARD"] });
+    });
+});
+
+describe("the merges, end to end", () => {
+    test("preview a hymn merge without writing, then merge, and do the same for tunes", () => {
+        const { abbaFather, tunes, songs } = seed();
+        const other = seedHymn(db, { title: "Father, We Love You" });
+        const otherSong = seedSong(db, { hymnId: other, tuneId: tunes.abbaFather });
+
+        const preview = previewCatalogHymnMerge(other, abbaFather);
+        expect(preview).toMatchObject({
+            ok: true,
+            preview: {
+                merges: [{ sourceSongId: otherSong, targetSongId: songs.abbaFather }],
+                aliasesAdded: ["Father, We Love You"],
+                refusals: [],
+            },
+        });
+        expect(getHymnOptions().map(({ title }) => title)).toContain("Father, We Love You");
+
+        expect(mergeCatalogHymns(other, abbaFather)).toMatchObject({ ok: true });
+        expect(getHymnOptions().map(({ title }) => title)).not.toContain("Father, We Love You");
+        expect(findCatalogSong(db, songs.abbaFather)?.hymn.aliases).toEqual([
+            "Father, We Adore You",
+            "Father, We Love You",
+        ]);
+
+        expect(previewCatalogTuneMerge(tunes.abbaFather, tunes.abbaFather)).toMatchObject({
+            ok: true,
+            preview: { refusals: [{ reason: "same" }] },
+        });
+        expect(mergeCatalogTunes(tunes.newBritain, tunes.pritchard)).toMatchObject({
+            ok: true,
+            preview: { moves: [{ songId: songs.amazingGrace }], aliasesAdded: ["NEW BRITAIN"] },
+        });
+        expect(getTuneOptions().map(({ name }) => name)).toEqual(["ABBA, FATHER", "PRITCHARD"]);
     });
 });

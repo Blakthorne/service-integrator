@@ -34,6 +34,14 @@ import {
     type TuneEditResult,
 } from "@/lib/db/catalogEdit";
 import {
+    applyHymnMerge,
+    applyTuneMerge,
+    previewHymnMerge,
+    previewTuneMerge,
+    type MergeApplyResult,
+    type MergePlanResult,
+} from "@/lib/db/catalogMerge";
+import {
     createCatalogSong,
     type CreateSongResult,
     type NewCatalogSong,
@@ -66,6 +74,14 @@ export type {
     TuneAliasResult,
     TuneEditResult,
 } from "@/lib/db/catalogEdit";
+export type { MergeApplyResult, MergePlanResult } from "@/lib/db/catalogMerge";
+export type {
+    MergePreview,
+    MergeRefusal,
+    MergeRefusalReason,
+    SongMergeStep,
+    SongMove,
+} from "@/lib/catalog/merge";
 
 /**
  * Editing the catalog from its forms: what the new-song form shows and the
@@ -288,4 +304,50 @@ export function addCatalogTuneAlias(input: TuneAliasInput): TuneAliasResult {
 /** Take another name off a tune (`removeTuneAlias`). */
 export function removeCatalogTuneAlias(input: TuneAliasInput): TuneAliasResult {
     return removeTuneAlias(getDb(), input);
+}
+
+/**
+ * Every hymn, by title, with its other titles and the names of its tunes:
+ * the options of a hymn picker, such as "Merge this hymn into…".
+ */
+export function getHymnOptions(): HymnOption[] {
+    return hymnOptions(listCatalogSongs(getDb()));
+}
+
+/** Every tune, by name, with its other names and meter: the options of a tune picker. */
+export function getTuneOptions(): TuneOption[] {
+    return listTunes(getDb()).map(({ id, name, aliases, meter }) => ({ id, name, aliases, meter }));
+}
+
+// ---------------------------------------------------------------------------
+// Merges (the song page's Hymn card, and a tune's page)
+// ---------------------------------------------------------------------------
+
+/**
+ * What merging hymn `sourceId` into hymn `targetId` would do: the songs that
+ * move and merge, the other titles and fields the target takes, and why the
+ * merge would be refused, if it would (see lib/catalog/merge.ts). Nothing
+ * is written.
+ */
+export function previewCatalogHymnMerge(sourceId: number, targetId: number): MergePlanResult {
+    return previewHymnMerge(getDb(), sourceId, targetId);
+}
+
+/**
+ * Merge hymn `sourceId` into hymn `targetId`, planned afresh and written in
+ * one transaction; the result names everything that changed. A refused
+ * merge writes nothing and comes back with the plan that says why.
+ */
+export function mergeCatalogHymns(sourceId: number, targetId: number): MergeApplyResult {
+    return applyHymnMerge(getDb(), sourceId, targetId);
+}
+
+/** What merging tune `sourceId` into tune `targetId` would do; nothing is written. */
+export function previewCatalogTuneMerge(sourceId: number, targetId: number): MergePlanResult {
+    return previewTuneMerge(getDb(), sourceId, targetId);
+}
+
+/** Merge tune `sourceId` into tune `targetId`, as `mergeCatalogHymns` merges hymns. */
+export function mergeCatalogTunes(sourceId: number, targetId: number): MergeApplyResult {
+    return applyTuneMerge(getDb(), sourceId, targetId);
 }

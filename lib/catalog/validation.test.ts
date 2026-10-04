@@ -13,6 +13,7 @@ import {
     validateEntryMove,
     validateHymnAlias,
     validateHymnEdit,
+    validateMerge,
     validateNewEntry,
     validateNewSong,
     validateSongMark,
@@ -647,6 +648,26 @@ describe("validateHymnAlias and validateTuneAlias", () => {
         expect(validateTuneAlias(fields({ tuneId: "4", alias: " " }))).toEqual({
             ok: false,
             fieldErrors: { alias: { message: "Type the other name." } },
+        });
+    });
+});
+
+describe("validateMerge", () => {
+    test("reads the source and the target", () => {
+        expect(validateMerge(fields({ sourceId: "3", targetId: "8" }), "hymn")).toEqual({
+            ok: true,
+            input: { sourceId: 3, targetId: 8 },
+        });
+        expect(validateMerge(fields({ sourceId: "3", targetId: "3" }), "tune")).toMatchObject({ ok: true });
+    });
+
+    test("refuses ids that do not parse, in the words of the kind", () => {
+        expect(validateMerge(fields({ sourceId: "x", targetId: "" }), "tune")).toEqual({
+            ok: false,
+            fieldErrors: {
+                source: { message: "That tune is not in the catalog." },
+                target: { message: "Choose the tune to merge it into." },
+            },
         });
     });
 });

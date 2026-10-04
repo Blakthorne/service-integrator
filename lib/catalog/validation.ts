@@ -852,3 +852,36 @@ export function validateTuneAlias(formData: FormData): FormCheck<TuneAliasInput,
         ({ tune, alias }) => ({ tuneId: tune, alias })
     );
 }
+
+// Merges -----------------------------------------------------------------------
+
+/**
+ * The fields a merge form posts: the hymn (or tune) to merge, from the page
+ * it is on, and the one to merge it into, chosen from a picker. Both
+ * Preview and Merge post them.
+ */
+export const MERGE_FIELDS = ["sourceId", "targetId"] as const;
+
+/** The parts of a merge form, each of which shows at most one error. */
+export type MergePart = "source" | "target";
+
+/** Two hymns, or two tunes, to merge: the source into the target. */
+export interface MergeInput {
+    sourceId: number;
+    targetId: number;
+}
+
+/**
+ * Read a merge form of `kind` ("hymn" or "tune"): the source's id and the
+ * target's. Merging one into itself is for the merge to refuse, with the
+ * rest of its plan.
+ */
+export function validateMerge(formData: FormData, kind: "hymn" | "tune"): FormCheck<MergeInput, MergePart> {
+    return checkParts(
+        {
+            source: readCatalogId(formData, "sourceId", `That ${kind} is not in the catalog.`),
+            target: readCatalogId(formData, "targetId", `Choose the ${kind} to merge it into.`),
+        },
+        ({ source, target }) => ({ sourceId: source, targetId: target })
+    );
+}
