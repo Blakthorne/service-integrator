@@ -45,6 +45,18 @@ function failed(what: string, error: unknown): ImportActionState {
     return { error: FAILURE_MESSAGE };
 }
 
+/**
+ * A refusal means the run or the catalog is not as the page showed it: the
+ * run was applied or discarded in another tab, or books arrived. Give the
+ * form the refusal, and revalidate the import pages, so that once the form
+ * is closed the page behind it shows the state as it is now, not a preview
+ * with live Apply and Discard buttons.
+ */
+function refused(message: string): ImportActionState {
+    revalidatePath(routes.catalogImport(), "layout");
+    return { error: message };
+}
+
 // Each action below runs its query inside a try block and calls `redirect()`
 // outside it: redirect works by throwing, so a try block would swallow it.
 
@@ -68,7 +80,8 @@ export async function previewSeedImportAction(): Promise<ImportActionState> {
  * The Apply form's action: add the previewed run's rows to the catalog, then
  * revalidate every catalog page (they read what it just added) and go to the
  * songs list. A refusal (the run is not a preview, or the catalog already
- * has books) is returned for the form to show.
+ * has books) is returned for the form to show, and the import pages are
+ * revalidated.
  */
 export async function applyImportAction(
     _state: ImportActionState,
@@ -86,7 +99,7 @@ export async function applyImportAction(
         return failed(`apply import run ${runId}`, error);
     }
     if (!result.ok) {
-        return { error: result.message };
+        return refused(result.message);
     }
     revalidatePath(routes.catalog(), "layout");
     redirect(routes.catalog());
@@ -95,7 +108,7 @@ export async function applyImportAction(
 /**
  * The Discard form's action: mark the previewed run discarded, then go back
  * to the list of runs. A refusal (no such run, or it is not a preview) is
- * returned for the form to show.
+ * returned for the form to show, and the import pages are revalidated.
  */
 export async function discardImportAction(
     _state: ImportActionState,
@@ -113,7 +126,7 @@ export async function discardImportAction(
         return failed(`discard import run ${runId}`, error);
     }
     if (!result.ok) {
-        return { error: result.message };
+        return refused(result.message);
     }
     revalidatePath(routes.catalogImport(), "layout");
     redirect(routes.catalogImport());

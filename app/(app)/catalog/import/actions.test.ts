@@ -209,7 +209,7 @@ describe("applyImportAction", () => {
         ["a catalog that already has books", CATALOG_NOT_EMPTY],
         ["a run that is no longer a preview", NOT_A_PREVIEW],
     ])(
-        "returns the refusal for %s as it is, and changes no page",
+        "returns the refusal for %s as it is, and revalidates the import pages behind it",
         async (_name, refusal) => {
             applyCatalogImport.mockReturnValue(refusal);
 
@@ -217,7 +217,8 @@ describe("applyImportAction", () => {
                 applyImportAction(null, formWith({ runId: "7" }))
             ).resolves.toEqual({ error: refusal.message });
             expect(applyCatalogImport).toHaveBeenCalledWith(7);
-            expect(revalidatePath).not.toHaveBeenCalled();
+            expect(revalidatePath).toHaveBeenCalledTimes(1);
+            expect(revalidatePath).toHaveBeenCalledWith("/catalog/import", "layout");
             expect(redirect).not.toHaveBeenCalled();
         }
     );
@@ -268,13 +269,14 @@ describe("discardImportAction", () => {
         expect(redirect).not.toHaveBeenCalled();
     });
 
-    test("returns the refusal for a run that is no longer a preview, and changes no page", async () => {
+    test("returns the refusal for a run that is no longer a preview, and revalidates the import pages behind it", async () => {
         discardCatalogImport.mockReturnValue(NOT_A_PREVIEW);
 
         await expect(
             discardImportAction(null, formWith({ runId: "7" }))
         ).resolves.toEqual({ error: NOT_A_PREVIEW.message });
-        expect(revalidatePath).not.toHaveBeenCalled();
+        expect(revalidatePath).toHaveBeenCalledTimes(1);
+        expect(revalidatePath).toHaveBeenCalledWith("/catalog/import", "layout");
         expect(redirect).not.toHaveBeenCalled();
     });
 
