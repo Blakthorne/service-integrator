@@ -5,8 +5,8 @@ import {
     findSongTags,
     listSongTagGroups,
     listTagIdsBySong,
+    replaceListedSongTags,
     replaceSongTagGroups,
-    replaceTagSongs,
 } from "@/lib/db/tags";
 import type { PcoTag, PcoTagGroup } from "@/lib/domain";
 import { fetchSongIdsWithTag, fetchSongTagGroups } from "@/lib/pco";
@@ -28,6 +28,8 @@ export type TagsSyncCounts = {
     songTags: number;
     /** Song tags left out because the song mirror does not have the song yet. */
     skipped: number;
+    /** Songs whose tags were saved while the sync read Planning Center, left as saved. */
+    kept: number;
 };
 
 /**
@@ -38,13 +40,19 @@ export type TagsSyncCounts = {
  * (`fetchSongTagGroups`), then, for each of those tags and only those (an id
  * Planning Center does not know may list every song), the songs that have it
  * (`fetchSongIdsWithTag`), one tag at a time. Only then does it write, in
- * one transaction: the groups and tags replace the mirror's
- * (`replaceSongTagGroups`), and each tag's songs replace its song tags
- * (`replaceTagSongs`), leaving out the songs the song mirror does not have
- * yet; the next sync after the song sync mirrors them gives them their
- * tags. A failed read throws before anything is written.
+ * one transaction at `now()`: the groups and tags replace the mirror's
+ * (`replaceSongTagGroups`), and the listing replaces every song's tags
+ * (`replaceListedSongTags`), leaving out the songs the song mirror does not
+ * have yet; the next sync after the song sync mirrors them gives them their
+ * tags. A song whose tags were saved since the reading began (the Tags
+ * card) is left as saved, since the listing may be older than the save. A
+ * failed read throws before anything is written.
  */
-export async function syncTags(db: DatabaseSync): Promise<TagsSyncCounts> {
+export async function syncTags(
+    db: DatabaseSync,
+    now: () => Date = () => new Date()
+): Promise<TagsSyncCounts> {
+    const listingStartedAt = now();
     const groups = await fetchSongTagGroups({ paced: true });
     const songsByTag = new Map<string, string[]>();
     for (const group of groups) {
@@ -56,14 +64,13 @@ export async function syncTags(db: DatabaseSync): Promise<TagsSyncCounts> {
     }
     return withTransaction(db, () => {
         const stored = replaceSongTagGroups(db, groups);
-        let songTags = 0;
-        let skipped = 0;
-        for (const [tagId, songIds] of songsByTag) {
-            const replaced = replaceTagSongs(db, tagId, songIds);
-            songTags += replaced.tagged;
-            skipped += replaced.skipped;
-        }
-        return { groups: stored.groups, tags: stored.tags, songTags, skipped };
+        const { tagged, skipped, kept } = replaceListedSongTags(
+            db,
+            songsByTag,
+            listingStartedAt,
+            now()
+        );
+        return { groups: stored.groups, tags: stored.tags, songTags: tagged, skipped, kept };
     });
 }
 
@@ -74,12 +81,17 @@ function counted(count: number, singular: string, plural: string): string {
 
 /**
  * A tags sync's counts in words, for its run's message: "Synced 5 tags in 1
- * group: 412 song tags", and how many were skipped when some were ("…, 3
- * skipped (songs not mirrored yet)").
+ * group: 412 song tags", then how many were skipped and how many songs were
+ * left as saved, when there were some ("…, 3 skipped (songs not mirrored
+ * yet), 1 song left as saved during the sync").
  */
-export function describeTagsSync({ groups, tags, songTags, skipped }: TagsSyncCounts): string {
-    const synced = `Synced ${counted(tags, "tag", "tags")} in ${counted(groups, "group", "groups")}: ${counted(songTags, "song tag", "song tags")}`;
-    return skipped > 0 ? `${synced}, ${skipped} skipped (songs not mirrored yet)` : synced;
+export function describeTagsSync({ groups, tags, songTags, skipped, kept }: TagsSyncCounts): string {
+    const parts = [
+        `Synced ${counted(tags, "tag", "tags")} in ${counted(groups, "group", "groups")}: ${counted(songTags, "song tag", "song tags")}`,
+        ...(skipped > 0 ? [`${skipped} skipped (songs not mirrored yet)`] : []),
+        ...(kept > 0 ? [`${counted(kept, "song", "songs")} left as saved during the sync`] : []),
+    ];
+    return parts.join(", ");
 }
 
 /**

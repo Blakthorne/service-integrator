@@ -3,6 +3,7 @@ import catalog from "./0002_catalog";
 import pcoSongs from "./0003_pco_songs";
 import selections from "./0004_selections";
 import creditsTags from "./0005_credits_tags";
+import songTagsWritten from "./0006_song_tags_written";
 
 /** A schema change, applied once by `migrate()` and recorded in `schema_migrations`. */
 export interface Migration {
@@ -31,4 +32,5 @@ export const MIGRATIONS: readonly Migration[] = [
     pcoSongs,
     selections,
     creditsTags,
+    songTagsWritten,
 ];

@@ -6,8 +6,8 @@ import {
     listSongTagGroups,
     listTagIdsBySong,
     replaceSongTagGroups,
+    replaceListedSongTags,
     replaceSongTags,
-    replaceTagSongs,
 } from "./tags";
 import {
     openTestDb,
@@ -174,7 +174,22 @@ describe("replaceSongTagGroups", () => {
     });
 });
 
-describe("replaceTagSongs", () => {
+/** When a listing began, a moment before it, and when its sync wrote. */
+const BEFORE = new Date("2026-10-04T11:59:59.000Z");
+const STARTED = new Date("2026-10-04T12:00:00.000Z");
+const WROTE = new Date("2026-10-04T12:00:30.000Z");
+
+/** When each song's tags were last written, by song id. */
+function writtenAt(): Record<string, string> {
+    return Object.fromEntries(
+        db
+            .prepare("SELECT pco_song_id, written_at FROM pco_song_tags_written ORDER BY pco_song_id")
+            .all()
+            .map((row) => [String(row.pco_song_id), String(row.written_at)])
+    );
+}
+
+describe("replaceListedSongTags", () => {
     beforeEach(() => {
         replaceSongTagGroups(db, [TYPE]);
         for (const id of ["1001", "1002", "1003"]) {
@@ -182,37 +197,110 @@ describe("replaceTagSongs", () => {
         }
     });
 
-    test("gives the tag exactly the songs listed, leaving other tags alone", () => {
+    test("gives every song exactly the tags the listing gives it, and records when", () => {
         seedPcoSongTag(db, "1003", "101");
         seedPcoSongTag(db, "1003", "102");
-        expect(replaceTagSongs(db, "101", ["1001", "1002"])).toEqual({ tagged: 2, skipped: 0 });
+        const listing = new Map([
+            ["101", ["1001", "1002"]],
+            ["102", ["1002"]],
+            ["103", []],
+        ]);
+
+        expect(replaceListedSongTags(db, listing, STARTED, WROTE)).toEqual({
+            tagged: 3,
+            skipped: 0,
+            kept: 0,
+        });
+        // 1003 is listed with no tag any more, so it has none.
         expect(songTagRows()).toEqual([
             ["1001", "101"],
             ["1002", "101"],
-            ["1003", "102"],
+            ["1002", "102"],
         ]);
+        expect(writtenAt()).toEqual({
+            "1001": WROTE.toISOString(),
+            "1002": WROTE.toISOString(),
+            "1003": WROTE.toISOString(),
+        });
     });
 
-    test("skips the songs the mirror does not have yet, and counts a song listed twice once", () => {
-        expect(replaceTagSongs(db, "101", ["1001", "9999", "1001", "8888"])).toEqual({
+    test("takes a tag the listing leaves out off every song", () => {
+        seedPcoSongTag(db, "1001", "102");
+        expect(replaceListedSongTags(db, new Map([["101", ["1001"]]]), STARTED, WROTE)).toMatchObject({
             tagged: 1,
-            skipped: 2,
         });
         expect(songTagRows()).toEqual([["1001", "101"]]);
     });
 
-    test("takes the tag off every song when none is listed", () => {
-        seedPcoSongTag(db, "1001", "101");
-        expect(replaceTagSongs(db, "101", [])).toEqual({ tagged: 0, skipped: 0 });
-        expect(songTagRows()).toEqual([]);
+    test("skips the songs the mirror does not have yet, and counts a song listed twice once", () => {
+        expect(
+            replaceListedSongTags(
+                db,
+                new Map([
+                    ["101", ["1001", "9999", "1001", "8888"]],
+                    ["102", ["9999"]],
+                ]),
+                STARTED,
+                WROTE
+            )
+        ).toEqual({ tagged: 1, skipped: 3, kept: 0 });
+        expect(songTagRows()).toEqual([["1001", "101"]]);
+    });
+
+    test("leaves as saved a song whose tags were written after the listing began", () => {
+        replaceSongTags(db, "1002", ["102"], new Date("2026-10-04T12:00:10.000Z"));
+        // Saved before the listing began, or as it began: the listing was
+        // read after the save, so it is the newer, and wins.
+        replaceSongTags(db, "1001", ["103"], STARTED);
+        replaceSongTags(db, "1003", ["103"], BEFORE);
+        const listing = new Map([
+            ["101", ["1001", "1002", "1003"]],
+            ["103", []],
+        ]);
+
+        expect(replaceListedSongTags(db, listing, STARTED, WROTE)).toEqual({
+            tagged: 2,
+            skipped: 0,
+            kept: 1,
+        });
+        expect(songTagRows()).toEqual([
+            ["1001", "101"],
+            ["1002", "102"],
+            ["1003", "101"],
+        ]);
+        expect(writtenAt()).toEqual({
+            "1001": WROTE.toISOString(),
+            "1002": "2026-10-04T12:00:10.000Z",
+            "1003": WROTE.toISOString(),
+        });
+    });
+
+    test("never takes its own last write for a save, however soon the next listing begins", () => {
+        replaceListedSongTags(db, new Map([["101", ["1001"]]]), STARTED, WROTE);
+        // The next listing begins the moment the last one was written.
+        expect(replaceListedSongTags(db, new Map([["102", ["1001"]]]), WROTE, WROTE)).toEqual({
+            tagged: 1,
+            skipped: 0,
+            kept: 0,
+        });
+        expect(songTagRows()).toEqual([["1001", "102"]]);
     });
 
     test("refuses a tag the mirror does not have, writing nothing", () => {
         seedPcoSongTag(db, "1001", "101");
-        expect(() => replaceTagSongs(db, "999", ["1001"])).toThrow(
-            'The tag mirror has no tag "999"'
-        );
+        expect(() =>
+            replaceListedSongTags(
+                db,
+                new Map([
+                    ["101", []],
+                    ["999", ["1001"]],
+                ]),
+                STARTED,
+                WROTE
+            )
+        ).toThrow('The tag mirror has no tag "999"');
         expect(songTagRows()).toEqual([["1001", "101"]]);
+        expect(writtenAt()).toEqual({});
     });
 });
 
@@ -253,6 +341,14 @@ describe("replaceSongTags", () => {
             'The song mirror has no song "9999"'
         );
         expect(songTagRows()).toEqual([]);
+        expect(writtenAt()).toEqual({});
+    });
+
+    test("records when the song's tags were written, a later write replacing it", () => {
+        replaceSongTags(db, "1001", ["101"], STARTED);
+        expect(writtenAt()).toEqual({ "1001": STARTED.toISOString() });
+        replaceSongTags(db, "1001", [], WROTE);
+        expect(writtenAt()).toEqual({ "1001": WROTE.toISOString() });
     });
 });
 
