@@ -158,8 +158,9 @@ interface TagsCardProps {
  * Center has them then, so a tag set there since the page loaded is never
  * dropped. It is called from its click with its pending state in
  * `useState` (convention 15), and then says what the song's tags are now,
- * which the editor then shows, or why nothing was saved, in an alert keyed
- * per attempt; focus stays on Save. A save refused because the tags changed
+ * which the editor then shows, in a status region that is always there,
+ * or why nothing was saved, in an alert keyed per attempt; focus stays on
+ * Save. A save refused because the tags changed
  * in a way the changes cannot be applied to offers to reload the page. The
  * choices are this card's state: a revalidation updates the list above
  * them and never the choices.
@@ -180,6 +181,8 @@ export default function TagsCard({ pcoSongId, groups, songTags, editable }: Tags
     const changes = describeTagChanges(tagChanges(shown, selection, shownGroups));
     const saved =
         result?.ok === true && savedSelection !== null && sameTagSelection(selection, savedSelection);
+    // Cleared while a save runs, so a second "Saved." is a change the region announces again.
+    const status = !pending && saved && result?.ok === true ? describeTagsSave(result, shownGroups) : "";
 
     async function save() {
         if (saving.current) {
@@ -273,11 +276,11 @@ export default function TagsCard({ pcoSongId, groups, songTags, editable }: Tags
                             >
                                 Save tags
                             </PendingButton>
-                            {saved && result?.ok === true && (
-                                <p key={formStateKey(result)} role="status" className={DONE_CLASS}>
-                                    {describeTagsSave(result, shownGroups)}
-                                </p>
-                            )}
+                            {/* Always there, empty until there is news: a live region added
+                                with its text already in it may not be announced. */}
+                            <p role="status" className={DONE_CLASS}>
+                                {status}
+                            </p>
                         </div>
                     </>
                 ) : (

@@ -90,7 +90,8 @@ interface CreditsCardProps {
  * Only Save writes, never Enter in a field: it calls `saveSongCreditsAction`
  * from its click, with its pending state in `useState` (convention 15),
  * then says what Planning Center's author is now, or why nothing was
- * saved, in an alert keyed per attempt. Focus stays on Save. The fields
+ * saved, in an alert keyed per attempt, or in a status region that is
+ * always there, as the Settings forms' is. Focus stays on Save. The fields
  * are this card's state: a revalidation updates the author above them and
  * never what is being typed. Once a save succeeds they hold what
  * Planning Center has now, and "Saved." stays until they change.
@@ -134,6 +135,8 @@ export default function CreditsCard({ pcoSongId, author, settings, editable }: C
         preview.ok &&
         sameCredits(preview.credits, savedCredits);
     const unchanged = preview.ok && preview.credits.length > 0 && preview.author === (author ?? "");
+    // Cleared while a save runs, so a second "Saved." is a change the region announces again.
+    const status = !pending && saved && result?.ok === true ? describeCreditsSave(result) : "";
 
     async function save() {
         if (saving.current) {
@@ -248,15 +251,13 @@ export default function CreditsCard({ pcoSongId, author, settings, editable }: C
                             >
                                 Save credits
                             </PendingButton>
-                            {saved && result?.ok === true ? (
-                                <p key={formStateKey(result)} role="status" className={DONE_CLASS}>
-                                    {describeCreditsSave(result)}
-                                </p>
-                            ) : (
-                                unchanged &&
-                                !pending && (
-                                    <p className={HINT_CLASS}>Planning Center already has these credits.</p>
-                                )
+                            {/* Always there, empty until there is news: a live region added
+                                with its text already in it may not be announced. */}
+                            <p role="status" className={DONE_CLASS}>
+                                {status}
+                            </p>
+                            {status === "" && unchanged && !pending && (
+                                <p className={HINT_CLASS}>Planning Center already has these credits.</p>
                             )}
                         </div>
                     </>
