@@ -16,7 +16,7 @@ import { getNextPlan, getPlanItems, getServiceTypes } from "@/lib/pco";
 import { scheduleSongView, type ScheduleCatalogState, type ScheduleSongView } from "@/lib/scheduleCards";
 import { formatScheduleNumbers } from "@/lib/serviceSchedule";
 import type { AppSettings } from "@/lib/settings";
-import { readItemNoteCategories } from "./hymnNotes";
+import { readAppWrittenNoteIds, readItemNoteCategories } from "./hymnNotes";
 import { planCatalogLinks } from "./plans";
 import { getSettings } from "./settings";
 
@@ -28,9 +28,10 @@ import { getSettings } from "./settings";
  * each one that is not archived, in parallel, one for its next plan and,
  * when it has one, its items with their notes (one request per 100 items)
  * and its item note categories, in parallel: seven for the church's two
- * service types. The database: at most ten queries, however many plans:
- * seven for every plan's catalog links at once (`planCatalogLinks`), and one
- * each for the settings, the song sync's latest run and the catalog's size.
+ * service types. The database: at most eleven queries, however many plans:
+ * seven for every plan's catalog links at once (`planCatalogLinks`), one for
+ * which of all their notes the app wrote, and one each for the settings, the
+ * song sync's latest run and the catalog's size.
  */
 
 /** A song sync whose latest success is older than this is stale: it runs hourly. */
@@ -286,7 +287,9 @@ export async function getDashboard(now: Date = new Date()): Promise<Dashboard> {
     }
     const reads = await Promise.all(serviceTypes.map(readNextPlan));
 
-    const links = readCatalogLinks(reads.flatMap((read) => (read.ok ? read.items : [])));
+    const items = reads.flatMap((read) => (read.ok ? read.items : []));
+    const links = readCatalogLinks(items);
+    const ownedNoteIds = readAppWrittenNoteIds(items);
     const { settings, error: settingsError } = getSettings();
     const state = readCatalogState();
 
@@ -304,6 +307,7 @@ export async function getDashboard(now: Date = new Date()): Promise<Dashboard> {
             catalogError: links.catalogError,
             categories: read.categories,
             settings,
+            ownedNoteIds,
         });
         return {
             status: "plan",

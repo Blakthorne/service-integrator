@@ -10,6 +10,7 @@ import {
     seedSetting,
     seedSong,
     seedTune,
+    seedWriteLog,
 } from "@/lib/db/testing";
 import {
     PCO_BASE,
@@ -616,12 +617,54 @@ describe("getPlanDetail's hymnal notes", () => {
             hymnNoteStatus.kind === "ready" &&
                 hymnNoteStatus.items.map(({ itemId, action, content, current }) => [itemId, action, content, current])
         ).toEqual([
-            ["2", "delete", null, "R-553"],
+            // The app did not write the note on the song that is not linked, so it stays.
+            ["2", "keep", null, "R-553"],
             ["3", "create", "R-517 / G-64", null],
             ["4", "none", null, null],
         ]);
         // The items carry their notes for the pages too.
         expect(items.map((item) => item.notes.map(({ id }) => id))).toEqual([["9002"], [], ["9004"]]);
+    });
+
+    test("would delete a note the write log says the app created", async () => {
+        seedAbide();
+        seedWriteLog(db, {
+            payload: { action: "create", content: "R-553" },
+            result: { note: { id: "9002", categoryId: "503", categoryName: "Hymnal", content: "R-553" } },
+        });
+        stubFetchRoutes(routesWithNotes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus } = await getPlanDetail(MORNING, PLAN);
+
+        expect(hymnNoteStatus.kind === "ready" && hymnNoteStatus.items[0]).toMatchObject({
+            itemId: "2",
+            action: "delete",
+            changes: [{ kind: "delete", noteId: "9002", reason: "nothing-to-say" }],
+            keep: [],
+        });
+    });
+
+    test("shows every note as kept when the write log cannot be read", async () => {
+        seedAbide();
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const prepare = db.prepare.bind(db);
+        vi.spyOn(db, "prepare").mockImplementation((sql: string) => {
+            if (sql.includes("FROM write_log")) {
+                throw new Error("no such table: write_log");
+            }
+            return prepare(sql);
+        });
+        stubFetchRoutes(routesWithNotes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus } = await getPlanDetail(MORNING, PLAN);
+
+        expect(hymnNoteStatus.kind === "ready" && hymnNoteStatus.items[0].action).toBe("keep");
+        expect(consoleError).toHaveBeenCalledWith(
+            "Failed to read which item notes the app wrote:",
+            expect.objectContaining({ message: "no such table: write_log" })
+        );
     });
 
     test("follows the settings' separator and category name", async () => {

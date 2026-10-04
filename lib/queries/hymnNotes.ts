@@ -3,15 +3,21 @@ import type { DatabaseSync } from "node:sqlite";
 import { getDb } from "@/lib/db";
 import { findCatalogMatches } from "@/lib/db/catalog";
 import { errorMessage } from "@/lib/db/errors";
-import { recordWrite, type NewWriteLogEntry } from "@/lib/db/writeLog";
+import {
+    findCreatedItemNoteIds,
+    recordWrite,
+    type NewWriteLogEntry,
+} from "@/lib/db/writeLog";
 import type { CatalogMatch, ItemNote, ItemNoteCategory, PlanItem, ServiceType } from "@/lib/domain";
 import {
     findHymnNoteCategory,
     missingCategoryMessage,
     planHymnNoteStatus,
+    songItemNoteIds,
     type HymnNoteAction,
     type HymnNoteChange,
     type HymnNoteDiff,
+    type HymnNoteKeep,
     type HymnNoteStatus,
     type ItemNoteCategoriesRead,
 } from "@/lib/hymnNotes";
@@ -35,7 +41,8 @@ import { getSettings } from "./settings";
  * (`previewHymnNotes`), the sync itself (`syncHymnNotes`), and, for
  * Settings, the category each service type has for them. The diff is
  * `diffHymnNotes`'s (lib/hymnNotes.ts); the writes are lib/pco/writes.ts's,
- * each recorded in the write log.
+ * each recorded in the write log, which also says which notes the app
+ * wrote: the only ones it deletes.
  */
 
 /**
@@ -67,6 +74,28 @@ function pcoSongIdsOf(items: readonly Pick<PlanItem, "itemType" | "songId">[]): 
     ];
 }
 
+/**
+ * The notes on these items' song items that the app wrote itself
+ * (`findCreatedItemNoteIds`), the only ones it deletes, for a page to show
+ * what a sync would do. Never throws: when the write log cannot be read it
+ * logs the error and gives none, which shows every note as kept, never as
+ * deleted. One query, and none when the song items have no notes.
+ */
+export function readAppWrittenNoteIds(
+    items: readonly (Pick<PlanItem, "itemType"> & { notes: readonly ItemNote[] })[]
+): ReadonlySet<string> {
+    const noteIds = songItemNoteIds(items);
+    if (noteIds.length === 0) {
+        return new Set();
+    }
+    try {
+        return findCreatedItemNoteIds(getDb(), noteIds);
+    } catch (error) {
+        console.error("Failed to read which item notes the app wrote:", error);
+        return new Set();
+    }
+}
+
 /** The catalog songs the items' Planning Center songs are linked to, by Planning Center song id. Two queries. */
 function catalogOf(
     db: DatabaseSync,
@@ -78,11 +107,12 @@ function catalogOf(
 /**
  * What a sync of plan `planId`'s hymnal notes would do: the category it
  * writes to, with each song item's diff, or why it cannot (the category is
- * missing, or the categories or the catalog could not be read). Reads the
- * service type, the plan's items and the service type's categories from
+ * missing, or the categories or the database could not be read). Reads
+ * the service type, the plan's items and the service type's categories from
  * Planning Center in parallel (three requests, deduped within a request),
- * then the catalog. A plan or service type that cannot be read throws, as
- * on the plan's pages.
+ * then the catalog and which of the items' notes the app wrote (at most
+ * three queries). A plan or service type that cannot be read throws, as on
+ * the plan's pages.
  */
 export async function previewHymnNotes(
     serviceTypeId: string,
@@ -95,9 +125,12 @@ export async function previewHymnNotes(
     ]);
     const { settings } = getSettings();
     let catalog: Record<string, CatalogMatch> = {};
+    let ownedNoteIds: ReadonlySet<string> = new Set();
     let catalogError: string | null = null;
     try {
-        catalog = catalogOf(getDb(), items);
+        const db = getDb();
+        catalog = catalogOf(db, items);
+        ownedNoteIds = findCreatedItemNoteIds(db, songItemNoteIds(items));
     } catch (error) {
         console.error(
             `Failed to read the catalog links of plan ${serviceTypeId}/${planId}:`,
@@ -112,6 +145,7 @@ export async function previewHymnNotes(
         catalogError,
         categories,
         settings,
+        ownedNoteIds,
     });
 }
 
@@ -150,11 +184,13 @@ export interface HymnNoteSyncItem {
     /**
      * "done": every change was made; "failed": a change failed, and the
      * item's later changes were not tried; "nothing-to-do": none was
-     * needed ("unchanged" or "none").
+     * needed ("unchanged", "keep" or "none").
      */
     outcome: "done" | "failed" | "nothing-to-do";
     /** The changes made, in order. */
     made: HymnNoteChange[];
+    /** The notes it left alone because the app did not write them. */
+    keep: HymnNoteKeep[];
     /** Why it failed, fit to show; null unless it failed. */
     error: string | null;
 }
@@ -166,6 +202,8 @@ export interface HymnNoteSyncCounts {
     deleted: number;
     /** Items that needed nothing. */
     unchanged: number;
+    /** Notes left alone because the app did not write them. */
+    kept: number;
     /** Items with a change that failed. */
     failed: number;
 }
@@ -267,7 +305,7 @@ async function syncItem(
     category: ItemNoteCategory,
     diff: HymnNoteDiff
 ): Promise<HymnNoteSyncItem> {
-    const { itemId, title, sequence, action } = diff;
+    const { itemId, title, sequence, action, keep } = diff;
     const made: HymnNoteChange[] = [];
     const target = `plan ${planId} item ${itemId}`;
     for (const change of diff.changes) {
@@ -283,7 +321,16 @@ async function syncItem(
             );
             const result = writeError(error);
             logWrite(db, { kind: "item-note", target, ok: false, payload, result });
-            return { itemId, title, sequence, action, outcome: "failed", made, error: result.error };
+            return {
+                itemId,
+                title,
+                sequence,
+                action,
+                outcome: "failed",
+                made,
+                keep,
+                error: result.error,
+            };
         }
     }
     return {
@@ -293,14 +340,23 @@ async function syncItem(
         action,
         outcome: diff.changes.length > 0 ? "done" : "nothing-to-do",
         made,
+        keep,
         error: null,
     };
 }
 
-/** The changes made, and the items that failed or needed nothing. */
+/** The changes made, the notes left alone, and the items that failed or needed nothing. */
 function countSync(items: readonly HymnNoteSyncItem[]): HymnNoteSyncCounts {
-    const counts: HymnNoteSyncCounts = { created: 0, updated: 0, deleted: 0, unchanged: 0, failed: 0 };
+    const counts: HymnNoteSyncCounts = {
+        created: 0,
+        updated: 0,
+        deleted: 0,
+        unchanged: 0,
+        kept: 0,
+        failed: 0,
+    };
     for (const item of items) {
+        counts.kept += item.keep.length;
         if (item.outcome === "nothing-to-do") {
             counts.unchanged += 1;
         } else if (item.outcome === "failed") {
@@ -326,9 +382,12 @@ function countSync(items: readonly HymnNoteSyncItem[]): HymnNoteSyncCounts {
  * `fetchPlanItems`, never the request's `cache()`d read, which a page
  * rendered earlier in the request may hold and which would then be handed
  * back to any page rendered after the sync too; and it reads the service
- * type and its categories (three requests in parallel), then the catalog.
- * It recomputes the diff from these, so it writes what is needed now, not
- * what a preview showed. Then it makes the changes one at a time, unpaced
+ * type and its categories (three requests in parallel), then the catalog,
+ * and which of the items' notes the write log says the app wrote: the only
+ * ones it deletes (any other is kept, so a note typed by hand, or one the
+ * log has lost track of, is never deleted). It recomputes the diff from
+ * these, so it writes what is needed now, not what a preview showed. Then
+ * it makes the changes one at a time, unpaced
  * (someone is waiting), recording a `write_log` row (`item-note`) for each,
  * with what it asked for and what came of it or Planning Center's error.
  * An item whose change fails stops there, and the sync goes on to the next
@@ -358,6 +417,7 @@ export async function syncHymnNotes(
         catalogError: null,
         categories,
         settings,
+        ownedNoteIds: findCreatedItemNoteIds(db, songItemNoteIds(items)),
     });
     if (status.kind !== "ready") {
         return { ok: false, kind: status.kind, message: status.message };

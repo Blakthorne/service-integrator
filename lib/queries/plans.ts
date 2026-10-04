@@ -26,7 +26,7 @@ import { groupPlansByDate, sortPlanDates } from "@/lib/plansByDate";
 import { TOP_SUGGESTIONS, buildCatalogIndex, suggestLinks } from "@/lib/reconcile";
 import { planTextSettings, type PlanTextSettings } from "@/lib/settings";
 import { createTtlCache } from "@/lib/ttlCache";
-import { readItemNoteCategories } from "./hymnNotes";
+import { readAppWrittenNoteIds, readItemNoteCategories } from "./hymnNotes";
 import { getScheduleSelections } from "./selections";
 import { getSettings } from "./settings";
 
@@ -229,8 +229,9 @@ function readPlanSelections(
 /**
  * Load a plan, its service type and its items, and the service type's item
  * note categories, in parallel (four requests); then find the songs'
- * catalog links and suggestions, the plan's saved choices and the settings
- * in the database (at most nine queries), and compare the hymnal notes. PCO
+ * catalog links and suggestions, the plan's saved choices, the settings and
+ * which of its notes the app wrote in the database (at most ten queries),
+ * and compare the hymnal notes. PCO
  * errors in the plan, its service type or its items pass through (wrap the
  * call in orNotFound to turn a missing plan into a 404). Nothing else does:
  * categories or a database that cannot be read leave the plan without what
@@ -260,6 +261,7 @@ export const getPlanDetail = cache(
                 catalogError: links.catalogError,
                 categories,
                 settings,
+                ownedNoteIds: readAppWrittenNoteIds(items),
             }),
         };
     }

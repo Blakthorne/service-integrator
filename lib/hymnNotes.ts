@@ -11,9 +11,10 @@ import type { AppSettings, HymnNoteSettings } from "./settings";
  * lib/queries/hymnNotes.ts reads the plan and writes what `diffHymnNotes`
  * says, and the pages show the same diff.
  *
- * Notes in other categories are never touched. The Schedule tab's choices
- * play no part: the notes are for the musicians, the choices for the
- * bulletin text.
+ * Notes in other categories are never touched, and of the hymnal notes the
+ * app deletes only those it wrote itself: one typed by hand is never
+ * deleted. The Schedule tab's choices play no part: the notes are for the
+ * musicians, the choices for the bulletin text.
  */
 
 /** What a hymnal note is made from: the linked catalog song's tune and entries, in book order. */
@@ -109,21 +110,41 @@ export function hymnNoteItems(
 }
 
 /**
- * What a song item's hymnal note needs:
+ * What a song item's hymnal note needs. The app updates any hymnal note on
+ * a song with numbers, which is its job, but deletes only the notes it
+ * wrote itself (see `diffHymnNotes`): any other note it would delete is
+ * left alone, so a note typed by hand never goes.
  *
  * - "create": it has none, and its song has numbers;
  * - "update": its note says something else;
  * - "unchanged": its note says what it should;
- * - "delete": it has a note, but its song has nothing to say (not linked,
- *   or in no book), so every note in the category goes;
- * - "dedupe": its first note says what it should, but it has more in the
- *   category (Planning Center allows that): the rest go;
+ * - "delete": its song has nothing to say (not linked, or in no book), and
+ *   it has notes the app wrote: they go;
+ * - "dedupe": its note says what it should, and it has more the app wrote
+ *   (Planning Center allows several in one category): they go;
+ * - "keep": its song has nothing to say, and it has notes, none of them
+ *   the app's: they are left alone;
  * - "none": it has no note and its song has nothing to say.
  *
- * An item with extra notes whose first note also says something else is
- * "update", and its changes delete the extras too.
+ * An item whose note says something else is "update" even when it has
+ * extras, and its changes delete the app's extras too. Whatever the action,
+ * the notes left alone are listed in the diff's `keep`: an item can be
+ * "unchanged" with an extra note someone typed.
  */
-export type HymnNoteAction = "create" | "update" | "unchanged" | "delete" | "dedupe" | "none";
+export type HymnNoteAction =
+    | "create"
+    | "update"
+    | "unchanged"
+    | "delete"
+    | "dedupe"
+    | "keep"
+    | "none";
+
+/**
+ * Why a hymnal note would go: "nothing-to-say", its song has no numbers;
+ * "duplicate", it is an extra note in the category.
+ */
+export type HymnNoteRemovalReason = "nothing-to-say" | "duplicate";
 
 /** One write that brings an item's hymnal note in step. */
 export type HymnNoteChange =
@@ -134,9 +155,22 @@ export type HymnNoteChange =
           noteId: string;
           /** What the note says, for the preview and the write log. */
           content: string;
-          /** "nothing-to-say": the song has no numbers; "duplicate": an extra note in the category. */
-          reason: "nothing-to-say" | "duplicate";
+          reason: HymnNoteRemovalReason;
       };
+
+/**
+ * A hymnal note the app leaves alone: it would go (`reason`), but the app
+ * did not write it, and deletes only its own notes. The preview shows it as
+ * left alone (not written by the app).
+ */
+export interface HymnNoteKeep {
+    kind: "keep";
+    noteId: string;
+    /** What the note says. */
+    content: string;
+    /** Why it would otherwise go. */
+    reason: HymnNoteRemovalReason;
+}
 
 /** A song item's hymnal note: what it says, what it should say, and the writes between. */
 export interface HymnNoteDiff {
@@ -146,15 +180,21 @@ export interface HymnNoteDiff {
     sequence: number;
     /** What its note should say; null when its song has nothing to say. */
     content: string | null;
-    /** What its note says now (the first in the category, the one kept); null when it has none. */
+    /**
+     * What its note says now: the note brought in step when its song has
+     * numbers (see `diffHymnNotes`), else its first in the category; null
+     * when it has none.
+     */
     current: string | null;
     action: HymnNoteAction;
     /**
      * The writes that bring it in step, in the order to make them: create
-     * or update the note kept, then delete the others. Empty for
-     * "unchanged" and "none".
+     * or update the note brought in step, then delete the app's others.
+     * Empty for "unchanged", "keep" and "none".
      */
     changes: HymnNoteChange[];
+    /** Its notes in the category that would go but are left alone, since the app did not write them. */
+    keep: HymnNoteKeep[];
 }
 
 /** True when a note's content says `content`, spaces around either aside. */
@@ -167,61 +207,98 @@ function says(note: ItemNote, content: string): boolean {
  * `HymnNoteAction`), in sequence order. The category is matched by name, as
  * `sameCategoryName` does; notes in other categories are never touched,
  * and items that are not songs are left out. What a note should say comes
- * from `formatHymnNote`. When an item has several notes in the category,
- * the first (in Planning Center's order) is kept and the rest deleted.
+ * from `formatHymnNote`.
+ *
+ * `ownedNoteIds` are the notes the app wrote itself (its successful creates,
+ * from the write log): the only ones it deletes. Every other note it would
+ * delete goes in `keep` instead. So a write log that has lost history (a
+ * restored database, say) can only keep a note that could have gone, never
+ * delete one.
+ *
+ * Of an item's notes in the category, the one brought in step is the first
+ * that already says what it should, else the first the app wrote, else the
+ * first (in Planning Center's order): a note typed by hand is changed only
+ * when the app has no note of its own there. Each other note is deleted
+ * when the app wrote it, and kept when it did not.
  */
 export function diffHymnNotes(
     items: readonly HymnNoteItem[],
     categoryName: string,
-    settings: HymnNoteSettings
+    settings: HymnNoteSettings,
+    ownedNoteIds: ReadonlySet<string>
 ): HymnNoteDiff[] {
     return items
         .filter((item) => item.itemType === "song")
         .sort((a, b) => a.sequence - b.sequence)
         .map((item) => {
             const content = formatHymnNote(item.match, settings);
-            const [kept, ...extras] = item.notes.filter((note) =>
+            const notes = item.notes.filter((note) =>
                 sameCategoryName(note.categoryName, categoryName)
             );
+            const kept =
+                content === null
+                    ? undefined
+                    : (notes.find((note) => says(note, content)) ??
+                      notes.find((note) => ownedNoteIds.has(note.id)) ??
+                      notes[0]);
+            const reason: HymnNoteRemovalReason =
+                content === null ? "nothing-to-say" : "duplicate";
+            const deletes: HymnNoteChange[] = [];
+            const keep: HymnNoteKeep[] = [];
+            for (const note of notes) {
+                if (note === kept) {
+                    continue;
+                }
+                const { id: noteId, content: noteContent } = note;
+                if (ownedNoteIds.has(noteId)) {
+                    deletes.push({ kind: "delete", noteId, content: noteContent, reason });
+                } else {
+                    keep.push({ kind: "keep", noteId, content: noteContent, reason });
+                }
+            }
             const diff = (action: HymnNoteAction, changes: HymnNoteChange[]): HymnNoteDiff => ({
                 itemId: item.id,
                 title: item.title,
                 sequence: item.sequence,
                 content,
-                current: kept?.content ?? null,
+                current: (kept ?? notes[0])?.content ?? null,
                 action,
                 changes,
+                keep,
             });
             if (content === null) {
-                return kept === undefined
-                    ? diff("none", [])
-                    : diff(
-                          "delete",
-                          [kept, ...extras].map((note) => ({
-                              kind: "delete",
-                              noteId: note.id,
-                              content: note.content,
-                              reason: "nothing-to-say",
-                          }))
-                      );
+                if (notes.length === 0) {
+                    return diff("none", []);
+                }
+                return diff(deletes.length > 0 ? "delete" : "keep", deletes);
             }
             if (kept === undefined) {
                 return diff("create", [{ kind: "create", content }]);
             }
-            const duplicates: HymnNoteChange[] = extras.map((note) => ({
-                kind: "delete",
-                noteId: note.id,
-                content: note.content,
-                reason: "duplicate",
-            }));
             if (says(kept, content)) {
-                return diff(duplicates.length > 0 ? "dedupe" : "unchanged", duplicates);
+                return diff(deletes.length > 0 ? "dedupe" : "unchanged", deletes);
             }
             return diff("update", [
                 { kind: "update", noteId: kept.id, from: kept.content, content },
-                ...duplicates,
+                ...deletes,
             ]);
         });
+}
+
+/**
+ * The ids of the notes on song items, in every category, each once: the
+ * notes whose authorship to look up in the write log.
+ */
+export function songItemNoteIds(
+    items: readonly (Pick<PlanItem, "itemType"> & { notes: readonly ItemNote[] })[]
+): string[] {
+    return [
+        ...new Set(
+            items.flatMap((item) =>
+                item.itemType === "song" ? item.notes.map((note) => note.id) : []
+            )
+        ),
+    ];
 }
 
 /** How many song items need each action. */
@@ -235,6 +312,7 @@ export function countHymnNoteActions(diffs: readonly HymnNoteDiff[]): HymnNoteCo
         unchanged: 0,
         delete: 0,
         dedupe: 0,
+        keep: 0,
         none: 0,
     };
     for (const { action } of diffs) {
@@ -243,16 +321,17 @@ export function countHymnNoteActions(diffs: readonly HymnNoteDiff[]): HymnNoteCo
     return counts;
 }
 
-/** The items whose notes need a write: every action but "unchanged" and "none". */
+/** The items whose notes need a write: every action but "unchanged", "keep" and "none". */
 export function hymnNotesToSync(diffs: readonly HymnNoteDiff[]): HymnNoteDiff[] {
     return diffs.filter((diff) => diff.changes.length > 0);
 }
 
 /**
  * What a song card says of its hymnal note: "in-sync" (it says what it
- * should), "differs" (it says something else, there are extras, or it
- * should go), or "missing" (it should exist and does not). Null when there
- * is nothing to say and no note.
+ * should), "differs" (it says something else, there are extras of the
+ * app's, or it should go), or "missing" (it should exist and does not).
+ * Null when the app has nothing to say and nothing to do: no note, or only
+ * notes it leaves alone.
  */
 export type HymnNoteState = "in-sync" | "differs" | "missing";
 
@@ -266,6 +345,7 @@ export function hymnNoteState(diff: Pick<HymnNoteDiff, "action">): HymnNoteState
         case "dedupe":
         case "delete":
             return "differs";
+        case "keep":
         case "none":
             return null;
     }
@@ -310,6 +390,11 @@ export interface PlanHymnNoteInput {
     catalogError: string | null;
     categories: ItemNoteCategoriesRead;
     settings: HymnNoteSettings & Pick<AppSettings, "hymnNoteCategoryName">;
+    /**
+     * The notes on the items that the app wrote itself (see `diffHymnNotes`),
+     * the only ones it deletes; when the write log cannot say, none.
+     */
+    ownedNoteIds: ReadonlySet<string>;
 }
 
 /** A reason that ends one sentence, for another to follow. */
@@ -345,6 +430,7 @@ export function planHymnNoteStatus({
     catalogError,
     categories,
     settings,
+    ownedNoteIds,
 }: PlanHymnNoteInput): HymnNoteStatus {
     const categoryName = settings.hymnNoteCategoryName;
     if (!categories.ok) {
@@ -372,7 +458,7 @@ export function planHymnNoteStatus({
     return {
         kind: "ready",
         category,
-        items: diffHymnNotes(hymnNoteItems(items, catalog), category.name, settings),
+        items: diffHymnNotes(hymnNoteItems(items, catalog), category.name, settings, ownedNoteIds),
     };
 }
 

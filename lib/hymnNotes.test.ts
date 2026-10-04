@@ -13,6 +13,7 @@ import {
     missingCategoryMessage,
     planHymnNoteStatus,
     sameCategoryName,
+    songItemNoteIds,
     type HymnNoteAction,
     type HymnNoteItem,
     type HymnNoteMatch,
@@ -51,9 +52,24 @@ function songItem(
     return { id, title: `Song ${id}`, itemType: "song", sequence, match, notes };
 }
 
-/** The one item's diff. */
-function diffOf(item: HymnNoteItem, settings = SETTINGS, categoryName = "Hymnal") {
-    const [diff] = diffHymnNotes([item], categoryName, settings);
+/** The ids of these notes: notes the app wrote, as the write log says. */
+function written(...notes: ItemNote[]): Set<string> {
+    return new Set(notes.map(({ id }) => id));
+}
+
+/**
+ * The one item's diff, with `owned` the notes the app wrote (none by
+ * default, as when the write log has no record of them).
+ */
+function diffOf(
+    item: HymnNoteItem,
+    {
+        owned = new Set<string>(),
+        settings = SETTINGS,
+        categoryName = "Hymnal",
+    }: { owned?: ReadonlySet<string>; settings?: HymnNoteSettings; categoryName?: string } = {}
+) {
+    const [diff] = diffHymnNotes([item], categoryName, settings, owned);
     return diff;
 }
 
@@ -125,16 +141,20 @@ describe("diffHymnNotes", () => {
             current: null,
             action: "create",
             changes: [{ kind: "create", content: "R-396 / G-317" }],
+            keep: [],
         });
     });
 
-    test("update: a hymnal note that says something else", () => {
-        const stale = note("R-12");
-        expect(diffOf(songItem("1", ST_ANNE, [stale]))).toMatchObject({
-            current: "R-12",
-            action: "update",
-            changes: [{ kind: "update", noteId: stale.id, from: "R-12", content: "R-396 / G-317" }],
-        });
+    test("update: any hymnal note that says something else, the app's or not", () => {
+        for (const owned of [true, false]) {
+            const stale = note("R-12");
+            expect(diffOf(songItem("1", ST_ANNE, [stale]), { owned: owned ? written(stale) : undefined })).toMatchObject({
+                current: "R-12",
+                action: "update",
+                changes: [{ kind: "update", noteId: stale.id, from: "R-12", content: "R-396 / G-317" }],
+                keep: [],
+            });
+        }
     });
 
     test("unchanged: a hymnal note that says what it should, spaces around it aside", () => {
@@ -142,54 +162,147 @@ describe("diffHymnNotes", () => {
             expect(diffOf(songItem("1", ST_ANNE, [note(content)]))).toMatchObject({
                 action: "unchanged",
                 changes: [],
+                keep: [],
             });
         }
     });
 
-    test("delete: a hymnal note on a song that is not linked, or is in no book", () => {
-        for (const match of [null, NO_BOOK]) {
-            const old = note("R-396");
-            expect(diffOf(songItem("1", match, [old]))).toEqual({
-                itemId: "1",
-                title: "Song 1",
-                sequence: 1,
-                content: null,
-                current: "R-396",
+    describe("a hymnal note on a song with nothing to say (not linked, or in no book)", () => {
+        test("delete: the app's note goes", () => {
+            for (const match of [null, NO_BOOK]) {
+                const old = note("R-396");
+                expect(diffOf(songItem("1", match, [old]), { owned: written(old) })).toEqual({
+                    itemId: "1",
+                    title: "Song 1",
+                    sequence: 1,
+                    content: null,
+                    current: "R-396",
+                    action: "delete",
+                    changes: [{ kind: "delete", noteId: old.id, content: "R-396", reason: "nothing-to-say" }],
+                    keep: [],
+                });
+            }
+        });
+
+        test("keep: a note the app did not write is left alone", () => {
+            for (const match of [null, NO_BOOK]) {
+                const typed = note("R-396 (verse 3 only)");
+                expect(diffOf(songItem("1", match, [typed]))).toEqual({
+                    itemId: "1",
+                    title: "Song 1",
+                    sequence: 1,
+                    content: null,
+                    current: "R-396 (verse 3 only)",
+                    action: "keep",
+                    changes: [],
+                    keep: [
+                        {
+                            kind: "keep",
+                            noteId: typed.id,
+                            content: "R-396 (verse 3 only)",
+                            reason: "nothing-to-say",
+                        },
+                    ],
+                });
+            }
+        });
+
+        test("of several, the app's go and the others stay", () => {
+            const [typed, ours, more] = [note("R-1"), note("R-2"), note("R-3")];
+            expect(diffOf(songItem("1", null, [typed, ours, more]), { owned: written(ours, more) })).toMatchObject({
                 action: "delete",
-                changes: [{ kind: "delete", noteId: old.id, content: "R-396", reason: "nothing-to-say" }],
+                changes: [
+                    { kind: "delete", noteId: ours.id, content: "R-2", reason: "nothing-to-say" },
+                    { kind: "delete", noteId: more.id, content: "R-3", reason: "nothing-to-say" },
+                ],
+                keep: [{ kind: "keep", noteId: typed.id, content: "R-1", reason: "nothing-to-say" }],
             });
-        }
+        });
     });
 
-    test("delete removes every hymnal note of an item with nothing to say", () => {
-        const [first, second] = [note("R-1"), note("R-2")];
-        expect(diffOf(songItem("1", null, [first, second])).changes).toEqual([
-            { kind: "delete", noteId: first.id, content: "R-1", reason: "nothing-to-say" },
-            { kind: "delete", noteId: second.id, content: "R-2", reason: "nothing-to-say" },
+    describe("extra hymnal notes on one item", () => {
+        test("dedupe: the app's extras go", () => {
+            const [kept, extra, another] = [note("R-396 / G-317"), note("R-12"), note("R-396 / G-317")];
+            expect(
+                diffOf(songItem("1", ST_ANNE, [kept, extra, another]), { owned: written(kept, extra, another) })
+            ).toMatchObject({
+                current: "R-396 / G-317",
+                action: "dedupe",
+                changes: [
+                    { kind: "delete", noteId: extra.id, content: "R-12", reason: "duplicate" },
+                    { kind: "delete", noteId: another.id, content: "R-396 / G-317", reason: "duplicate" },
+                ],
+                keep: [],
+            });
+        });
+
+        test("an extra the app did not write is left alone, so the item is unchanged", () => {
+            const [ours, typed] = [note("R-396 / G-317"), note("Organ: intro only")];
+            expect(diffOf(songItem("1", ST_ANNE, [ours, typed]), { owned: written(ours) })).toMatchObject({
+                action: "unchanged",
+                changes: [],
+                keep: [{ kind: "keep", noteId: typed.id, content: "Organ: intro only", reason: "duplicate" }],
+            });
+        });
+
+        test("update and dedupe: the note is updated, then the app's extras deleted and the others kept", () => {
+            const [first, ours, typed] = [note("R-12"), note("R-13"), note("R-14")];
+            expect(diffOf(songItem("1", ST_ANNE, [first, ours, typed]), { owned: written(first, ours) })).toMatchObject({
+                action: "update",
+                changes: [
+                    { kind: "update", noteId: first.id, from: "R-12", content: "R-396 / G-317" },
+                    { kind: "delete", noteId: ours.id, reason: "duplicate" },
+                ],
+                keep: [{ kind: "keep", noteId: typed.id, reason: "duplicate" }],
+            });
+        });
+    });
+
+    describe("the note brought in step", () => {
+        test("is the first that already says what it should, so nothing is rewritten", () => {
+            const [stale, right] = [note("R-1"), note("R-396 / G-317")];
+            expect(diffOf(songItem("1", ST_ANNE, [stale, right]), { owned: written(stale) })).toMatchObject({
+                current: "R-396 / G-317",
+                action: "dedupe",
+                changes: [{ kind: "delete", noteId: stale.id, content: "R-1", reason: "duplicate" }],
+                keep: [],
+            });
+        });
+
+        test("else the app's own, so a note typed by hand is not rewritten", () => {
+            const [typed, ours] = [note("R-5 (verse 3 only)"), note("R-1")];
+            expect(diffOf(songItem("1", ST_ANNE, [typed, ours]), { owned: written(ours) })).toMatchObject({
+                current: "R-1",
+                action: "update",
+                changes: [{ kind: "update", noteId: ours.id, from: "R-1", content: "R-396 / G-317" }],
+                keep: [{ kind: "keep", noteId: typed.id, reason: "duplicate" }],
+            });
+        });
+
+        test("else the first, which the app takes over", () => {
+            const [first, second] = [note("R-5"), note("R-6")];
+            expect(diffOf(songItem("1", ST_ANNE, [first, second]))).toMatchObject({
+                current: "R-5",
+                action: "update",
+                changes: [{ kind: "update", noteId: first.id, from: "R-5", content: "R-396 / G-317" }],
+                keep: [{ kind: "keep", noteId: second.id, reason: "duplicate" }],
+            });
+        });
+    });
+
+    test("a write log that has lost track of the app's notes keeps them all, never deletes one", () => {
+        // As after restoring an older database: the notes are the app's, but
+        // the log does not say so.
+        const items = [
+            songItem("1", null, [note("R-1")]),
+            songItem("2", ST_ANNE, [note("R-396 / G-317"), note("R-396 / G-317")]),
+        ];
+        const diffs = diffHymnNotes(items, "Hymnal", SETTINGS, new Set());
+        expect(diffs.flatMap(({ changes }) => changes)).toEqual([]);
+        expect(diffs.map(({ action, keep }) => [action, keep.length])).toEqual([
+            ["keep", 1],
+            ["unchanged", 1],
         ]);
-    });
-
-    test("dedupe: keeps the first hymnal note and deletes the rest", () => {
-        const [kept, extra, another] = [note("R-396 / G-317"), note("R-12"), note("R-396 / G-317")];
-        expect(diffOf(songItem("1", ST_ANNE, [kept, extra, another]))).toMatchObject({
-            current: "R-396 / G-317",
-            action: "dedupe",
-            changes: [
-                { kind: "delete", noteId: extra.id, content: "R-12", reason: "duplicate" },
-                { kind: "delete", noteId: another.id, content: "R-396 / G-317", reason: "duplicate" },
-            ],
-        });
-    });
-
-    test("update and dedupe: the first note is updated, then the extras deleted", () => {
-        const [kept, extra] = [note("R-12"), note("R-396 / G-317")];
-        expect(diffOf(songItem("1", ST_ANNE, [kept, extra]))).toMatchObject({
-            action: "update",
-            changes: [
-                { kind: "update", noteId: kept.id, from: "R-12", content: "R-396 / G-317" },
-                { kind: "delete", noteId: extra.id, reason: "duplicate" },
-            ],
-        });
     });
 
     test("none: nothing to say and no hymnal note", () => {
@@ -199,36 +312,44 @@ describe("diffHymnNotes", () => {
                 current: null,
                 action: "none",
                 changes: [],
+                keep: [],
             });
         }
     });
 
-    test("never touches notes in other categories", () => {
+    test("never touches notes in other categories, even ones the app wrote", () => {
         const vocals = note("Women on verse 2", "Vocals", "502");
         const band = note("R-396 / G-317", "Band", "503");
+        const owned = written(vocals, band);
         // The Band note says the numbers, but it is not a hymnal note.
-        expect(diffOf(songItem("1", ST_ANNE, [vocals, band]))).toMatchObject({
+        expect(diffOf(songItem("1", ST_ANNE, [vocals, band]), { owned })).toMatchObject({
             current: null,
             action: "create",
             changes: [{ kind: "create", content: "R-396 / G-317" }],
+            keep: [],
         });
-        expect(diffOf(songItem("2", null, [vocals]))).toMatchObject({ action: "none", changes: [] });
+        expect(diffOf(songItem("2", null, [vocals]), { owned })).toMatchObject({
+            action: "none",
+            changes: [],
+            keep: [],
+        });
         const hymnal = note("R-12");
-        const changes = diffOf(songItem("3", null, [vocals, hymnal, band])).changes;
-        expect(changes.map((change) => change.kind === "delete" && change.noteId)).toEqual([hymnal.id]);
+        const diff = diffOf(songItem("3", null, [vocals, hymnal, band]), { owned: written(vocals, hymnal, band) });
+        expect(diff.changes.map((change) => change.kind === "delete" && change.noteId)).toEqual([hymnal.id]);
+        expect(diff.keep).toEqual([]);
     });
 
     test("matches the category's name without regard to case or whitespace", () => {
         const odd = note("R-396 / G-317", "  hymnal ");
-        expect(diffOf(songItem("1", ST_ANNE, [odd]), SETTINGS, "Hymnal").action).toBe("unchanged");
+        expect(diffOf(songItem("1", ST_ANNE, [odd]), { categoryName: "Hymnal" }).action).toBe("unchanged");
         const other = note("R-396 / G-317", "Hymnal");
-        expect(diffOf(songItem("1", ST_ANNE, [other]), SETTINGS, " HYMNAL").action).toBe("unchanged");
-        expect(diffOf(songItem("1", ST_ANNE, [other]), SETTINGS, "Hymn Numbers").action).toBe("create");
+        expect(diffOf(songItem("1", ST_ANNE, [other]), { categoryName: " HYMNAL" }).action).toBe("unchanged");
+        expect(diffOf(songItem("1", ST_ANNE, [other]), { categoryName: "Hymn Numbers" }).action).toBe("create");
     });
 
     test("follows the settings: the tune turned on updates a note of numbers only", () => {
         const numbersOnly = note("R-396 / G-317");
-        expect(diffOf(songItem("1", ST_ANNE, [numbersOnly]), WITH_TUNE)).toMatchObject({
+        expect(diffOf(songItem("1", ST_ANNE, [numbersOnly]), { settings: WITH_TUNE })).toMatchObject({
             content: "R-396 / G-317 · ST. ANNE",
             action: "update",
         });
@@ -240,14 +361,31 @@ describe("diffHymnNotes", () => {
             { ...songItem("2", null, [note("R-1")], 2), itemType: "header" },
             songItem("1", null, [], 1),
         ];
-        expect(diffHymnNotes(items, "Hymnal", SETTINGS).map(({ itemId }) => itemId)).toEqual(["1", "3"]);
+        expect(diffHymnNotes(items, "Hymnal", SETTINGS, new Set()).map(({ itemId }) => itemId)).toEqual([
+            "1",
+            "3",
+        ]);
     });
 
     test("does not change the items it is given", () => {
-        const items = [songItem("1", ST_ANNE, [note("R-12"), note("R-13")])];
+        const notes = [note("R-12"), note("R-13")];
+        const items = [songItem("1", ST_ANNE, notes)];
         const before = JSON.stringify(items);
-        diffHymnNotes(items, "Hymnal", SETTINGS);
+        diffHymnNotes(items, "Hymnal", SETTINGS, written(...notes));
         expect(JSON.stringify(items)).toBe(before);
+    });
+});
+
+describe("songItemNoteIds", () => {
+    test("lists the notes of song items, every category, each once", () => {
+        const [a, b, c] = [note("R-1"), note("Solo", "Vocals"), note("R-2")];
+        const items = [
+            { itemType: "song", notes: [a, b] },
+            { itemType: "header", notes: [c] },
+            { itemType: "song", notes: [a] },
+            { itemType: "song", notes: [] },
+        ];
+        expect(songItemNoteIds(items)).toEqual([a.id, b.id]);
     });
 });
 
@@ -267,18 +405,23 @@ describe("hymnNoteItems", () => {
 });
 
 describe("summaries", () => {
+    const ours = note("R-1");
+    const extra = note("R-1");
+    const typed = note("R-5 (verse 3 only)");
     const diffs = diffHymnNotes(
         [
             songItem("1", ST_ANNE),
             songItem("2", ST_ANNE, [note("R-1")]),
             songItem("3", ST_ANNE, [note("R-396 / G-317")]),
-            songItem("4", null, [note("R-1")]),
-            songItem("5", ST_ANNE, [note("R-396 / G-317"), note("R-1")]),
+            songItem("4", null, [ours]),
+            songItem("5", ST_ANNE, [note("R-396 / G-317"), extra]),
             songItem("6", null),
             songItem("7", ST_ANNE, [note("R-396 / G-317")]),
+            songItem("8", null, [typed]),
         ],
         "Hymnal",
-        SETTINGS
+        SETTINGS,
+        written(ours, extra)
     );
 
     test("countHymnNoteActions counts each action", () => {
@@ -288,6 +431,7 @@ describe("summaries", () => {
             unchanged: 2,
             delete: 1,
             dedupe: 1,
+            keep: 1,
             none: 1,
         });
         expect(countHymnNoteActions([])).toEqual({
@@ -296,6 +440,7 @@ describe("summaries", () => {
             unchanged: 0,
             delete: 0,
             dedupe: 0,
+            keep: 0,
             none: 0,
         });
     });
@@ -311,6 +456,7 @@ describe("summaries", () => {
             unchanged: "in-sync",
             delete: "differs",
             dedupe: "differs",
+            keep: null,
             none: null,
         };
         for (const [action, state] of Object.entries(states)) {
@@ -331,6 +477,7 @@ describe("planHymnNoteStatus", () => {
         catalogError: null,
         categories: { ok: true, categories: [{ id: "501", name: "Band" }, hymnal] },
         settings: DEFAULT_SETTINGS,
+        ownedNoteIds: new Set(),
     };
 
     test("ready: the category, found by name, and each song item's diff", () => {
@@ -346,9 +493,21 @@ describe("planHymnNoteStatus", () => {
                     current: null,
                     action: "create",
                     changes: [{ kind: "create", content: "R-396 / G-317" }],
+                    keep: [],
                 },
             ],
         });
+    });
+
+    test("deletes only the notes the app wrote", () => {
+        const typed = note("R-1");
+        const ours = note("R-2");
+        const items = [
+            { id: "3", title: "Not Linked", itemType: "song", sequence: 3, songId: "99", notes: [typed] },
+            { id: "4", title: "Not Linked Either", itemType: "song", sequence: 4, songId: null, notes: [ours] },
+        ];
+        const status = planHymnNoteStatus({ ...input, items, ownedNoteIds: written(ours) });
+        expect(status.kind === "ready" && status.items.map(({ action }) => action)).toEqual(["keep", "delete"]);
     });
 
     test("finds the category the settings name, without regard to case", () => {

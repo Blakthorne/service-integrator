@@ -107,3 +107,31 @@ export function recentWrites(db: DatabaseSync, limit = 20): WriteLogEntry[] {
         .all(...WRITE_LOG_KINDS, limit)
         .map(toWriteLogEntry);
 }
+
+/**
+ * Which of `noteIds` are item notes the app created: each has a successful
+ * `item-note` write in the log whose payload's action is "create" and
+ * whose result is the note with that id (what lib/queries/hymnNotes.ts
+ * records). These are the only notes the app deletes. A create that failed,
+ * timed out, or came back without its note counts for nothing, so a note
+ * the log does not vouch for is kept. One query, and none for no ids.
+ */
+export function findCreatedItemNoteIds(
+    db: DatabaseSync,
+    noteIds: readonly string[]
+): Set<string> {
+    if (noteIds.length === 0) {
+        return new Set();
+    }
+    const rows = db
+        .prepare(
+            `SELECT DISTINCT json_extract(result, '$.note.id') AS note_id
+             FROM write_log
+             WHERE kind = 'item-note'
+               AND ok = 1
+               AND json_extract(payload, '$.action') = 'create'
+               AND json_extract(result, '$.note.id') IN (SELECT value FROM json_each(?))`
+        )
+        .all(JSON.stringify([...new Set(noteIds)]));
+    return new Set(rows.map((row) => String(row.note_id)));
+}

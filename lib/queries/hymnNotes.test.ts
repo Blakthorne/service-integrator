@@ -8,6 +8,7 @@ import {
     seedSetting,
     seedSong,
     seedTune,
+    seedWriteLog,
 } from "@/lib/db/testing";
 import { recentWrites } from "@/lib/db/writeLog";
 import { InvalidPcoIdError } from "@/lib/pco";
@@ -140,6 +141,39 @@ function writesSent(fetchMock: ReturnType<typeof stubFetchRoutes>) {
     return calledRequests(fetchMock).filter(({ method }) => method !== "GET");
 }
 
+/** The notes an earlier sync wrote: item 3's (its song has since lost its link) and item 4's two. */
+const APP_NOTES = ["9003", "9004", "9005"];
+
+/** Record in the write log that the app created these notes, as a sync does. */
+function seedAppNotes(...noteIds: string[]): void {
+    for (const noteId of noteIds) {
+        seedWriteLog(db, {
+            target: `plan ${PLAN} item 1`,
+            payload: {
+                serviceTypeId: ST,
+                planId: PLAN,
+                itemId: "1",
+                action: "create",
+                categoryId: HYMNAL,
+                content: "R-1",
+            },
+            result: { note: { id: noteId, categoryId: HYMNAL, categoryName: "Hymnal", content: "R-1" } },
+        });
+    }
+}
+
+/** The id of the write log's latest row, or 0. */
+function lastWriteId(): number {
+    return recentWrites(db, 1)[0]?.id ?? 0;
+}
+
+/** The write log's rows after row `mark`, oldest first. */
+function writesAfter(mark: number) {
+    return recentWrites(db, 1000)
+        .filter(({ id }) => id > mark)
+        .reverse();
+}
+
 let db: DatabaseSync;
 
 beforeEach(() => {
@@ -177,6 +211,8 @@ afterEach(() => {
 
 describe("previewHymnNotes", () => {
     test("gives the category and what each song item's note needs, writing nothing", async () => {
+        seedAppNotes(...APP_NOTES);
+        const mark = lastWriteId();
         const fetchMock = stubFetchRoutes(readRoutes());
 
         const status = await previewHymnNotes(ST, PLAN);
@@ -196,7 +232,23 @@ describe("previewHymnNotes", () => {
             [urls.serviceType(), urls.items, urls.categories()].sort()
         );
         expect(writesSent(fetchMock)).toEqual([]);
-        expect(recentWrites(db)).toEqual([]);
+        expect(writesAfter(mark)).toEqual([]);
+    });
+
+    test("shows the hymnal notes it would leave alone, which the app did not write", async () => {
+        stubFetchRoutes(readRoutes());
+
+        const status = await previewHymnNotes(ST, PLAN);
+
+        expect(
+            status.kind === "ready" && status.items.map(({ itemId, action, changes, keep }) => [itemId, action, changes.length, keep])
+        ).toEqual([
+            ["1", "create", 1, []],
+            ["2", "update", 1, []],
+            ["3", "keep", 0, [{ kind: "keep", noteId: "9003", content: "R-5", reason: "nothing-to-say" }]],
+            ["4", "unchanged", 0, [{ kind: "keep", noteId: "9005", content: "R-396", reason: "duplicate" }]],
+            ["5", "unchanged", 0, []],
+        ]);
     });
 
     test("follows the settings: the category's name and whether the note names the tune", async () => {
@@ -267,6 +319,7 @@ describe("previewHymnNotes", () => {
 
 describe("syncHymnNotes", () => {
     test("makes each item's changes in order, one at a time, unpaced", async () => {
+        seedAppNotes(...APP_NOTES);
         const pacer = stubPcoPacer();
         const acquire = vi.spyOn(pacer, "acquire");
         const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
@@ -296,7 +349,7 @@ describe("syncHymnNotes", () => {
         expect(result).toMatchObject({
             ok: true,
             category: { id: HYMNAL, name: "Hymnal" },
-            counts: { created: 1, updated: 1, deleted: 2, unchanged: 1, failed: 0 },
+            counts: { created: 1, updated: 1, deleted: 2, unchanged: 1, kept: 0, failed: 0 },
         });
         expect(
             result.ok && result.items.map(({ itemId, action, outcome, made, error }) => [itemId, action, outcome, made.length, error])
@@ -310,15 +363,15 @@ describe("syncHymnNotes", () => {
     });
 
     test("records a write_log row for each change, with what it asked for and what came of it", async () => {
+        seedAppNotes(...APP_NOTES);
+        const mark = lastWriteId();
         stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
 
         await syncHymnNotes(ST, PLAN);
 
         const ids = { serviceTypeId: ST, planId: PLAN };
         expect(
-            recentWrites(db)
-                .reverse()
-                .map(({ kind, target, ok, payload, result }) => ({ kind, target, ok, payload, result }))
+            writesAfter(mark).map(({ kind, target, ok, payload, result }) => ({ kind, target, ok, payload, result }))
         ).toEqual([
             {
                 kind: "item-note",
@@ -368,6 +421,7 @@ describe("syncHymnNotes", () => {
     });
 
     test("reads the items afresh and writes what is needed then, not what a preview showed", async () => {
+        seedAppNotes(...APP_NOTES);
         let reads = 0;
         const fetchMock = stubFetchRoutes({
             ...readRoutes(),
@@ -412,6 +466,8 @@ describe("syncHymnNotes", () => {
     });
 
     test("goes on past an item whose change fails, and logs Planning Center's reasons", async () => {
+        seedAppNotes(...APP_NOTES);
+        const mark = lastWriteId();
         vi.spyOn(console, "error").mockImplementation(() => {});
         const fetchMock = stubFetchRoutes({
             ...readRoutes(),
@@ -437,7 +493,7 @@ describe("syncHymnNotes", () => {
         expect(writesSent(fetchMock)).toHaveLength(4);
         expect(result).toMatchObject({
             ok: true,
-            counts: { created: 0, updated: 1, deleted: 2, unchanged: 1, failed: 1 },
+            counts: { created: 0, updated: 1, deleted: 2, unchanged: 1, kept: 0, failed: 1 },
         });
         expect(result.ok && result.items[0]).toMatchObject({
             itemId: "1",
@@ -445,7 +501,7 @@ describe("syncHymnNotes", () => {
             made: [],
             error: "category: must exist",
         });
-        expect(recentWrites(db).at(-1)).toMatchObject({
+        expect(writesAfter(mark)[0]).toMatchObject({
             target: `plan ${PLAN} item 1`,
             ok: false,
             payload: { action: "create", content: "R-396 / G-317" },
@@ -454,6 +510,7 @@ describe("syncHymnNotes", () => {
     });
 
     test("stops an item at its first failed change, and tries none of its others", async () => {
+        seedAppNotes(...APP_NOTES);
         vi.spyOn(console, "error").mockImplementation(() => {});
         const page = planItems();
         // Item 4's first note is stale too: update it, then delete the extra.
@@ -481,6 +538,7 @@ describe("syncHymnNotes", () => {
     });
 
     test("keeps going when a write cannot be recorded, and logs that", async () => {
+        seedAppNotes(...APP_NOTES);
         const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
         const prepare = db.prepare.bind(db);
         vi.spyOn(db, "prepare").mockImplementation((sql: string) => {
@@ -499,6 +557,72 @@ describe("syncHymnNotes", () => {
             `Failed to record a write to Planning Center (plan ${PLAN} item 1):`,
             expect.objectContaining({ message: "disk I/O error" })
         );
+    });
+
+    test("leaves alone the hymnal notes the app did not write: on a song with nothing to say, and as an extra", async () => {
+        // The write log has no record of the notes on items 3 and 4: typed
+        // by hand, or written before a restore lost the log's history.
+        const mark = lastWriteId();
+        const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
+
+        const result = await syncHymnNotes(ST, PLAN);
+
+        expect(writesSent(fetchMock).map(({ method, url }) => `${method} ${url}`)).toEqual([
+            `POST ${urls.notes("1")}`,
+            `PATCH ${urls.note("2", "9002")}`,
+        ]);
+        expect(result).toMatchObject({
+            ok: true,
+            counts: { created: 1, updated: 1, deleted: 0, unchanged: 3, kept: 2, failed: 0 },
+        });
+        expect(
+            result.ok &&
+                result.items.slice(2).map(({ itemId, action, outcome, keep }) => [itemId, action, outcome, keep])
+        ).toEqual([
+            ["3", "keep", "nothing-to-do", [{ kind: "keep", noteId: "9003", content: "R-5", reason: "nothing-to-say" }]],
+            ["4", "unchanged", "nothing-to-do", [{ kind: "keep", noteId: "9005", content: "R-396", reason: "duplicate" }]],
+            ["5", "unchanged", "nothing-to-do", []],
+        ]);
+        // Nothing is logged for a note left alone.
+        expect(writesAfter(mark).map(({ payload }) => (payload as { action: string }).action)).toEqual([
+            "create",
+            "update",
+        ]);
+    });
+
+    test("deletes a note it created in an earlier sync once its song has nothing to say", async () => {
+        stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
+        await syncHymnNotes(ST, PLAN);
+        // Song 77 loses its link; Planning Center now has the note the first
+        // sync created on item 1 (9101) and the update it made to item 2's.
+        db.prepare("UPDATE songs SET pco_song_id = NULL WHERE pco_song_id = '77'").run();
+        const page = planItems();
+        page.data[0] = itemResource("1", { title: "O God, Our Help", sequence: 1 }, {
+            ...songLink("77"),
+            ...noteLinks("9101"),
+        });
+        page.included = (page.included as Included[])
+            .map((resource) => (resource.id === "9002" ? hymnalNote("9002", "R-12") : resource))
+            .concat([hymnalNote("9101", "R-396 / G-317")]);
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            [urls.items]: page,
+            [`DELETE ${urls.note("1", "9101")}`]: () => new Response(null, { status: 204 }),
+        });
+
+        const result = await syncHymnNotes(ST, PLAN);
+
+        // Its own note goes; item 4's two, which it did not write, stay.
+        expect(writesSent(fetchMock)).toEqual([
+            { method: "DELETE", url: urls.note("1", "9101"), body: undefined },
+        ]);
+        expect(result.ok && result.items.map(({ action }) => action)).toEqual([
+            "delete",
+            "unchanged",
+            "keep",
+            "keep",
+            "unchanged",
+        ]);
     });
 
     test("refuses when the category is missing, and writes nothing", async () => {
@@ -559,7 +683,7 @@ describe("syncHymnNotes", () => {
         expect(writesSent(fetchMock)).toEqual([]);
         expect(result).toMatchObject({
             ok: true,
-            counts: { created: 0, updated: 0, deleted: 0, unchanged: 5, failed: 0 },
+            counts: { created: 0, updated: 0, deleted: 0, unchanged: 5, kept: 0, failed: 0 },
         });
     });
 

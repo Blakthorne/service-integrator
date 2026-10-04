@@ -361,13 +361,14 @@ describe("getDashboard", () => {
         expect(dashboard.todos).toEqual([{ kind: "empty-catalog" }]);
     });
 
-    test("asks the database ten queries at most, however many plans and songs", async () => {
+    test("asks the database eleven queries at most, however many plans and songs", async () => {
         stubFetchRoutes(routes());
         const prepare = vi.spyOn(db, "prepare");
         await getDashboard(NOW);
         // Seven for the links of both plans' songs (suggestions included),
-        // and one each for the settings, the song sync and the catalog's size.
-        expect(prepare).toHaveBeenCalledTimes(10);
+        // one for which of their notes the app wrote, and one each for the
+        // settings, the song sync and the catalog's size.
+        expect(prepare).toHaveBeenCalledTimes(11);
     });
 });
 
