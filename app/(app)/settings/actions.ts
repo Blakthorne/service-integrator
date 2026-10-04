@@ -3,19 +3,28 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
+    ROLES_IMPACT_UNCHECKED_MESSAGE,
+    checkRolesImpactConfirmed,
+    creditRolesImpact,
+} from "@/lib/creditRoleImpact";
+import {
     FORM_FAILURE_MESSAGE,
     formError,
     formSuccess,
     type FieldErrors,
     type FormState,
+    type FormValues,
 } from "@/lib/forms";
 import { parsePcoId } from "@/lib/pco";
-import { rederiveAllCredits } from "@/lib/queries/credits";
+import { getCreditLabelSets, rederiveAllCredits } from "@/lib/queries/credits";
 import { syncPcoSongsNow, type RunJobResult } from "@/lib/queries/reconcile";
 import { getSettings, saveSettings, type SaveSettingsResult } from "@/lib/queries/settings";
 import { routes } from "@/lib/routes";
 import {
+    CREDIT_ROLES_CONFIRM_FIELD,
+    creditRolesOf,
     readCopyrightForm,
+    readCreditRolesConfirmation,
     readCreditsForm,
     readEmailForm,
     readHymnalNotesForm,
@@ -267,15 +276,64 @@ function rederiveCredits(): AfterSave {
 }
 
 /**
+ * Whether `roles` may be saved, for what they do to songs: the labels the
+ * mirrored songs' authors use are read again (`getCreditLabelSets`), and
+ * roles that would leave some of them labelled with a role that no longer
+ * exists, changing their copyright text, are saved only when the form's
+ * checkbox confirms exactly how many songs that is
+ * (lib/creditRoleImpact.ts). Null when they may be saved. A refusal is
+ * marked on the checkbox, and Settings is revalidated so the form's notice
+ * shows the songs as they are now: the page's may be stale (a sync, or
+ * roles saved in another tab), or show no songs at all. When the labels
+ * cannot be read nothing is saved, since the change cannot be checked.
+ */
+function refuseUnconfirmedImpact(
+    roles: readonly string[],
+    formData: FormData,
+    posted: FormValues
+): SettingsFormState | null {
+    const { sets, error } = getCreditLabelSets();
+    if (error !== null) {
+        return formError(ROLES_IMPACT_UNCHECKED_MESSAGE, { values: posted });
+    }
+    const check = checkRolesImpactConfirmed(
+        creditRolesImpact(sets, roles),
+        readCreditRolesConfirmation(formData)
+    );
+    if (check.ok) {
+        return null;
+    }
+    revalidatePath(routes.settings());
+    return formError(FIX_FIELDS_MESSAGE, {
+        fieldErrors: { [CREDIT_ROLES_CONFIRM_FIELD]: { message: check.message } },
+        values: posted,
+    });
+}
+
+/**
  * The Credits card's action: save the credit roles, in order, and the
  * phrase for each, then read every song's author again with the new roles
  * (`rederiveAllCredits`) so the credits follow at once and not at the next
  * song sync, and say how many songs that was. A refused form saves nothing
  * and reads nothing again.
+ *
+ * Roles that rename or remove a role that songs' authors use as a label
+ * change those songs' copyright text (their authors stop reading as
+ * labelled), so they are saved only once the form confirms how many songs
+ * that is, checked against the mirror here (`refuseUnconfirmedImpact`).
  */
 export async function saveCreditsAction(formData: FormData): Promise<SettingsFormState> {
     await requireSession();
-    return saveRead(readCreditsForm(formData), {
+    const read = readCreditsForm(formData);
+    // Null when the form was refused, which `saveRead` then says.
+    const roles = creditRolesOf(read);
+    if (roles !== null) {
+        const refused = refuseUnconfirmedImpact(roles, formData, read.posted);
+        if (refused !== null) {
+            return refused;
+        }
+    }
+    return saveRead(read, {
         revalidate: revalidateCreditPages,
         after: rederiveCredits,
     });

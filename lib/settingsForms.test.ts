@@ -11,14 +11,17 @@ import {
     CATEGORY_NAME_FIELD,
     CCLI_LICENSE_NUMBER_FIELD,
     CREDIT_PHRASES_FIELD,
+    CREDIT_ROLES_CONFIRM_FIELD,
     CREDIT_ROLES_FIELD,
     EMAIL_RECIPIENTS_FIELD,
     EMAIL_SUBJECT_FIELD,
     INCLUDES_TUNE_FIELD,
     NUMBER_SEPARATOR_FIELD,
+    creditRolesOf,
     headerLabelField,
     isSaved,
     readCopyrightForm,
+    readCreditRolesConfirmation,
     readCreditsForm,
     readEmailForm,
     readHymnalNotesForm,
@@ -628,6 +631,64 @@ describe("readCreditsForm", () => {
             ok: false,
             fieldErrors: { [creditRoleField(0)]: { message: "A role cannot be blank." } },
         });
+    });
+});
+
+describe("creditRolesOf", () => {
+    test("gives the roles a Credits form read, in order, as they would be saved", () => {
+        const read = readCreditsForm(
+            creditsForm([
+                [" Lyrics ", ""],
+                ["Tune", "Tune by"],
+            ])
+        );
+        expect(creditRolesOf(read)).toEqual(["Lyrics", "Tune"]);
+    });
+
+    test("gives null for a refused form, and for another form's read", () => {
+        expect(
+            creditRolesOf(
+                readCreditsForm(
+                    creditsForm([
+                        ["Words", ""],
+                        ["words", ""],
+                    ])
+                )
+            )
+        ).toBeNull();
+        const copyright = new FormData();
+        copyright.set(CCLI_LICENSE_NUMBER_FIELD, "1564484");
+        expect(creditRolesOf(readCopyrightForm(copyright))).toBeNull();
+    });
+});
+
+describe("readCreditRolesConfirmation", () => {
+    function confirmation(value: string | File | null): number | null {
+        const formData = creditsForm(DEFAULT_ROWS);
+        if (value !== null) {
+            formData.set(CREDIT_ROLES_CONFIRM_FIELD, value);
+        }
+        return readCreditRolesConfirmation(formData);
+    }
+
+    test("reads how many songs the ticked box confirmed", () => {
+        expect(confirmation("40")).toBe(40);
+        expect(confirmation(" 1 ")).toBe(1);
+    });
+
+    test("is null when the box was not ticked, or posted what is not a number of songs", () => {
+        for (const value of [null, "", "  ", "0", "-3", "4.5", "1e2", "forty", new File(["40"], "x.txt")]) {
+            expect(confirmation(value)).toBeNull();
+        }
+    });
+
+    test("is a field of its own, which holds no setting", () => {
+        expect(SETTING_KEYS).not.toContain(CREDIT_ROLES_CONFIRM_FIELD);
+        const formData = creditsForm(DEFAULT_ROWS);
+        formData.set(CREDIT_ROLES_CONFIRM_FIELD, "40");
+        const read = readCreditsForm(formData);
+        expect(read.ok && Object.keys(read.shown)).not.toContain(CREDIT_ROLES_CONFIRM_FIELD);
+        expect(Object.keys(read.posted)).not.toContain(CREDIT_ROLES_CONFIRM_FIELD);
     });
 });
 

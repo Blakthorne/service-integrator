@@ -3,6 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { saveCreditsAction } from "@/app/(app)/settings/actions";
 import {
+    NO_ROLES_IMPACT,
+    ROLES_IMPACT_EXPLANATION,
+    ROLES_IMPACT_UNKNOWN_NOTICE,
+    confirmRolesImpactLabel,
+    creditRolesImpact,
+    rolesImpactHeadline,
+    rolesImpactKey,
+    rolesImpactLabels,
+    type CreditLabelSet,
+    type CreditRolesImpact,
+} from "@/lib/creditRoleImpact";
+import {
     CREDIT_PAIR_PHRASE_FIELD,
     addCreditRow,
     canAddCreditRow,
@@ -14,16 +26,16 @@ import {
     moveCreditRow,
     removeCreditRow,
 } from "@/lib/creditRows";
-import { fieldErrorOf } from "@/lib/forms";
+import { fieldErrorOf, type FieldError } from "@/lib/forms";
 import { CREDIT_ROLES_MAX, type CreditPhrases } from "@/lib/settings";
-import { CREDIT_ROLES_FIELD } from "@/lib/settingsForms";
+import { CREDIT_ROLES_CONFIRM_FIELD, CREDIT_ROLES_FIELD } from "@/lib/settingsForms";
 import {
     creditPairPhraseHint,
     creditPhraseHint,
     creditRoleLegend,
     previewCreditLines,
 } from "@/lib/settingsText";
-import { FieldErrorText, FormPart, HINT_CLASS } from "../Catalog/SongForm/Fields";
+import { FieldErrorText, FormNotice, FormPart, HINT_CLASS } from "../Catalog/SongForm/Fields";
 import { PreviewSample, SettingsFormFooter, SettingsTextField } from "./SettingsFields";
 import { useSettingsForm } from "./useSettingsForm";
 
@@ -32,6 +44,8 @@ interface CreditsFormProps {
     creditRoles: readonly string[];
     /** The saved credit phrases, by role. */
     creditPhrases: CreditPhrases;
+    /** The labels the songs' authors use, read with the saved roles; null when they could not be read. */
+    labelSets: readonly CreditLabelSet[] | null;
 }
 
 /** A small button of a role's row (Move up, Move down, Remove), white or the dark card's grey, with a ring that shows. */
@@ -48,6 +62,93 @@ const roleInputId = (index: number) => `credit-role-${index}`;
 const upButtonId = (index: number) => `credit-up-${index}`;
 const downButtonId = (index: number) => `credit-down-${index}`;
 
+/** The ids of the impact notice's parts, which describe its checkbox. */
+const IMPACT_HEADLINE_ID = "credit-roles-impact-headline";
+const IMPACT_LABELS_ID = "credit-roles-impact-labels";
+const IMPACT_EXPLANATION_ID = "credit-roles-impact-explanation";
+const CONFIRM_ERROR_ID = "credit-roles-confirm-error";
+
+interface RolesImpactNoticeProps {
+    /** What the roles in the form would do to songs. */
+    impact: CreditRolesImpact;
+    /** True when the songs' labels could not be read, so the impact is not known. */
+    unknown: boolean;
+    /** Whether the checkbox confirms this impact. */
+    confirmed: boolean;
+    onConfirmedChange: (confirmed: boolean) => void;
+    /** What the action found wrong with the confirmation. */
+    error: FieldError | undefined;
+    /** True while the form saves: the checkbox takes no change. */
+    pending: boolean;
+}
+
+/**
+ * What saving the roles in the form would do to songs, above Save: how many
+ * songs' copyright text would change, the labels their authors use that
+ * would no longer be roles, what those songs would print, and a checkbox
+ * that confirms it, which the action requires (`saveCreditsAction`). The
+ * checkbox posts how many songs it confirms, and the parts of the notice
+ * describe it. Nothing when no song would change; when the songs' labels
+ * could not be read, a note that says so.
+ */
+function RolesImpactNotice({
+    impact,
+    unknown,
+    confirmed,
+    onConfirmedChange,
+    error,
+    pending,
+}: RolesImpactNoticeProps) {
+    if (unknown) {
+        return (
+            <FormNotice tone="warning">
+                <p>{ROLES_IMPACT_UNKNOWN_NOTICE}</p>
+                <FieldErrorText id={CONFIRM_ERROR_ID} error={error} />
+            </FormNotice>
+        );
+    }
+    if (impact.songs === 0) {
+        return null;
+    }
+    return (
+        <FormNotice tone="warning">
+            <p id={IMPACT_HEADLINE_ID} className="font-semibold">
+                {rolesImpactHeadline(impact.songs)}
+            </p>
+            <p id={IMPACT_LABELS_ID}>{rolesImpactLabels(impact)}</p>
+            <p id={IMPACT_EXPLANATION_ID}>{ROLES_IMPACT_EXPLANATION}</p>
+            <div className="space-y-1">
+                <label className="flex items-start gap-3 font-medium">
+                    <input
+                        type="checkbox"
+                        name={CREDIT_ROLES_CONFIRM_FIELD}
+                        value={String(impact.songs)}
+                        checked={confirmed}
+                        // Not `disabled`, which would grey the box for the moment a
+                        // save lasts; the form ignores a change while it saves.
+                        aria-disabled={pending || undefined}
+                        onChange={(event) => onConfirmedChange(event.target.checked)}
+                        aria-describedby={[
+                            IMPACT_HEADLINE_ID,
+                            IMPACT_LABELS_ID,
+                            IMPACT_EXPLANATION_ID,
+                            error ? CONFIRM_ERROR_ID : null,
+                        ]
+                            .filter(Boolean)
+                            .join(" ")}
+                        aria-invalid={error ? true : undefined}
+                        className="mt-0.5 size-4 shrink-0 cursor-pointer accent-blue-600"
+                    />
+                    <span>{confirmRolesImpactLabel(impact.songs)}</span>
+                </label>
+                <div className="pl-7">
+                    <FieldErrorText id={CONFIRM_ERROR_ID} error={error} />
+                </div>
+            </div>
+        </FormNotice>
+    );
+}
+
 /**
  * The Credits card's form: the credit roles as a list of rows, each with the
  * phrase the copyright text prints before its names (Add a role, and Move
@@ -55,6 +156,13 @@ const downButtonId = (index: number) => `credit-down-${index}`;
  * when the same people hold both, and a preview of a credit line as it will
  * print. Its action (`saveCreditsAction`) saves them and reads every song's
  * author again with the new roles, and says how many songs that was.
+ *
+ * Renaming or removing a role that songs' authors use as a label changes
+ * those songs' copyright text, so the form shows, as the roles are edited,
+ * how many songs that would be and which labels (`creditRolesImpact`, from
+ * the page's `labelSets`), and saves only once a checkbox confirms it. The
+ * confirmation holds for the impact it was given: any change to what would
+ * change clears it. The action checks the same against the mirror.
  *
  * The fields are a flat map like the other forms' (`lib/creditRows.ts` adds,
  * removes and moves rows in it), so the row buttons and the keyboard work
@@ -64,7 +172,7 @@ const downButtonId = (index: number) => `credit-down-${index}`;
  * button that has gone. The buttons that cannot act (the first row's Move
  * up, Remove at two roles) are `aria-disabled` and keep focus.
  */
-export default function CreditsForm({ creditRoles, creditPhrases }: CreditsFormProps) {
+export default function CreditsForm({ creditRoles, creditPhrases, labelSets }: CreditsFormProps) {
     const form = useSettingsForm(creditFormValues(creditRoles, creditPhrases), saveCreditsAction);
     const { values, state } = form;
     const rows = creditRowsOf(values);
@@ -72,6 +180,16 @@ export default function CreditsForm({ creditRoles, creditPhrases }: CreditsFormP
     const canRemove = canRemoveCreditRow(values);
     const rolesError = fieldErrorOf(state, CREDIT_ROLES_FIELD);
     const preview = previewCreditLines(rows, values[CREDIT_PAIR_PHRASE_FIELD] ?? "");
+    // While the fields show what was just saved, no song would change, though
+    // `labelSets` may still be the ones read with the roles before, until the
+    // page the save revalidated arrives.
+    const impact =
+        labelSets === null || form.saved
+            ? NO_ROLES_IMPACT
+            : creditRolesImpact(labelSets, rows.map((row) => row.role));
+    const impactKey = rolesImpactKey(impact);
+    /** The impact the checkbox was ticked for; it confirms only that one. */
+    const [confirmedKey, setConfirmedKey] = useState<string | null>(null);
     const [announcement, setAnnouncement] = useState("");
     /** The id of the control that takes focus once the rows have changed. */
     const focusRef = useRef<string | null>(null);
@@ -121,8 +239,9 @@ export default function CreditsForm({ creditRoles, creditPhrases }: CreditsFormP
             >
                 <p className={HINT_CLASS}>
                     Saving reads every song&apos;s author again with these roles. A song whose
-                    author text uses a label that no role matches is flagged as unparsed on its
-                    page, and its copyright text stays as it was.
+                    author is labelled with a role you rename or remove, such as “Music:”, then
+                    prints its whole author in place of its credit line, and its page flags it, so
+                    the form asks you to confirm such a change before it saves.
                 </p>
                 <ul role="list" className="space-y-4">
                     {rows.map((row, index) => {
@@ -239,6 +358,18 @@ export default function CreditsForm({ creditRoles, creditPhrases }: CreditsFormP
                     </FormPart>
                 </>
             )}
+            <RolesImpactNotice
+                impact={impact}
+                unknown={labelSets === null}
+                confirmed={impact.songs > 0 && confirmedKey === impactKey}
+                onConfirmedChange={(confirmed) => {
+                    if (!form.pending) {
+                        setConfirmedKey(confirmed ? impactKey : null);
+                    }
+                }}
+                error={fieldErrorOf(state, CREDIT_ROLES_CONFIRM_FIELD)}
+                pending={form.pending}
+            />
             <SettingsFormFooter form={form} saveLabel="Save credits" />
             <p role="status" className="sr-only">
                 {announcement}

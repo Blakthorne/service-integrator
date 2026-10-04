@@ -13,6 +13,7 @@ import ScheduleTextCard, {
 import SettingsIssuesCard from "@/app/components/Settings/SettingsIssuesCard";
 import PageHeader from "@/app/components/ui/PageHeader";
 import { withDeadline } from "@/lib/deadline";
+import { getCreditLabelSets } from "@/lib/queries/credits";
 import { getEmailStatus } from "@/lib/queries/email";
 import { getHymnNoteCategories } from "@/lib/queries/hymnNotes";
 import { getRecentWrites, getSettings, getSettingsIssues } from "@/lib/queries/settings";
@@ -46,6 +47,7 @@ export const metadata: Metadata = { title: "Settings" };
  */
 export default function SettingsPage() {
     const { settings, error } = getSettings();
+    const labelSets = getCreditLabelSets();
     const issues = getSettingsIssues();
     const recentWrites = getRecentWrites();
     const status = getDatabaseStatus();
@@ -68,6 +70,7 @@ export default function SettingsPage() {
                 <CreditsCard
                     creditRoles={settings.creditRoles}
                     creditPhrases={settings.creditPhrases}
+                    labelSets={labelSets.error === null ? labelSets.sets : null}
                 />
                 <Suspense fallback={<ScheduleTextCardFallback />}>
                     <ScheduleTextCard settings={settings} categories={categories} />

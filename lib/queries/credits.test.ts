@@ -10,7 +10,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
     getDb,
 }));
 
-import { rederiveAllCredits } from "./credits";
+import { getCreditLabelSets, rederiveAllCredits } from "./credits";
 
 let db: DatabaseSync;
 
@@ -126,5 +126,71 @@ describe("rederiveAllCredits", () => {
             throw cause;
         });
         expect(() => rederiveAllCredits()).toThrow(cause);
+    });
+});
+
+describe("getCreditLabelSets", () => {
+    test("groups the labels of the songs' authors with the stored roles, leaving out removed songs", () => {
+        seedSongs();
+        seedPcoSong(db, {
+            id: "1004",
+            author: "Text: John Newton; Tune: Anon",
+            ignoredAt: "2026-10-04T13:00:00.000Z",
+        });
+        seedPcoSong(db, { id: "1005", author: "Text: Fanny Crosby" });
+        seedPcoSong(db, {
+            id: "1006",
+            author: "Text: Charles Wesley",
+            removedAt: "2026-10-04T13:00:00.000Z",
+        });
+        seedSetting(db, "creditRoles", ["Text", "Tune"]);
+
+        // An ignored song (1004) counts; one Planning Center no longer has (1006) does not,
+        // and neither do authors with no labels (1003) or labels that are not roles (1002).
+        expect(getCreditLabelSets()).toEqual({
+            sets: [
+                { labels: ["Text", "Tune"], songs: 2 },
+                { labels: ["Text"], songs: 1 },
+            ],
+            error: null,
+        });
+    });
+
+    test("reads them with the default roles when the stored ones do not parse, or none are stored", () => {
+        seedPcoSong(db, { id: "1001", author: "Words: Isaac Watts; Music: Lowell Mason" });
+        seedPcoSong(db, { id: "1002", author: "Text: Isaac Watts" });
+        const expected = { sets: [{ labels: ["Words", "Music"], songs: 1 }], error: null };
+
+        expect(getCreditLabelSets()).toEqual(expected);
+        seedSetting(db, "creditRoles", ["Text"]);
+        expect(getCreditLabelSets()).toEqual(expected);
+    });
+
+    test("gives no sets for an empty mirror", () => {
+        expect(getCreditLabelSets()).toEqual({ sets: [], error: null });
+    });
+
+    test("asks Planning Center nothing", () => {
+        seedSongs();
+        const fetchMock = stubFetchRoutes({});
+        getCreditLabelSets();
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("never throws: a database that cannot be opened is logged, and comes back as the error", () => {
+        const cause = new Error("Could not open the database at /srv/data/x: denied");
+        getDb.mockImplementation(() => {
+            throw cause;
+        });
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        expect(getCreditLabelSets()).toEqual({
+            sets: [],
+            error: "Could not open the database at /srv/data/x: denied",
+        });
+        expect(consoleError).toHaveBeenCalledWith(
+            "Failed to read the labels of the songs' credits:",
+            cause
+        );
     });
 });

@@ -1,21 +1,30 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // vi.hoisted is required: vi.mock is hoisted above const declarations.
-const { auth, revalidatePath, syncPcoSongsNow, getSettings, saveSettings, rederiveAllCredits } =
-    vi.hoisted(() => ({
-        auth: vi.fn(),
-        revalidatePath: vi.fn(),
-        syncPcoSongsNow: vi.fn(),
-        getSettings: vi.fn(),
-        saveSettings: vi.fn(),
-        rederiveAllCredits: vi.fn(),
-    }));
+const {
+    auth,
+    revalidatePath,
+    syncPcoSongsNow,
+    getSettings,
+    saveSettings,
+    rederiveAllCredits,
+    getCreditLabelSets,
+} = vi.hoisted(() => ({
+    auth: vi.fn(),
+    revalidatePath: vi.fn(),
+    syncPcoSongsNow: vi.fn(),
+    getSettings: vi.fn(),
+    saveSettings: vi.fn(),
+    rederiveAllCredits: vi.fn(),
+    getCreditLabelSets: vi.fn(),
+}));
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ syncPcoSongsNow }));
 vi.mock("@/lib/queries/settings", () => ({ getSettings, saveSettings }));
-vi.mock("@/lib/queries/credits", () => ({ rederiveAllCredits }));
+vi.mock("@/lib/queries/credits", () => ({ rederiveAllCredits, getCreditLabelSets }));
 
+import { ROLES_IMPACT_UNCHECKED_MESSAGE } from "@/lib/creditRoleImpact";
 import { FORM_FAILURE_MESSAGE } from "@/lib/forms";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 import {
@@ -58,6 +67,7 @@ beforeEach(() => {
         getSettings,
         saveSettings,
         rederiveAllCredits,
+        getCreditLabelSets,
     ]) {
         mock.mockReset();
     }
@@ -65,6 +75,8 @@ beforeEach(() => {
     getSettings.mockReturnValue({ settings: DEFAULT_SETTINGS, error: null });
     saveSettings.mockReturnValue({ ok: true, saved: [] });
     rederiveAllCredits.mockReturnValue({ songs: 8, ok: 1, legacy: 7, unparsed: 0 });
+    // No song is labelled, so no change of the roles changes any song's copyright text.
+    getCreditLabelSets.mockReturnValue({ sets: [], error: null });
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -203,6 +215,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields, pages) => {
         expect(getSettings).not.toHaveBeenCalled();
         expect(saveSettings).not.toHaveBeenCalled();
         expect(rederiveAllCredits).not.toHaveBeenCalled();
+        expect(getCreditLabelSets).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
@@ -603,6 +616,148 @@ describe("saveCreditsAction", () => {
         expect(console.error).toHaveBeenCalledWith("Failed to read the songs' credits again:", cause);
         // The roles are stored, so the pages that show them are revalidated.
         expect(revalidatePath.mock.calls).toEqual(CREDIT_PAGES);
+    });
+
+    describe("roles that change songs' copyright text", () => {
+        /** 38 songs labelled with Words and Music, and 2 with Words, Music and Trans. */
+        const SETS = [
+            { labels: ["Words", "Music"], songs: 38 },
+            { labels: ["Words", "Music", "Trans."], songs: 2 },
+        ];
+
+        /** The default roles with Music renamed Tune: 40 songs lose their "Music" label. */
+        const RENAMED = { ...DEFAULT_FIELDS, "creditRole-1": "Tune" };
+
+        /** What the checkbox says when the 40 songs were not confirmed. */
+        const NOT_CONFIRMED =
+            "Confirm that the copyright text of 40 songs will change, or keep the labels their authors use as roles.";
+
+        beforeEach(() => {
+            getCreditLabelSets.mockReturnValue({ sets: SETS, error: null });
+        });
+
+        test("refuses them without a confirmation, on the checkbox, and saves and reads nothing", async () => {
+            const state = await saveCreditsAction(formWith(RENAMED));
+
+            expect(state).toEqual({
+                status: "error",
+                message: FIX_FIELDS,
+                fieldErrors: { creditRolesConfirmed: { message: NOT_CONFIRMED } },
+                values: RENAMED,
+            });
+            expect(getCreditLabelSets).toHaveBeenCalledTimes(1);
+            expect(saveSettings).not.toHaveBeenCalled();
+            expect(rederiveAllCredits).not.toHaveBeenCalled();
+            // Settings again, so its notice shows the songs as they are now.
+            expect(revalidatePath.mock.calls).toEqual([["/settings"]]);
+        });
+
+        test("saves them once exactly those songs are confirmed, then reads the credits again", async () => {
+            const state = await saveCreditsAction(formWith({ ...RENAMED, creditRolesConfirmed: "40" }));
+
+            expect(saveSettings).toHaveBeenCalledWith({
+                creditRoles: ["Words", "Tune", "Arr.", "Trans."],
+                creditPhrases: expect.objectContaining({ Tune: "Music by" }),
+            });
+            expect(rederiveAllCredits).toHaveBeenCalledTimes(1);
+            expect(state).toMatchObject({ status: "success", message: expect.stringMatching(/^Saved\./) });
+            expect(revalidatePath.mock.calls).toEqual(CREDIT_PAGES);
+        });
+
+        test("refuses a confirmation of another number of songs, saying how many it is now", async () => {
+            const state = await saveCreditsAction(formWith({ ...RENAMED, creditRolesConfirmed: "38" }));
+
+            expect(state).toMatchObject({
+                status: "error",
+                message: FIX_FIELDS,
+                fieldErrors: {
+                    creditRolesConfirmed: {
+                        message:
+                            "These roles now change the copyright text of 40 songs, not the 38 you confirmed, since the songs or the saved roles changed. Check which songs, then confirm again.",
+                    },
+                },
+            });
+            expect(saveSettings).not.toHaveBeenCalled();
+            expect(revalidatePath.mock.calls).toEqual([["/settings"]]);
+        });
+
+        test("takes a confirmation that is not a number of songs as none", async () => {
+            for (const confirmed of ["", "forty", "40.0", "-40", "0"]) {
+                const state = await saveCreditsAction(
+                    formWith({ ...RENAMED, creditRolesConfirmed: confirmed })
+                );
+                expect(state).toMatchObject({
+                    fieldErrors: { creditRolesConfirmed: { message: NOT_CONFIRMED } },
+                });
+            }
+            expect(saveSettings).not.toHaveBeenCalled();
+        });
+
+        test("counts a song that would lose two labels once", async () => {
+            const state = await saveCreditsAction(
+                formWith({
+                    "creditRole-0": "Words",
+                    "creditPhrase-0": "Words by",
+                    "creditRole-1": "Tune",
+                    "creditPhrase-1": "Music by",
+                    creditPairPhrase: "Words and Music by",
+                })
+            );
+
+            expect(state).toMatchObject({
+                fieldErrors: { creditRolesConfirmed: { message: NOT_CONFIRMED } },
+            });
+        });
+
+        test("saves roles that keep every label without a confirmation, whatever their case, spaces or order", async () => {
+            for (const fields of [
+                { ...DEFAULT_FIELDS, "creditRole-1": " music " },
+                { ...DEFAULT_FIELDS, "creditRole-4": "Desc.", "creditPhrase-4": "" },
+                {
+                    ...DEFAULT_FIELDS,
+                    "creditRole-2": "Trans.",
+                    "creditPhrase-2": "Trans. by",
+                    "creditRole-3": "Arr.",
+                    "creditPhrase-3": "Arr. by",
+                },
+            ]) {
+                await expect(saveCreditsAction(formWith(fields))).resolves.toMatchObject({
+                    status: "success",
+                });
+            }
+            expect(saveSettings).toHaveBeenCalledTimes(3);
+        });
+
+        test("checks against the songs as the mirror has them when it saves, not as the page showed them", async () => {
+            // No song uses "Music" any more (a sync changed them), so the rename changes none.
+            getCreditLabelSets.mockReturnValue({ sets: [{ labels: ["Words"], songs: 40 }], error: null });
+
+            await expect(saveCreditsAction(formWith(RENAMED))).resolves.toMatchObject({
+                status: "success",
+            });
+            expect(saveSettings).toHaveBeenCalledTimes(1);
+        });
+
+        test("saves nothing when the songs' labels cannot be read, since the change cannot be checked", async () => {
+            getCreditLabelSets.mockReturnValue({ sets: [], error: "Could not open the database" });
+
+            await expect(saveCreditsAction(formWith(RENAMED))).resolves.toEqual({
+                status: "error",
+                message: ROLES_IMPACT_UNCHECKED_MESSAGE,
+                fieldErrors: {},
+                values: RENAMED,
+            });
+            expect(saveSettings).not.toHaveBeenCalled();
+            expect(rederiveAllCredits).not.toHaveBeenCalled();
+            expect(revalidatePath).not.toHaveBeenCalled();
+        });
+
+        test("checks no song while a field needs fixing", async () => {
+            await saveCreditsAction(formWith({ ...RENAMED, "creditRole-3": "words" }));
+
+            expect(getCreditLabelSets).not.toHaveBeenCalled();
+            expect(saveSettings).not.toHaveBeenCalled();
+        });
     });
 });
 

@@ -395,8 +395,9 @@ function listedParts(parts: readonly string[]): string {
  * What the Credits form says once it is saved: how many songs' credits were
  * read again with the new roles, and how they read: following the roles,
  * with no labels at all (read as the copyright text always read them), or
- * with labels that no role matches (a role renamed or removed: they keep
- * their copyright text and are flagged on the song's page).
+ * with labels that no role matches (a role renamed or removed: they print
+ * their whole author in place of their credit line, and are flagged on the
+ * song's page; see lib/creditRoleImpact.ts).
  */
 export function describeRederivedCredits(counts: RederivedCreditCounts): string {
     if (counts.songs === 0) {

@@ -5,7 +5,13 @@ import {
     creditRoleField,
 } from "./creditRows";
 import { phraseFor } from "./credits";
-import { readValues, type FieldErrors, type FormState, type FormValues } from "./forms";
+import {
+    readOptionalPositiveInteger,
+    readValues,
+    type FieldErrors,
+    type FormState,
+    type FormValues,
+} from "./forms";
 import {
     parseCreditPhrase,
     parseCreditRole,
@@ -51,6 +57,14 @@ export const CREDIT_ROLES_FIELD = "creditRoles" satisfies SettingKey;
 
 /** Where an error about the phrases as a whole is marked, as `CREDIT_ROLES_FIELD` is for the roles. */
 export const CREDIT_PHRASES_FIELD = "creditPhrases" satisfies SettingKey;
+
+/**
+ * The Credits form's confirmation that saving its roles changes songs'
+ * copyright text (lib/creditRoleImpact.ts): a checkbox, shown only when it
+ * would, that posts how many songs it confirmed. Its refusals are marked on
+ * it. It holds no setting, so it is not one of the form's values.
+ */
+export const CREDIT_ROLES_CONFIRM_FIELD = "creditRolesConfirmed";
 
 /** The Email form's fields, each named for the setting it holds. */
 export const EMAIL_RECIPIENTS_FIELD = "emailRecipients" satisfies SettingKey;
@@ -327,6 +341,30 @@ export function readCreditsForm(formData: FormData): SettingsFormRead {
     });
     into.shown[CREDIT_PAIR_PHRASE_FIELD] = phraseFor([roles[0], roles[1]], phrases.value);
     return finish(into, posted);
+}
+
+/**
+ * The roles a Credits form read, in order, as they would be saved; null
+ * when the form was refused. What saving them would do to songs is checked
+ * with these (lib/creditRoleImpact.ts).
+ */
+export function creditRolesOf(read: SettingsFormRead): readonly string[] | null {
+    if (!read.ok) {
+        return null;
+    }
+    const roles = parseSetting("creditRoles", read.values.creditRoles);
+    return roles.ok ? roles.value : null;
+}
+
+/**
+ * How many songs the Credits form's checkbox confirmed would change
+ * (`CREDIT_ROLES_CONFIRM_FIELD`), or null when it confirmed nothing: the
+ * box was not ticked (it then posts nothing), or what it posted is not a
+ * whole number of at least 1.
+ */
+export function readCreditRolesConfirmation(formData: FormData): number | null {
+    const confirmed = readOptionalPositiveInteger(formData, CREDIT_ROLES_CONFIRM_FIELD);
+    return confirmed.ok ? confirmed.value : null;
 }
 
 /** What separates the recipients typed in the Email form: a line break, a comma or a semicolon. */

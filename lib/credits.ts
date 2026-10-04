@@ -38,7 +38,7 @@ export type CreditsParse =
     | { status: "unparsed"; raw: string };
 
 /** A label or role as compared: trimmed, its runs of whitespace one space, in lower case. */
-function labelKey(text: string): string {
+export function labelKey(text: string): string {
     return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
