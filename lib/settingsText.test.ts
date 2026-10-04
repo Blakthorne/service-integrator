@@ -197,6 +197,16 @@ describe("describeCategoryLookup", () => {
         });
     });
 
+    test("several categories of the name are a warning with the data layer's sentence", () => {
+        const message =
+            'Sunday Morning has 2 item note categories named "Hymnal" ("Hymnal" and "hymnal"), so the hymnal notes have no one place to go. Rename or delete all but one in Planning Center.';
+        expect(describeCategoryLookup({ status: "ambiguous", message })).toEqual({
+            tone: "warning",
+            status: "More than one",
+            detail: message,
+        });
+    });
+
     test("categories that could not be read are an error with the reason, ending in a full stop", () => {
         expect(
             describeCategoryLookup({

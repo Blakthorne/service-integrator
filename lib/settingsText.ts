@@ -199,6 +199,7 @@ export const CATEGORIES_UNAVAILABLE_TEXT =
 export type CategoryLookupText =
     | { status: "found"; category: { name: string } }
     | { status: "missing"; message: string }
+    | { status: "ambiguous"; message: string }
     | { status: "unavailable"; error: string };
 
 /** Shown as a state: fine, to be fixed, or not known. */
@@ -222,8 +223,9 @@ function withFullStop(text: string): string {
 /**
  * A service type's item note category for the hymnal notes, in words: found
  * (as Planning Center spells its name), missing (`lookup.message`, which
- * names the service type and the category), or not known because Planning
- * Center would not say.
+ * names the service type and the category), more than one of the name
+ * (`lookup.message`, which names them; the sync refuses until all but one
+ * are renamed), or not known because Planning Center would not say.
  */
 export function describeCategoryLookup(lookup: CategoryLookupText): CategoryStateText {
     switch (lookup.status) {
@@ -231,6 +233,8 @@ export function describeCategoryLookup(lookup: CategoryLookupText): CategoryStat
             return { tone: "ok", status: `Found as "${lookup.category.name}"`, detail: null };
         case "missing":
             return { tone: "warning", status: "Missing", detail: lookup.message };
+        case "ambiguous":
+            return { tone: "warning", status: "More than one", detail: lookup.message };
         case "unavailable":
             return {
                 tone: "error",

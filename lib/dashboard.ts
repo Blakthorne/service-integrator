@@ -140,13 +140,7 @@ export function planNotesSummary(entry: {
                 text: `Hymnal notes can't be synced without a "${hymnNotes.categoryName}" item note category.`,
             };
         case "unavailable":
-            return {
-                tone: "muted",
-                text:
-                    hymnNotes.reason === "catalog"
-                        ? "Hymnal notes can't be compared while the catalog is unavailable."
-                        : "Hymnal notes can't be compared: Planning Center's item note categories couldn't be read.",
-            };
+            return unavailableNotesSummary(hymnNotes);
         case "ready":
             if (entry.notesToSync > 0) {
                 return { tone: "attention", text: notesNeedSyncing(entry.notesToSync) };
@@ -154,6 +148,29 @@ export function planNotesSummary(entry: {
             return entry.songs.some((song) => hymnNoteBadge(song) !== null)
                 ? { tone: "ok", text: "Hymnal notes in sync." }
                 : null;
+    }
+}
+
+/** Why a plan's hymnal notes cannot be compared, briefly: the status's message is for the sync dialog. */
+function unavailableNotesSummary(
+    status: Extract<HymnNoteStatus, { kind: "unavailable" }>
+): PlanNotesSummary {
+    switch (status.reason) {
+        case "ambiguous-category":
+            return {
+                tone: "warning",
+                text: `Hymnal notes can't be synced: ${status.categories.length} item note categories are named "${status.categoryName}".`,
+            };
+        case "catalog":
+            return {
+                tone: "muted",
+                text: "Hymnal notes can't be compared while the catalog is unavailable.",
+            };
+        case "categories":
+            return {
+                tone: "muted",
+                text: "Hymnal notes can't be compared: Planning Center's item note categories couldn't be read.",
+            };
     }
 }
 

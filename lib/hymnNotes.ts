@@ -68,16 +68,51 @@ export function sameCategoryName(a: string, b: string): boolean {
 }
 
 /**
- * The category named `name` (as `sameCategoryName` compares names) among a
- * service type's categories: the first, if two have that name. Null when
- * there is none, as there is none until someone creates it in Planning
- * Center: the API cannot.
+ * How a service type's categories answer to the hymnal notes' category name
+ * (as `sameCategoryName` compares names): one category ("found"); none
+ * ("missing"), as until someone creates it in Planning Center, since the API
+ * cannot; or more than one ("ambiguous"), as "Hymnal" and "hymnal" would
+ * be: the app refuses then, since it cannot tell which the notes go in.
  */
-export function findHymnNoteCategory(
+export type HymnNoteCategoryMatch =
+    | { status: "found"; category: ItemNoteCategory }
+    | { status: "missing" }
+    | { status: "ambiguous"; categories: ItemNoteCategory[] };
+
+/** The categories among a service type's named `name` (see `HymnNoteCategoryMatch`). */
+export function matchHymnNoteCategory(
     categories: readonly ItemNoteCategory[],
     name: string
-): ItemNoteCategory | null {
-    return categories.find((category) => sameCategoryName(category.name, name)) ?? null;
+): HymnNoteCategoryMatch {
+    const matches = categories.filter((category) => sameCategoryName(category.name, name));
+    if (matches.length === 0) {
+        return { status: "missing" };
+    }
+    return matches.length === 1
+        ? { status: "found", category: matches[0] }
+        : { status: "ambiguous", categories: matches };
+}
+
+/** "a", "a and b", "a, b and c". */
+function listed(parts: readonly string[]): string {
+    return parts.length <= 1
+        ? parts.join("")
+        : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * What the app says when several of a service type's categories have the
+ * hymnal notes' name: `Sunday Morning has 2 item note categories named
+ * "Hymnal" ("Hymnal" and "hymnal"), so the hymnal notes have no one place
+ * to go. Rename or delete all but one in Planning Center.`
+ */
+export function ambiguousCategoryMessage(
+    categoryName: string,
+    serviceTypeName: string,
+    categories: readonly Pick<ItemNoteCategory, "name">[]
+): string {
+    const names = listed(categories.map(({ name }) => `"${name}"`));
+    return `${serviceTypeName} has ${categories.length} item note categories named "${categoryName}" (${names}), so the hymnal notes have no one place to go. Rename or delete all but one in Planning Center.`;
 }
 
 /** A plan item as `diffHymnNotes` reads it: its catalog link, if any, and its notes. */
@@ -203,11 +238,25 @@ function says(note: ItemNote, content: string): boolean {
 }
 
 /**
- * What each song item's note in category `categoryName` needs (see
- * `HymnNoteAction`), in sequence order. The category is matched by name, as
- * `sameCategoryName` does; notes in other categories are never touched,
- * and items that are not songs are left out. What a note should say comes
- * from `formatHymnNote`.
+ * Whether a note is in `category`: by its category's id, or, only when
+ * Planning Center sent the note without one, by name (`sameCategoryName`).
+ * So a note in another category of the same name (a deleted category's,
+ * whose notes keep its name) is never taken for one of `category`'s.
+ */
+function inCategory(note: ItemNote, category: Pick<ItemNoteCategory, "id" | "name">): boolean {
+    return note.categoryId !== null
+        ? note.categoryId === category.id
+        : sameCategoryName(note.categoryName, category.name);
+}
+
+/**
+ * What each song item's note in `category` needs (see `HymnNoteAction`), in
+ * sequence order. A note is in the category when its category's id is the
+ * category's, or, only for a note Planning Center sent without one, when
+ * its category's name is (`inCategory`); notes in other categories are
+ * never touched, a deleted one of the same name included, and items that
+ * are not songs are left out. What a note should say comes from
+ * `formatHymnNote`.
  *
  * `ownedNoteIds` are the notes the app wrote itself (its successful creates,
  * from the write log): the only ones it deletes. Every other note it would
@@ -223,7 +272,7 @@ function says(note: ItemNote, content: string): boolean {
  */
 export function diffHymnNotes(
     items: readonly HymnNoteItem[],
-    categoryName: string,
+    category: Pick<ItemNoteCategory, "id" | "name">,
     settings: HymnNoteSettings,
     ownedNoteIds: ReadonlySet<string>
 ): HymnNoteDiff[] {
@@ -232,9 +281,7 @@ export function diffHymnNotes(
         .sort((a, b) => a.sequence - b.sequence)
         .map((item) => {
             const content = formatHymnNote(item.match, settings);
-            const notes = item.notes.filter((note) =>
-                sameCategoryName(note.categoryName, categoryName)
-            );
+            const notes = item.notes.filter((note) => inCategory(note, category));
             const kept =
                 content === null
                     ? undefined
@@ -357,8 +404,10 @@ export function hymnNoteState(diff: Pick<HymnNoteDiff, "action">): HymnNoteState
  * - "ready": the category was found, with each song item's diff;
  * - "no-category": the service type has no category of that name, so
  *   nothing can be written until someone creates it in Planning Center;
- * - "unavailable": the categories or the catalog could not be read, so the
- *   notes cannot be compared.
+ * - "unavailable": the notes cannot be compared, and nothing is written:
+ *   the categories or the catalog could not be read, or several categories
+ *   have the name ("ambiguous-category"), so the notes have no one place to
+ *   go until all but one are renamed or deleted in Planning Center.
  */
 export type HymnNoteStatus =
     | { kind: "ready"; category: ItemNoteCategory; items: HymnNoteDiff[] }
@@ -369,6 +418,16 @@ export type HymnNoteStatus =
           reason: "categories" | "catalog";
           /** Why, fit to show. */
           message: string;
+      }
+    | {
+          kind: "unavailable";
+          reason: "ambiguous-category";
+          /** Why, fit to show (`ambiguousCategoryMessage`). */
+          message: string;
+          /** The name the settings give the category. */
+          categoryName: string;
+          /** The service type's categories of that name. */
+          categories: ItemNoteCategory[];
       };
 
 /** The service type's item note categories, or why they could not be read. */
@@ -417,11 +476,13 @@ export function missingCategoryMessage(categoryName: string, serviceTypeName: st
 
 /**
  * A plan's hymnal notes (see `HymnNoteStatus`). Categories that could not
- * be read make it "unavailable"; then a missing category, which is the
- * fix to ask for whatever else is wrong, makes it "no-category"; then a
- * catalog that could not be read makes it "unavailable", since what each
- * note should say is not known. Otherwise each song item's diff against
- * the category, found by name (`findHymnNoteCategory`).
+ * be read make it "unavailable"; then a missing category, or several of
+ * the name, which are the fix to ask for whatever else is wrong, make it
+ * "no-category" or "unavailable" ("ambiguous-category"); then a catalog
+ * that could not be read makes it "unavailable", since what each note
+ * should say is not known. Otherwise each song item's diff against the
+ * category, found by name (`matchHymnNoteCategory`) and matched to the
+ * notes by its id.
  */
 export function planHymnNoteStatus({
     serviceTypeName,
@@ -440,14 +501,24 @@ export function planHymnNoteStatus({
             message: `Planning Center's item note categories could not be read${sentence(categories.error) || "."} Hymnal notes can't be compared.`,
         };
     }
-    const category = findHymnNoteCategory(categories.categories, categoryName);
-    if (category === null) {
+    const match = matchHymnNoteCategory(categories.categories, categoryName);
+    if (match.status === "missing") {
         return {
             kind: "no-category",
             categoryName,
             message: missingCategoryMessage(categoryName, serviceTypeName),
         };
     }
+    if (match.status === "ambiguous") {
+        return {
+            kind: "unavailable",
+            reason: "ambiguous-category",
+            message: ambiguousCategoryMessage(categoryName, serviceTypeName, match.categories),
+            categoryName,
+            categories: match.categories,
+        };
+    }
+    const { category } = match;
     if (catalogError !== null) {
         return {
             kind: "unavailable",
@@ -458,7 +529,7 @@ export function planHymnNoteStatus({
     return {
         kind: "ready",
         category,
-        items: diffHymnNotes(hymnNoteItems(items, catalog), category.name, settings, ownedNoteIds),
+        items: diffHymnNotes(hymnNoteItems(items, catalog), category, settings, ownedNoteIds),
     };
 }
 

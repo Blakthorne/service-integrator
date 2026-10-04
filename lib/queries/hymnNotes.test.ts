@@ -283,6 +283,20 @@ describe("previewHymnNotes", () => {
         });
     });
 
+    test("refuses a service type with several categories of the name, writing nothing", async () => {
+        const fetchMock = stubFetchRoutes(readRoutes(["Hymnal", "Band", "hymnal"]));
+        await expect(previewHymnNotes(ST, PLAN)).resolves.toMatchObject({
+            kind: "unavailable",
+            reason: "ambiguous-category",
+            categoryName: "Hymnal",
+            categories: [
+                { id: HYMNAL, name: "Hymnal" },
+                { id: "512", name: "hymnal" },
+            ],
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
     test("says why when the categories cannot be read", async () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
         stubFetchRoutes({ ...readRoutes(), [urls.categories()]: () => json({}, { status: 500 }) });
@@ -637,6 +651,51 @@ describe("syncHymnNotes", () => {
         expect(recentWrites(db)).toEqual([]);
     });
 
+    test("refuses a service type with several categories of the name, and writes nothing", async () => {
+        seedAppNotes(...APP_NOTES);
+        const fetchMock = stubFetchRoutes({ ...readRoutes(["Hymnal", "hymnal"]), ...writeRoutes() });
+
+        await expect(syncHymnNotes(ST, PLAN)).resolves.toEqual({
+            ok: false,
+            kind: "unavailable",
+            message:
+                'Sunday Morning has 2 item note categories named "Hymnal" ("Hymnal" and "hymnal"), so the hymnal notes have no one place to go. Rename or delete all but one in Planning Center.',
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("never writes to a note of another category with the name, such as a deleted one's", async () => {
+        // Item 1's note is in a deleted "Hymnal" category (999), which
+        // getItemNoteCategories leaves out; its note keeps the name. The app
+        // wrote it, and it is stale, yet it is not the live category's note.
+        seedAppNotes("9009");
+        const page = planItems();
+        page.data[0] = itemResource("1", { title: "O God, Our Help", sequence: 1 }, {
+            ...songLink("77"),
+            ...noteLinks("9009"),
+        });
+        page.included = (page.included as Included[]).concat([
+            itemNoteResource("9009", { category_name: "Hymnal", content: "R-1" }, "999"),
+        ]);
+        const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes(), [urls.items]: page });
+
+        const result = await syncHymnNotes(ST, PLAN);
+
+        const sent = writesSent(fetchMock);
+        expect(sent[0]).toEqual({
+            method: "POST",
+            url: urls.notes("1"),
+            body: {
+                data: {
+                    type: "ItemNote",
+                    attributes: { content: "R-396 / G-317", item_note_category_id: HYMNAL },
+                },
+            },
+        });
+        expect(sent.map(({ url }) => url)).not.toContain(urls.note("1", "9009"));
+        expect(result.ok && result.items[0]).toMatchObject({ itemId: "1", action: "create", keep: [] });
+    });
+
     test("refuses when the categories cannot be read, and writes nothing", async () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
         const fetchMock = stubFetchRoutes({
@@ -740,6 +799,27 @@ describe("getHymnNoteCategories", () => {
         expect(result.ok && result.serviceTypes.map(({ category }) => category.status)).toEqual([
             "found",
             "found",
+        ]);
+    });
+
+    test("says when a service type has several categories of the name", async () => {
+        stubFetchRoutes({
+            [urls.serviceTypes]: serviceTypes(),
+            [urls.categories(ST)]: categories("Hymnal", "hymnal"),
+            [urls.categories(EVENING)]: categories("Hymnal"),
+        });
+        const result = await getHymnNoteCategories();
+        expect(result.ok && result.serviceTypes.map(({ category }) => category)).toEqual([
+            {
+                status: "ambiguous",
+                categories: [
+                    { id: HYMNAL, name: "Hymnal" },
+                    { id: "511", name: "hymnal" },
+                ],
+                message:
+                    'Sunday Morning has 2 item note categories named "Hymnal" ("Hymnal" and "hymnal"), so the hymnal notes have no one place to go. Rename or delete all but one in Planning Center.',
+            },
+            { status: "found", category: { id: HYMNAL, name: "Hymnal" } },
         ]);
     });
 

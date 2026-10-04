@@ -148,6 +148,23 @@ describe("planNotesSummary", () => {
             text: "Hymnal notes can't be compared: Planning Center's item note categories couldn't be read.",
         });
     });
+
+    test("several categories of the name are a warning that names the count and the name", () => {
+        const hymnNotes: HymnNoteStatus = {
+            kind: "unavailable",
+            reason: "ambiguous-category",
+            message: "A long message naming the categories.",
+            categoryName: "Hymnal",
+            categories: [
+                { id: "503", name: "Hymnal" },
+                { id: "777", name: "hymnal" },
+            ],
+        };
+        expect(planNotesSummary({ hymnNotes, notesToSync: 0, songs: [] })).toEqual({
+            tone: "warning",
+            text: 'Hymnal notes can\'t be synced: 2 item note categories are named "Hymnal".',
+        });
+    });
 });
 
 describe("todoView", () => {

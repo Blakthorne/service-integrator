@@ -10,7 +10,8 @@ import {
 } from "@/lib/db/writeLog";
 import type { CatalogMatch, ItemNote, ItemNoteCategory, PlanItem, ServiceType } from "@/lib/domain";
 import {
-    findHymnNoteCategory,
+    ambiguousCategoryMessage,
+    matchHymnNoteCategory,
     missingCategoryMessage,
     planHymnNoteStatus,
     songItemNoteIds,
@@ -434,6 +435,11 @@ export type HymnNoteCategoryLookup =
     | { status: "found"; category: ItemNoteCategory }
     /** It has none of that name: `message` asks for one to be created. */
     | { status: "missing"; message: string }
+    /**
+     * Several of its categories have that name, so the notes have no one
+     * place to go: `message` asks for all but one to be renamed or deleted.
+     */
+    | { status: "ambiguous"; categories: ItemNoteCategory[]; message: string }
     /** Its categories could not be read. */
     | { status: "unavailable"; error: string };
 
@@ -481,16 +487,25 @@ export async function getHymnNoteCategories(): Promise<HymnNoteCategories> {
             if (!read.ok) {
                 return { serviceType, category: { status: "unavailable", error: read.error } };
             }
-            const category = findHymnNoteCategory(read.categories, categoryName);
-            return {
-                serviceType,
-                category: category
-                    ? { status: "found", category }
-                    : {
-                          status: "missing",
-                          message: missingCategoryMessage(categoryName, serviceType.name),
-                      },
-            };
+            const match = matchHymnNoteCategory(read.categories, categoryName);
+            const category: HymnNoteCategoryLookup =
+                match.status === "found"
+                    ? { status: "found", category: match.category }
+                    : match.status === "missing"
+                      ? {
+                            status: "missing",
+                            message: missingCategoryMessage(categoryName, serviceType.name),
+                        }
+                      : {
+                            status: "ambiguous",
+                            categories: match.categories,
+                            message: ambiguousCategoryMessage(
+                                categoryName,
+                                serviceType.name,
+                                match.categories
+                            ),
+                        };
+            return { serviceType, category };
         }),
     };
 }

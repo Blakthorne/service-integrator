@@ -2,14 +2,15 @@ import { describe, expect, test } from "vitest";
 import type { ItemNote, ItemNoteCategory } from "./domain";
 import {
     HYMN_NOTE_TUNE_SEPARATOR,
+    ambiguousCategoryMessage,
     countHymnNoteActions,
     diffHymnNotes,
-    findHymnNoteCategory,
     formatHymnNote,
     hymnNoteDiffFor,
     hymnNoteItems,
     hymnNoteState,
     hymnNotesToSync,
+    matchHymnNoteCategory,
     missingCategoryMessage,
     planHymnNoteStatus,
     sameCategoryName,
@@ -35,6 +36,9 @@ const ST_ANNE: HymnNoteMatch = {
 
 /** A song linked to a catalog song in no book. */
 const NO_BOOK: HymnNoteMatch = { tuneName: "NEW BRITAIN", entries: [] };
+
+/** The hymnal notes' category in the tests below: the one `note` puts notes in by default. */
+const HYMNAL: ItemNoteCategory = { id: "501", name: "Hymnal" };
 
 let noteIds = 9000;
 
@@ -66,10 +70,10 @@ function diffOf(
     {
         owned = new Set<string>(),
         settings = SETTINGS,
-        categoryName = "Hymnal",
-    }: { owned?: ReadonlySet<string>; settings?: HymnNoteSettings; categoryName?: string } = {}
+        category = HYMNAL,
+    }: { owned?: ReadonlySet<string>; settings?: HymnNoteSettings; category?: ItemNoteCategory } = {}
 ) {
-    const [diff] = diffHymnNotes([item], categoryName, settings, owned);
+    const [diff] = diffHymnNotes([item], category, settings, owned);
     return diff;
 }
 
@@ -105,7 +109,7 @@ describe("formatHymnNote", () => {
     });
 });
 
-describe("sameCategoryName and findHymnNoteCategory", () => {
+describe("sameCategoryName and matchHymnNoteCategory", () => {
     test("names match without regard to case or whitespace", () => {
         expect(sameCategoryName("Hymnal", "hymnal")).toBe(true);
         expect(sameCategoryName("  Hymnal ", "HYMNAL")).toBe(true);
@@ -116,18 +120,46 @@ describe("sameCategoryName and findHymnNoteCategory", () => {
 
     const categories: ItemNoteCategory[] = [
         { id: "501", name: "Audio/Visual" },
-        { id: "502", name: " hymnal" },
+        { id: "502", name: "Band" },
         { id: "503", name: "Hymnal" },
     ];
 
-    test("finds the first category with the name", () => {
-        expect(findHymnNoteCategory(categories, "Hymnal")).toEqual({ id: "502", name: " hymnal" });
-        expect(findHymnNoteCategory(categories, "audio/visual")).toEqual({ id: "501", name: "Audio/Visual" });
+    test("finds the one category with the name", () => {
+        expect(matchHymnNoteCategory(categories, " hymnal")).toEqual({
+            status: "found",
+            category: { id: "503", name: "Hymnal" },
+        });
+        expect(matchHymnNoteCategory(categories, "audio/visual")).toEqual({
+            status: "found",
+            category: { id: "501", name: "Audio/Visual" },
+        });
     });
 
-    test("is null when the service type has none", () => {
-        expect(findHymnNoteCategory(categories, "Band")).toBeNull();
-        expect(findHymnNoteCategory([], "Hymnal")).toBeNull();
+    test("says when the service type has none", () => {
+        expect(matchHymnNoteCategory(categories, "Vocals")).toEqual({ status: "missing" });
+        expect(matchHymnNoteCategory([], "Hymnal")).toEqual({ status: "missing" });
+    });
+
+    test("says when several have the name, whatever their case, and gives them all", () => {
+        const twins = [...categories, { id: "777", name: " hymnal" }];
+        expect(matchHymnNoteCategory(twins, "Hymnal")).toEqual({
+            status: "ambiguous",
+            categories: [
+                { id: "503", name: "Hymnal" },
+                { id: "777", name: " hymnal" },
+            ],
+        });
+    });
+
+    test("ambiguousCategoryMessage names the service type, the categories and the fix", () => {
+        expect(
+            ambiguousCategoryMessage("Hymnal", "Sunday Morning", [{ name: "Hymnal" }, { name: "hymnal" }])
+        ).toBe(
+            'Sunday Morning has 2 item note categories named "Hymnal" ("Hymnal" and "hymnal"), so the hymnal notes have no one place to go. Rename or delete all but one in Planning Center.'
+        );
+        expect(
+            ambiguousCategoryMessage("Hymnal", "Sunday Evening", [{ name: "A" }, { name: "B" }, { name: "C" }])
+        ).toContain('3 item note categories named "Hymnal" ("A", "B" and "C")');
     });
 });
 
@@ -297,7 +329,7 @@ describe("diffHymnNotes", () => {
             songItem("1", null, [note("R-1")]),
             songItem("2", ST_ANNE, [note("R-396 / G-317"), note("R-396 / G-317")]),
         ];
-        const diffs = diffHymnNotes(items, "Hymnal", SETTINGS, new Set());
+        const diffs = diffHymnNotes(items, HYMNAL, SETTINGS, new Set());
         expect(diffs.flatMap(({ changes }) => changes)).toEqual([]);
         expect(diffs.map(({ action, keep }) => [action, keep.length])).toEqual([
             ["keep", 1],
@@ -339,12 +371,39 @@ describe("diffHymnNotes", () => {
         expect(diff.keep).toEqual([]);
     });
 
-    test("matches the category's name without regard to case or whitespace", () => {
-        const odd = note("R-396 / G-317", "  hymnal ");
-        expect(diffOf(songItem("1", ST_ANNE, [odd]), { categoryName: "Hymnal" }).action).toBe("unchanged");
-        const other = note("R-396 / G-317", "Hymnal");
-        expect(diffOf(songItem("1", ST_ANNE, [other]), { categoryName: " HYMNAL" }).action).toBe("unchanged");
-        expect(diffOf(songItem("1", ST_ANNE, [other]), { categoryName: "Hymn Numbers" }).action).toBe("create");
+    test("takes a note to be in the category by its category's id, whatever its name says", () => {
+        const renamed = note("R-396 / G-317", "Hymnal (old name)", HYMNAL.id);
+        expect(diffOf(songItem("1", ST_ANNE, [renamed])).action).toBe("unchanged");
+    });
+
+    test("never touches a note of another category with the same name, such as a deleted one", () => {
+        // A deleted "Hymnal" category's notes keep its name; another category
+        // spelled "hymnal" has its own id. Neither is the category's.
+        const deleted = note("R-1", "Hymnal", "999");
+        const twin = note("R-2", "hymnal", "777");
+        const diff = diffOf(songItem("1", ST_ANNE, [deleted, twin]), { owned: written(deleted, twin) });
+        expect(diff).toMatchObject({
+            current: null,
+            action: "create",
+            changes: [{ kind: "create", content: "R-396 / G-317" }],
+            keep: [],
+        });
+        expect(diffOf(songItem("2", null, [deleted, twin]), { owned: written(deleted, twin) })).toMatchObject({
+            action: "none",
+            changes: [],
+            keep: [],
+        });
+    });
+
+    test("matches by name, without regard to case or whitespace, only a note sent without a category id", () => {
+        const odd = note("R-396 / G-317", "  hymnal ", null);
+        expect(diffOf(songItem("1", ST_ANNE, [odd])).action).toBe("unchanged");
+        expect(diffOf(songItem("1", ST_ANNE, [odd]), { category: { id: "501", name: " HYMNAL" } }).action).toBe(
+            "unchanged"
+        );
+        expect(
+            diffOf(songItem("1", ST_ANNE, [odd]), { category: { id: "601", name: "Hymn Numbers" } }).action
+        ).toBe("create");
     });
 
     test("follows the settings: the tune turned on updates a note of numbers only", () => {
@@ -361,7 +420,7 @@ describe("diffHymnNotes", () => {
             { ...songItem("2", null, [note("R-1")], 2), itemType: "header" },
             songItem("1", null, [], 1),
         ];
-        expect(diffHymnNotes(items, "Hymnal", SETTINGS, new Set()).map(({ itemId }) => itemId)).toEqual([
+        expect(diffHymnNotes(items, HYMNAL, SETTINGS, new Set()).map(({ itemId }) => itemId)).toEqual([
             "1",
             "3",
         ]);
@@ -371,7 +430,7 @@ describe("diffHymnNotes", () => {
         const notes = [note("R-12"), note("R-13")];
         const items = [songItem("1", ST_ANNE, notes)];
         const before = JSON.stringify(items);
-        diffHymnNotes(items, "Hymnal", SETTINGS, written(...notes));
+        diffHymnNotes(items, HYMNAL, SETTINGS, written(...notes));
         expect(JSON.stringify(items)).toBe(before);
     });
 });
@@ -419,7 +478,7 @@ describe("summaries", () => {
             songItem("7", ST_ANNE, [note("R-396 / G-317")]),
             songItem("8", null, [typed]),
         ],
-        "Hymnal",
+        HYMNAL,
         SETTINGS,
         written(ours, extra)
     );
@@ -500,8 +559,8 @@ describe("planHymnNoteStatus", () => {
     });
 
     test("deletes only the notes the app wrote", () => {
-        const typed = note("R-1");
-        const ours = note("R-2");
+        const typed = note("R-1", "Hymnal", hymnal.id);
+        const ours = note("R-2", "Hymnal", hymnal.id);
         const items = [
             { id: "3", title: "Not Linked", itemType: "song", sequence: 3, songId: "99", notes: [typed] },
             { id: "4", title: "Not Linked Either", itemType: "song", sequence: 4, songId: null, notes: [ours] },
@@ -517,6 +576,37 @@ describe("planHymnNoteStatus", () => {
             settings: { ...DEFAULT_SETTINGS, hymnNoteCategoryName: "Hymn Numbers" },
         });
         expect(status).toMatchObject({ kind: "ready", category: { id: "601" } });
+    });
+
+    test("matches the notes to the category found by its id", () => {
+        // Band's id is 501, the id `note` gives by default: a "Hymnal"-named
+        // note there is Band's, not the Hymnal category's (503).
+        const misfiled = note("R-1", "Hymnal", "501");
+        const items = [
+            { id: "1", title: "O God, Our Help", itemType: "song", sequence: 1, songId: "77", notes: [misfiled] },
+        ];
+        const status = planHymnNoteStatus({ ...input, items, ownedNoteIds: written(misfiled) });
+        expect(status.kind === "ready" && status.items[0]).toMatchObject({
+            action: "create",
+            changes: [{ kind: "create", content: "R-396 / G-317" }],
+        });
+    });
+
+    test("refuses, as unavailable, a service type with several categories of the name", () => {
+        const twin = { id: "777", name: "hymnal" };
+        expect(
+            planHymnNoteStatus({
+                ...input,
+                categories: { ok: true, categories: [{ id: "501", name: "Band" }, hymnal, twin] },
+            })
+        ).toEqual({
+            kind: "unavailable",
+            reason: "ambiguous-category",
+            message:
+                'Sunday Morning has 2 item note categories named "Hymnal" ("Hymnal" and "hymnal"), so the hymnal notes have no one place to go. Rename or delete all but one in Planning Center.',
+            categoryName: "Hymnal",
+            categories: [hymnal, twin],
+        });
     });
 
     test("no-category: asks for the category to be created in the service type", () => {

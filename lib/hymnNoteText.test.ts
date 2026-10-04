@@ -32,6 +32,9 @@ const ST_ANNE: HymnNoteMatch = {
     ],
 };
 
+/** The hymnal notes' category, in which `note` puts its notes. */
+const HYMNAL = { id: "501", name: "Hymnal" };
+
 let noteIds = 7000;
 
 function note(content: string): ItemNote {
@@ -51,7 +54,7 @@ function songItem(
 function diffOf(item: HymnNoteItem, owned: readonly ItemNote[] = []): HymnNoteDiff {
     const [diff] = diffHymnNotes(
         [item],
-        "Hymnal",
+        HYMNAL,
         DEFAULT_SETTINGS,
         new Set(owned.map(({ id }) => id))
     );
@@ -136,7 +139,7 @@ describe("previewRows and writesToMake", () => {
             songItem("3", ST_ANNE, [mine, note("R-2")]),
             songItem("4", null),
         ],
-        "Hymnal",
+        HYMNAL,
         DEFAULT_SETTINGS,
         new Set([mine.id])
     );
