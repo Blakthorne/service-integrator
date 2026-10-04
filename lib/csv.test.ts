@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { CSV_MIME_TYPE, UTF8_BOM, csvField, toCsv } from "./csv";
+import { CSV_MIME_TYPE, UTF8_BOM, csvField, parseCsv, toCsv } from "./csv";
 
 describe("csvField", () => {
     test("writes plain text as it is", () => {
@@ -101,5 +101,101 @@ describe("the download's constants", () => {
         expect(CSV_MIME_TYPE).toBe("text/csv;charset=utf-8");
         expect(UTF8_BOM).toHaveLength(1);
         expect(UTF8_BOM.charCodeAt(0)).toBe(0xfeff);
+    });
+});
+
+describe("parseCsv", () => {
+    /** The fields of each record, for a parse that must succeed. */
+    function fields(text: string): string[][] {
+        const parsed = parseCsv(text);
+        if (!parsed.ok) {
+            throw new Error(parsed.message);
+        }
+        return parsed.records.map((record) => record.fields);
+    }
+
+    test("reads records of comma-separated fields, keeping spaces", () => {
+        expect(fields("number,title\r\n396, A Charge to Keep \r\n")).toEqual([
+            ["number", "title"],
+            ["396", " A Charge to Keep "],
+        ]);
+    });
+
+    test("ends records at CRLF, LF or a lone CR", () => {
+        expect(fields("a,b\nc,d\r\ne,f\rg,h")).toEqual([
+            ["a", "b"],
+            ["c", "d"],
+            ["e", "f"],
+            ["g", "h"],
+        ]);
+    });
+
+    test("ends the last record at a final line break, or at the end without one", () => {
+        expect(fields("a,b\r\n")).toEqual([["a", "b"]]);
+        expect(fields("a,b\n")).toEqual([["a", "b"]]);
+        expect(fields("a,b")).toEqual([["a", "b"]]);
+    });
+
+    test("reads an empty line as a record of one empty field, and empty fields as empty", () => {
+        expect(fields("a\n\nb\n")).toEqual([["a"], [""], ["b"]]);
+        expect(fields(",x,\n")).toEqual([["", "x", ""]]);
+    });
+
+    test("reads a quoted field whole: commas, line breaks and doubled quotes", () => {
+        expect(fields('396,"Come, Thou Fount","He said ""go""\r\nthen ""stop"""\n')).toEqual([
+            ["396", "Come, Thou Fount", 'He said "go"\r\nthen "stop"'],
+        ]);
+        expect(fields('"",""""\n')).toEqual([["", '"']]);
+    });
+
+    test("skips a byte order mark at the start, and only there", () => {
+        expect(fields(`${UTF8_BOM}number,title\n1,A\n`)).toEqual([
+            ["number", "title"],
+            ["1", "A"],
+        ]);
+        expect(fields(`a,${UTF8_BOM}b`)).toEqual([["a", `${UTF8_BOM}b`]]);
+    });
+
+    test("gives each record the line it starts on, a quoted line break counting", () => {
+        const parsed = parseCsv('h\n"two\nlines"\nthree\r\n\r\nfive');
+        expect(parsed.ok && parsed.records.map(({ line }) => line)).toEqual([1, 2, 4, 5, 6]);
+    });
+
+    test("has no records for an empty text, or one that is only a byte order mark", () => {
+        expect(parseCsv("")).toEqual({ ok: true, records: [] });
+        expect(parseCsv(UTF8_BOM)).toEqual({ ok: true, records: [] });
+    });
+
+    test("reads back what toCsv writes", () => {
+        const records = [
+            ["number", "title", "tune", "variant"],
+            ["108", "Amazing Grace", "NEW BRITAIN", ""],
+            ["109", 'Amazing "Grace", again', "NEW\nBRITAIN", "Descant - last stanza only"],
+        ];
+        expect(fields(toCsv(records))).toEqual(records);
+    });
+
+    test("refuses a quoted field that is never closed, with the line it starts on", () => {
+        expect(parseCsv('a\nb,"open\nstill open')).toEqual({
+            ok: false,
+            line: 2,
+            message: "Line 2: a field that starts with a double quote is never closed.",
+        });
+    });
+
+    test("refuses text between a closing quote and the next comma", () => {
+        expect(parseCsv('a\n"quoted" then more,b')).toEqual({
+            ok: false,
+            line: 2,
+            message: "Line 2: a field in double quotes must end at a comma or the end of the line.",
+        });
+    });
+
+    test("refuses a double quote inside a field that does not start with one", () => {
+        expect(parseCsv('1,The "Old" Cross')).toEqual({
+            ok: false,
+            line: 1,
+            message: "Line 1: a field with a double quote in it must be in double quotes, with the quote doubled.",
+        });
     });
 });
