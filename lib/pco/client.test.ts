@@ -859,23 +859,36 @@ describe("validation errors (422)", () => {
         return stubFetchRoutes({ [`POST ${BASE}/songs`]: makeResponse });
     }
 
-    test("a 422 is a PcoValidationError carrying PCO's errors[].detail", async () => {
-        const fetchMock = rejectSong(() =>
-            json(
-                {
-                    errors: [
-                        {
-                            status: "422",
-                            title: "Unprocessable Entity",
-                            detail: "Title can't be blank",
-                            source: { pointer: "/data/attributes/title" },
-                        },
-                        { status: "422", title: "Unprocessable Entity", detail: "Ccli number is invalid" },
-                    ],
-                },
-                { status: 422 }
-            )
-        );
+    // The two 422s the live spike saw: an item note with no category, and a
+    // song attribute PCO will not assign.
+    const MISSING_CATEGORY = {
+        detail: "must exist",
+        status: "422",
+        title: "Validation Error",
+        source: { parameter: "category" },
+        meta: { resource: "PlanItemNote", associated_resources: [] },
+    };
+    const FORBIDDEN_ATTRIBUTE = {
+        status: "422",
+        title: "Forbidden Attribute",
+        detail: "notes cannot be assigned",
+    };
+
+    test.each([
+        [
+            "a missing category",
+            MISSING_CATEGORY,
+            { title: "Validation Error", detail: "must exist", parameter: "category" },
+            "category: must exist",
+        ],
+        [
+            "a forbidden attribute",
+            FORBIDDEN_ATTRIBUTE,
+            { title: "Forbidden Attribute", detail: "notes cannot be assigned" },
+            "Forbidden Attribute: notes cannot be assigned",
+        ],
+    ])("a 422 for %s is a PcoValidationError naming the issue", async (_case, body, issue, line) => {
+        const fetchMock = rejectSong(() => json({ errors: [body] }, { status: 422 }));
 
         const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
 
@@ -885,13 +898,44 @@ describe("validation errors (422)", () => {
             name: "PcoValidationError",
             status: 422,
             path: "/services/v2/songs",
-            details: ["Title can't be blank", "Ccli number is invalid"],
+            details: [line],
         });
-        expect((error as Error).message).toBe(
-            `${MESSAGE}: ["Title can't be blank","Ccli number is invalid"]`
-        );
+        expect((error as PcoValidationError).errors).toEqual([issue]);
+        expect((error as Error).message).toBe(`${MESSAGE}: ${JSON.stringify([line])}`);
         // A 422 is never retried.
         expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("names every issue a body lists, in order", async () => {
+        rejectSong(() => json({ errors: [MISSING_CATEGORY, FORBIDDEN_ATTRIBUTE] }, { status: 422 }));
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect((error as PcoValidationError).details).toEqual([
+            "category: must exist",
+            "Forbidden Attribute: notes cannot be assigned",
+        ]);
+        expect((error as Error).message).toBe(
+            `${MESSAGE}: ["category: must exist","Forbidden Attribute: notes cannot be assigned"]`
+        );
+    });
+
+    test.each([
+        [
+            { title: "Validation Error", detail: "must exist", parameter: "category" },
+            "category: must exist",
+        ],
+        [{ detail: "must exist", parameter: "category" }, "category: must exist"],
+        [{ title: "Validation Error", parameter: "category" }, "category: Validation Error"],
+        [{ parameter: "category" }, "category"],
+        [
+            { title: "Forbidden Attribute", detail: "notes cannot be assigned" },
+            "Forbidden Attribute: notes cannot be assigned",
+        ],
+        [{ detail: "must exist" }, "must exist"],
+        [{ title: "Validation Error" }, "Validation Error"],
+    ])("describes the issue %j as %j", (issue, line) => {
+        expect(new PcoValidationError("/services/v2/songs", [issue]).details).toEqual([line]);
     });
 
     test.each([
@@ -906,19 +950,20 @@ describe("validation errors (422)", () => {
         const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
 
         expect(error).toBeInstanceOf(PcoValidationError);
-        expect(error).toMatchObject({ status: 422, details: [] });
+        expect(error).toMatchObject({ status: 422, errors: [], details: [] });
         expect((error as Error).message).toBe(MESSAGE);
     });
 
-    test("keeps only the details that are non-empty strings", async () => {
+    test("keeps only fields that are non-empty strings, and skips an error with none", async () => {
         rejectSong(() =>
             json(
                 {
                     errors: [
-                        { title: "No detail" },
-                        { detail: "Title can't be blank" },
-                        { detail: 42 },
-                        { detail: "" },
+                        { title: "Validation Error" },
+                        { detail: 42, title: "", source: { parameter: 7 } },
+                        { detail: "must exist", source: "category" },
+                        { detail: "", source: null, meta: {} },
+                        { source: { parameter: "category" } },
                         null,
                         "invalid",
                     ],
@@ -926,9 +971,19 @@ describe("validation errors (422)", () => {
                 { status: 422 }
             )
         );
-        await expect(pcoMutate("POST", "/songs", songBody)).rejects.toMatchObject({
-            details: ["Title can't be blank"],
-        });
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect((error as PcoValidationError).errors).toEqual([
+            { title: "Validation Error" },
+            { detail: "must exist" },
+            { parameter: "category" },
+        ]);
+        expect((error as PcoValidationError).details).toEqual([
+            "Validation Error",
+            "must exist",
+            "category",
+        ]);
     });
 
     test("a body that fails while being read gives no details", async () => {
@@ -938,6 +993,7 @@ describe("validation errors (422)", () => {
         rejectSong(() => new Response(body, { status: 422 }));
         await expect(pcoMutate("POST", "/songs", songBody)).rejects.toMatchObject({
             name: "PcoValidationError",
+            errors: [],
             details: [],
         });
     });
@@ -968,6 +1024,7 @@ describe("validation errors (422)", () => {
         expect(error).toBeInstanceOf(PcoError);
         expect(error).not.toBeInstanceOf(PcoValidationError);
         expect(error).toMatchObject({ name: "PcoError", status });
+        expect(error).not.toHaveProperty("errors");
         expect(error).not.toHaveProperty("details");
     });
 });

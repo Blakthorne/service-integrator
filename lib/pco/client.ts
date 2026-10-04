@@ -54,21 +54,44 @@ export class PcoError extends Error {
     }
 }
 
+/** One problem a 422 names. PCO may leave out any of the fields. */
+export interface PcoValidationIssue {
+    /** The kind of problem, e.g. "Validation Error" or "Forbidden Attribute". */
+    title?: string;
+    /** What was wrong, e.g. "must exist". */
+    detail?: string;
+    /** The request parameter at fault, e.g. "category". */
+    parameter?: string;
+}
+
+/**
+ * One readable line for an issue: the parameter at fault (or else the title),
+ * then what was wrong. "category: must exist"; with no parameter, "Forbidden
+ * Attribute: notes cannot be assigned". A field PCO left out is left out.
+ */
+function describeIssue({ title, detail, parameter }: PcoValidationIssue): string {
+    const label = parameter ?? (detail === undefined ? undefined : title);
+    const text = detail ?? title;
+    return [label, text].filter((part) => part !== undefined).join(": ");
+}
+
 /**
  * PCO refused a request as invalid (422), typically a write whose attributes
- * failed validation. `details` are PCO's `errors[].detail` strings, possibly
- * none.
+ * failed validation. `errors` are the issues its body names, possibly none,
+ * and `details` one readable line for each, to show the user.
  */
 export class PcoValidationError extends PcoError {
+    readonly errors: readonly PcoValidationIssue[];
     readonly details: readonly string[];
 
-    constructor(path: string, details: readonly string[]) {
+    constructor(path: string, errors: readonly PcoValidationIssue[]) {
         super(422, path);
         this.name = "PcoValidationError";
-        this.details = details;
-        if (details.length > 0) {
+        this.errors = errors;
+        this.details = errors.map(describeIssue);
+        if (this.details.length > 0) {
             // JSON-quoted, so a detail cannot forge log lines.
-            this.message += `: ${JSON.stringify(details)}`;
+            this.message += `: ${JSON.stringify(this.details)}`;
         }
     }
 }
@@ -158,11 +181,18 @@ function discardBody(response: Response): void {
     void response.body?.cancel().catch(() => {});
 }
 
+/** `value` when it is a non-empty string, else undefined. */
+function nonEmptyString(value: unknown): string | undefined {
+    return typeof value === "string" && value !== "" ? value : undefined;
+}
+
 /**
- * The `errors[].detail` strings of a 422's body. Read defensively: a body that
- * is not JSON, or not shaped like PCO's errors, gives none.
+ * The issues a 422's body names: each error's title, detail and
+ * source.parameter. Read defensively: a body that is not JSON, or not shaped
+ * like PCO's errors, gives none; a field that is not a non-empty string is
+ * left out, and an error with none of the three is skipped.
  */
-async function validationDetails(response: Response): Promise<string[]> {
+async function validationIssues(response: Response): Promise<PcoValidationIssue[]> {
     let body: unknown;
     try {
         body = await response.json();
@@ -173,9 +203,12 @@ async function validationDetails(response: Response): Promise<string[]> {
     if (!Array.isArray(errors)) {
         return [];
     }
-    return errors.flatMap((error: Partial<PcoErrorObject> | null) =>
-        typeof error?.detail === "string" && error.detail !== "" ? [error.detail] : []
-    );
+    return errors.flatMap((error: Partial<PcoErrorObject> | null) => {
+        const title = nonEmptyString(error?.title);
+        const detail = nonEmptyString(error?.detail);
+        const parameter = nonEmptyString(error?.source?.parameter);
+        return title || detail || parameter ? [{ title, detail, parameter }] : [];
+    });
 }
 
 /**
@@ -184,7 +217,7 @@ async function validationDetails(response: Response): Promise<string[]> {
  */
 async function responseError(response: Response, path: string): Promise<PcoError> {
     if (response.status === 422) {
-        return new PcoValidationError(path, await validationDetails(response));
+        return new PcoValidationError(path, await validationIssues(response));
     }
     discardBody(response);
     return new PcoError(response.status, path);
