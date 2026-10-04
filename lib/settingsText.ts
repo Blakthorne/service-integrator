@@ -25,6 +25,8 @@ export const SETTINGS_CARD_TITLES = {
     copyright: "Copyright",
     scheduleText: "Schedule text",
     hymnalNotes: "Hymnal notes",
+    credits: "Credits",
+    email: "Email",
 } as const;
 
 /** What each setting is called on the page, and the card that edits it. */
@@ -45,6 +47,10 @@ export const SETTING_DESCRIPTIONS: Readonly<
         label: "Tune in hymnal notes",
         card: SETTINGS_CARD_TITLES.hymnalNotes,
     },
+    creditRoles: { label: "Credit roles", card: SETTINGS_CARD_TITLES.credits },
+    creditPhrases: { label: "Credit phrases", card: SETTINGS_CARD_TITLES.credits },
+    emailRecipients: { label: "Email recipients", card: SETTINGS_CARD_TITLES.email },
+    emailSubjectTemplate: { label: "Email subject", card: SETTINGS_CARD_TITLES.email },
 };
 
 /** The longest stored value an issue shows. */
@@ -57,6 +63,14 @@ function defaultInWords(key: SettingKey): string {
             return "no labels of its own, so each service type gets its default header";
         case "hymnNoteIncludesTune":
             return DEFAULT_SETTINGS.hymnNoteIncludesTune ? "yes" : "no";
+        case "creditRoles":
+            return DEFAULT_SETTINGS.creditRoles.join(", ");
+        case "creditPhrases":
+            return Object.entries(DEFAULT_SETTINGS.creditPhrases)
+                .map(([role, phrase]) => `${role}: "${phrase}"`)
+                .join(", ");
+        case "emailRecipients":
+            return "no recipients";
         default:
             return JSON.stringify(DEFAULT_SETTINGS[key]);
     }
