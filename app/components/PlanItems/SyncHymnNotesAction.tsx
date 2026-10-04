@@ -78,8 +78,9 @@ const PRIMARY_BUTTON_CLASS =
 const SECONDARY_BUTTON_CLASS =
     "px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed";
 
+/** A link in running text: underlined, since its colour alone is under 3:1 against the text's. */
 const LINK_CLASS =
-    "text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline";
+    "text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300";
 
 /** One line of a row: its tag, then the note's words, old to new for a change, and why. */
 function NoteLine({ line }: { line: HymnNoteLine }) {

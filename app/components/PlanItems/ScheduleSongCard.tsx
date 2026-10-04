@@ -243,10 +243,11 @@ export default function ScheduleSongCard({
             ) : view.kind === "ignored" ? (
                 <p className={NOTE_CLASS}>
                     Set aside on{" "}
+                    {/* Underlined: in running text, its colour alone is under 3:1 against the text's. */}
                     <Link
                         href={routes.catalogReconcile()}
                         prefetch={false}
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+                        className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                     >
                         Reconcile
                     </Link>{" "}
