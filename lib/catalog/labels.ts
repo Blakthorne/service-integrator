@@ -37,5 +37,7 @@ export function formatEntryLabel(
             : location !== ""
               ? titleCase(location)
               : "?";
-    return book.labelFormat.replaceAll(NUMBER_PLACEHOLDER, value);
+    // A function, not a string: a string replacement would expand "$&" and
+    // the like in a location label.
+    return book.labelFormat.replaceAll(NUMBER_PLACEHOLDER, () => value);
 }

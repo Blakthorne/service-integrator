@@ -36,6 +36,12 @@ describe("formatEntryLabel", () => {
         );
     });
 
+    test("puts a location in as it is, never reading $ patterns in it", () => {
+        expect(formatEntryLabel(great, entry(null, "$& and $$ page $1"))).toBe(
+            "G-$& And $$ Page $1"
+        );
+    });
+
     test("prefers the number when an entry has a location too", () => {
         expect(formatEntryLabel(great, entry(12, "front cover"))).toBe("G-12");
     });
