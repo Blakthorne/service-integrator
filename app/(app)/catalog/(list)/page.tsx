@@ -6,7 +6,7 @@ import EmptyState from "@/app/components/ui/EmptyState";
 import LoadingState from "@/app/components/ui/LoadingState";
 import PageHeader from "@/app/components/ui/PageHeader";
 import { catalogTagIdsBySong } from "@/lib/catalog/filter";
-import { getCatalogBooks, getCatalogSongs } from "@/lib/queries/catalog";
+import { getActiveCatalogBooks, getCatalogSongs } from "@/lib/queries/catalog";
 import { getSongTagGroups, getTagIdsBySong } from "@/lib/queries/tags";
 import { routes } from "@/lib/routes";
 
@@ -24,7 +24,7 @@ export const metadata: Metadata = { title: "Catalog" };
  */
 export default function CatalogPage() {
     const songs = getCatalogSongs();
-    const books = getCatalogBooks().map(({ code, name, shortName }) => ({
+    const books = getActiveCatalogBooks().map(({ code, name, shortName }) => ({
         code,
         name,
         shortName,
