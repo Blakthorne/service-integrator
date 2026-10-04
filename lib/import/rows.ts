@@ -4,7 +4,8 @@
  * was previewed. Rows refer to each other by key, not by id (ids exist only
  * once apply inserts them): a hymn by its `normalizeTitle` key, a tune by its
  * `normalizeTuneName` key, a song by its hymn and tune keys, a book by code.
- * Pure and safe on both sides.
+ * `parsePlannedRows` checks stored rows before apply trusts them. Pure and
+ * safe on both sides.
  */
 
 /** A book to create. */
@@ -63,10 +64,13 @@ export interface PlannedCatalogRows {
     entries: PlannedEntry[];
 }
 
-/** Thrown by `parsePlannedRows` for stored rows of the wrong shape. */
+/** Thrown by `parsePlannedRows` for stored rows that are damaged. */
 export class InvalidPlannedRowsError extends Error {
-    constructor(path: string) {
-        super(`The planned rows are not valid at ${path}`);
+    /** `path` is where the first problem is; `problem` says what it is, when the shape alone does not. */
+    constructor(path: string, problem?: string) {
+        super(
+            `The planned rows are not valid at ${path}${problem ? `: ${problem}` : ""}`
+        );
         this.name = "InvalidPlannedRowsError";
     }
 }
@@ -147,12 +151,84 @@ const plannedRows = shape<PlannedCatalogRows>({
     ),
 });
 
+/** A song's key: its hymn's and its tune's keys. */
+function songKey(hymnKey: string, tuneKey: string | null): string {
+    return JSON.stringify([hymnKey, tuneKey]);
+}
+
+/**
+ * Check that the rows hang together, as apply needs them to: each book code
+ * (without regard to case, as the database compares them), hymn key, tune
+ * key, song and alias form is planned once, and every song and entry refers
+ * to rows that are planned. A duplicate key would otherwise make apply
+ * insert two rows and keep one, leaving the other an orphan.
+ */
+function checkReferences(rows: PlannedCatalogRows): void {
+    const unique = <T>(list: T[], key: (item: T) => string, path: string, field: string) => {
+        const seen = new Set<string>();
+        list.forEach((item, index) => {
+            const value = key(item);
+            if (seen.has(value)) {
+                throw new InvalidPlannedRowsError(`${path}[${index}].${field}`, "planned twice");
+            }
+            seen.add(value);
+        });
+        return seen;
+    };
+    unique(rows.books, ({ code }) => code.toLowerCase(), "rows.books", "code");
+    // Entries name their book exactly as it is planned, as apply looks it up.
+    const books = new Set(rows.books.map(({ code }) => code));
+    const hymns = unique(rows.hymns, ({ key }) => key, "rows.hymns", "key");
+    const tunes = unique(rows.tunes, ({ key }) => key, "rows.tunes", "key");
+    const songs = unique(
+        rows.songs,
+        ({ hymnKey, tuneKey }) => songKey(hymnKey, tuneKey),
+        "rows.songs",
+        "tuneKey"
+    );
+    for (const [list, path] of [
+        [rows.hymns, "rows.hymns"],
+        [rows.tunes, "rows.tunes"],
+    ] as const) {
+        const seen = new Set<string>();
+        list.forEach((row, index) => {
+            row.aliases.forEach(({ normalized }, alias) => {
+                if (seen.has(normalized)) {
+                    throw new InvalidPlannedRowsError(
+                        `${path}[${index}].aliases[${alias}].normalized`,
+                        "planned twice"
+                    );
+                }
+                seen.add(normalized);
+            });
+        });
+    }
+    rows.songs.forEach(({ hymnKey, tuneKey }, index) => {
+        if (!hymns.has(hymnKey)) {
+            throw new InvalidPlannedRowsError(`rows.songs[${index}].hymnKey`, "no such hymn");
+        }
+        if (tuneKey !== null && !tunes.has(tuneKey)) {
+            throw new InvalidPlannedRowsError(`rows.songs[${index}].tuneKey`, "no such tune");
+        }
+    });
+    rows.entries.forEach(({ bookCode, hymnKey, tuneKey }, index) => {
+        if (!books.has(bookCode)) {
+            throw new InvalidPlannedRowsError(`rows.entries[${index}].bookCode`, "no such book");
+        }
+        if (!songs.has(songKey(hymnKey, tuneKey))) {
+            throw new InvalidPlannedRowsError(`rows.entries[${index}]`, "no such song");
+        }
+    });
+}
+
 /**
  * Check that a value (parsed from `import_runs.rows`) has the shape of
- * `PlannedCatalogRows`, and return it with only the known fields. Throws
- * `InvalidPlannedRowsError`, naming the first bad path, otherwise. It checks
- * the shape only: whether the keys refer to each other is apply's concern.
+ * `PlannedCatalogRows` and that its rows hang together (see
+ * `checkReferences`), and return it with only the known fields. Throws
+ * `InvalidPlannedRowsError`, naming the first problem, otherwise.
  */
 export function parsePlannedRows(value: unknown): PlannedCatalogRows {
-    return plannedRows(value, "rows");
+    const rows = plannedRows(value, "rows");
+    checkReferences(rows);
+    return rows;
 }

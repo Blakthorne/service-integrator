@@ -208,6 +208,27 @@ describe("applyImportRun's refusals", () => {
         expect(countCatalog(db)).toEqual(EMPTY);
     });
 
+    test("refuses rows that plan a key twice, writing nothing", () => {
+        const plan = planHymnsJsonImport([
+            {
+                song_title: "Amazing Grace",
+                tune_name: "NEW BRITAIN",
+                rejoice_hymns: 130,
+                great_hymns_of_the_faith: 236,
+            },
+        ]);
+        for (const rows of [
+            { ...plan.rows, hymns: [...plan.rows.hymns, ...plan.rows.hymns] },
+            { ...plan.rows, tunes: [...plan.rows.tunes, ...plan.rows.tunes] },
+            { ...plan.rows, songs: [...plan.rows.songs, ...plan.rows.songs] },
+        ]) {
+            const id = seedImportRun(db, { report: plan.report, rows });
+            expect(refusal(() => applyImportRun(db, id)).reason).toBe("invalid-rows");
+            expect(status(id)).toBe("preview");
+        }
+        expect(countCatalog(db)).toEqual(EMPTY);
+    });
+
     test("writes nothing when the database refuses a row", () => {
         const plan = planHymnsJsonImport([
             {

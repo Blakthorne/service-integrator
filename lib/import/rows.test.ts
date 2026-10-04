@@ -96,4 +96,67 @@ describe("parsePlannedRows", () => {
             `The planned rows are not valid at ${path}`
         );
     });
+
+    test.each([
+        [
+            "a book code planned twice, in any case",
+            () => ({ ...valid(), books: [...valid().books, { ...valid().books[0], code: "r" }] }),
+            "rows.books[1].code: planned twice",
+        ],
+        [
+            "a hymn key planned twice",
+            () => ({ ...valid(), hymns: [...valid().hymns, { ...valid().hymns[0], aliases: [] }] }),
+            "rows.hymns[1].key: planned twice",
+        ],
+        [
+            "a tune key planned twice",
+            () => ({ ...valid(), tunes: [...valid().tunes, ...valid().tunes] }),
+            "rows.tunes[1].key: planned twice",
+        ],
+        [
+            "a song planned twice",
+            () => ({ ...valid(), songs: [...valid().songs, valid().songs[1]] }),
+            "rows.songs[2].tuneKey: planned twice",
+        ],
+        [
+            "an alias form planned twice",
+            () => ({
+                ...valid(),
+                hymns: [
+                    ...valid().hymns,
+                    { key: "another", title: "Another", aliases: valid().hymns[0].aliases },
+                ],
+            }),
+            "rows.hymns[1].aliases[0].normalized: planned twice",
+        ],
+        [
+            "a song of a hymn that is not planned",
+            () => ({ ...valid(), songs: [{ hymnKey: "missing", tuneKey: null }], entries: [] }),
+            "rows.songs[0].hymnKey: no such hymn",
+        ],
+        [
+            "a song to a tune that is not planned",
+            () => ({
+                ...valid(),
+                songs: [{ hymnKey: "rejoice, the lord is king", tuneKey: "MISSING" }],
+                entries: [],
+            }),
+            "rows.songs[0].tuneKey: no such tune",
+        ],
+        [
+            "an entry in a book that is not planned, or not spelt as planned",
+            () => ({ ...valid(), entries: [{ ...valid().entries[0], bookCode: "r" }] }),
+            "rows.entries[0].bookCode: no such book",
+        ],
+        [
+            "an entry of a song that is not planned",
+            () => ({ ...valid(), entries: [{ ...valid().entries[0], tuneKey: "OTHER" }] }),
+            "rows.entries[0]: no such song",
+        ],
+    ])("refuses %s", (_, rows, problem) => {
+        expect(() => parsePlannedRows(rows())).toThrow(InvalidPlannedRowsError);
+        expect(() => parsePlannedRows(rows())).toThrow(
+            `The planned rows are not valid at ${problem}`
+        );
+    });
 });
