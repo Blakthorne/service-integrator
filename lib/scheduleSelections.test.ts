@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import type { PlanItem } from "./domain";
+import { CUSTOM_TEXT_MAX_LENGTH } from "./queries/selections";
 import {
+    CUSTOM_TEXT_INPUT_MAX_LENGTH,
     defaultOption,
     hasNumbers,
     mergeScheduleSelections,
@@ -132,6 +134,12 @@ describe("scheduleSelectionsReducer: purity", () => {
         const before = reduceAll([choose("2", "numbers")]);
         const after = scheduleSelectionsReducer(before, choose("1", "custom"));
         expect(after["2"]).toBe(before["2"]);
+    });
+});
+
+describe("CUSTOM_TEXT_INPUT_MAX_LENGTH", () => {
+    test("is the longest custom text the database saves", () => {
+        expect(CUSTOM_TEXT_INPUT_MAX_LENGTH).toBe(CUSTOM_TEXT_MAX_LENGTH);
     });
 });
 

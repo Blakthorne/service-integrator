@@ -112,16 +112,49 @@ export function differentSongTitle(
 }
 
 /**
+ * `lead`, then `reason` after a colon, as one sentence: "<lead>: <reason>."
+ * A reason that already ends a sentence gets no second full stop, and an
+ * empty one is left out ("<lead>.").
+ */
+function withReason(lead: string, reason: string): string {
+    const text = reason.trim();
+    if (text === "") {
+        return `${lead}.`;
+    }
+    return `${lead}: ${/[.!?]$/.test(text) ? text : `${text}.`}`;
+}
+
+/**
  * What the Schedule tab says when the catalog cannot be read (see
  * `PlanDetail.catalogError`): "The catalog is unavailable: <why>. Numbers
  * can't be shown." A reason that already ends a sentence gets no second
  * full stop, and an empty one is left out.
  */
 export function catalogUnavailableMessage(error: string): string {
-    const reason = error.trim();
-    if (reason === "") {
-        return "The catalog is unavailable. Numbers can't be shown.";
-    }
-    const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`;
-    return `The catalog is unavailable: ${sentence} Numbers can't be shown.`;
+    return `${withReason("The catalog is unavailable", error)} Numbers can't be shown.`;
 }
+
+/**
+ * What the Schedule tab says when the plan's saved choices cannot be read
+ * (see `PlanDetail.selectionsError`): every song shows its default, and
+ * nothing chosen on the tab is saved, since the database is not answering.
+ */
+export function selectionsUnavailableMessage(error: string): string {
+    return `${withReason("The saved choices couldn't be read", error)} Each song shows its default, and choices made here won't be saved.`;
+}
+
+/**
+ * What a card says when its choice could not be saved: "Not saved. <why>"
+ * (`message`, from the save, as a sentence), beside its Retry. The choice
+ * stays on screen.
+ */
+export function saveFailureText(message: string): string {
+    const reason = message.trim();
+    if (reason === "") {
+        return "Not saved.";
+    }
+    return `Not saved. ${/[.!?]$/.test(reason) ? reason : `${reason}.`}`;
+}
+
+/** What a card's status region says once a save that had failed has gone through. */
+export const SAVED_AFTER_FAILURE_NOTICE = "Saved.";

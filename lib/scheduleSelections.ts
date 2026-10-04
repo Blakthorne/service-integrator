@@ -27,6 +27,13 @@ export type ScheduleSelectionsAction =
           text: string;
       };
 
+/**
+ * The longest custom text the custom box takes: what the database saves
+ * (`CUSTOM_TEXT_MAX_LENGTH` in lib/queries/selections.ts, which a test keeps
+ * the same), so a choice is never refused for its length.
+ */
+export const CUSTOM_TEXT_INPUT_MAX_LENGTH = 500;
+
 /** Pick a song's option: its numbers, "blank" or "custom". */
 export type ChooseOption = (itemId: string, option: ScheduleOption) => void;
 

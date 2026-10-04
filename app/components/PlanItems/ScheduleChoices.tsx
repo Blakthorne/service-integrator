@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { createDebouncedSave } from "@/lib/debouncedSave";
 import type { PlanItem, ScheduleSelection } from "@/lib/domain";
 import { SCHEDULE_OPTION_LABELS } from "@/lib/scheduleCards";
-import type {
-    ChooseOption,
-    ScheduleOption,
-    SetCustomText,
+import {
+    CUSTOM_TEXT_INPUT_MAX_LENGTH,
+    type ChooseOption,
+    type ScheduleOption,
+    type SetCustomText,
 } from "@/lib/scheduleSelections";
 
 /** A song item as its choices read it: its ID and title, with its selection. */
@@ -25,6 +26,8 @@ const CUSTOM_TEXT_DEBOUNCE_MS = 500;
  * The custom-text box. It keeps what is typed locally and saves it 500 ms
  * after typing pauses, or straight away when the box loses focus (so a radio
  * or the copy button clicked right after typing sees the text) or unmounts.
+ * Saving hands it to the provider, which saves it in the database too while
+ * Custom is chosen. It takes no more text than the database keeps.
  */
 function CustomTextInput({
     item,
@@ -83,6 +86,7 @@ function CustomTextInput({
             value={inputValue}
             onChange={handleChange}
             onBlur={handleBlur}
+            maxLength={CUSTOM_TEXT_INPUT_MAX_LENGTH}
             aria-label={`Custom text for ${item.title}`}
             className="flex-1 px-2 py-1 text-sm border w-full rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
             placeholder="Enter custom text..."

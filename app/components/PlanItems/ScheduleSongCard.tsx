@@ -5,14 +5,18 @@ import { startTransition, useCallback, useEffect, useRef, useState } from "react
 import type { CatalogMatch, PlanItemWithSong, ScheduleSelection } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import {
+    SAVED_AFTER_FAILURE_NOTICE,
     differentSongTitle,
     linkedNotice,
+    saveFailureText,
     scheduleChoices,
     type ScheduleSongView,
 } from "@/lib/scheduleCards";
 import type { ChooseOption, SetCustomText } from "@/lib/scheduleSelections";
+import type { SelectionSaveState } from "@/lib/scheduleSelectionsStore";
 import EntryNumbers from "./EntryNumbers";
 import LinkToCatalogInline, { type LinkSong } from "./LinkToCatalogInline";
+import type { RetrySave } from "./PlanProvider";
 import ScheduleChoices from "./ScheduleChoices";
 
 /** A song item with its Schedule-tab selection. */
@@ -46,14 +50,55 @@ function LinkedSong({ match }: { match: CatalogMatch }) {
     );
 }
 
+/**
+ * The line under a card's choices when its choice could not be saved: why,
+ * as an alert that is new for each failure (so a repeated one is announced
+ * again), and Retry. Retry stays put while it runs, `aria-disabled` rather
+ * than disabled, so it keeps focus.
+ */
+function SaveFailure({
+    state,
+    onRetry,
+}: {
+    state: Extract<SelectionSaveState, { status: "failed" }>;
+    onRetry: () => void;
+}) {
+    return (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+            <p key={state.attempt} role="alert" className="text-red-600 dark:text-red-400">
+                {saveFailureText(state.message)}
+            </p>
+            <button
+                type="button"
+                onClick={() => {
+                    if (!state.retrying) {
+                        onRetry();
+                    }
+                }}
+                aria-disabled={state.retrying}
+                className={`rounded-sm font-medium text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    state.retrying
+                        ? "opacity-60 cursor-not-allowed"
+                        : "cursor-pointer hover:text-blue-800 hover:underline dark:hover:text-blue-300"
+                }`}
+            >
+                {state.retrying ? "Retrying…" : "Retry"}
+            </button>
+        </div>
+    );
+}
+
 interface ScheduleSongCardProps {
     item: ItemWithSelection;
     /** Which card it is (see `scheduleSongView`). */
     view: ScheduleSongView;
+    /** How the save of its choice stands; null when it is saved, or was never changed. */
+    saveState: SelectionSaveState | null;
     /** This Schedule tab's address, where the new-song form comes back to. */
     scheduleHref: string;
     onChooseOption: ChooseOption;
     onCustomTextChange: SetCustomText;
+    onRetrySave: RetrySave;
     onLink: LinkSong;
 }
 
@@ -79,19 +124,32 @@ interface ScheduleSongCardProps {
  * empty until then, so screen readers announce it, and moves focus to its
  * heading rather than leave it on the page's body. Both wait for the
  * revalidated plan to show the link.
+ *
+ * Each choice is saved as it is made. One that could not be saved stays
+ * chosen, and the card says so under its choices, with Retry
+ * (`SaveFailure`). Once a later save goes through, that line goes and the
+ * status region says "Saved."; when focus was on Retry, which goes with the
+ * line, the heading takes it.
  */
 export default function ScheduleSongCard({
     item,
     view,
+    saveState,
     scheduleHref,
     onChooseOption,
     onCustomTextChange,
+    onRetrySave,
     onLink,
 }: ScheduleSongCardProps) {
     const headingRef = useRef<HTMLHeadingElement>(null);
     /** True once a Link made on this card has gone through. */
     const [linkedHere, setLinkedHere] = useState(false);
-    const notice = linkedHere ? linkedNotice(view) : null;
+    const linkNotice = linkedHere ? linkedNotice(view) : null;
+    const failure = saveState?.status === "failed" ? saveState : null;
+    /** True once a save has gone through after a failure, until the next save starts. */
+    const [savedAgain, setSavedAgain] = useState(false);
+    const failedBefore = useRef(false);
+    const notice = linkNotice ?? (savedAgain ? SAVED_AFTER_FAILURE_NOTICE : null);
 
     // In a transition, like the revalidated plan the action brings, so the
     // notice can land with it.
@@ -100,10 +158,27 @@ export default function ScheduleSongCard({
     }, []);
 
     useEffect(() => {
-        if (notice !== null) {
+        if (linkNotice !== null) {
             headingRef.current?.focus();
         }
-    }, [notice]);
+    }, [linkNotice]);
+
+    useEffect(() => {
+        if (saveState !== null) {
+            failedBefore.current ||= saveState.status === "failed";
+            setSavedAgain(false);
+            return;
+        }
+        if (!failedBefore.current) {
+            return;
+        }
+        failedBefore.current = false;
+        setSavedAgain(true);
+        // Retry went with the failure's line: focus would be on the body.
+        if (document.activeElement === null || document.activeElement === document.body) {
+            headingRef.current?.focus();
+        }
+    }, [saveState]);
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 space-y-3">
@@ -152,6 +227,9 @@ export default function ScheduleSongCard({
                 onChooseOption={onChooseOption}
                 onCustomTextChange={onCustomTextChange}
             />
+            {failure !== null && (
+                <SaveFailure state={failure} onRetry={() => onRetrySave(item.id)} />
+            )}
         </div>
     );
 }

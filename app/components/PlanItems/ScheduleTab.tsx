@@ -10,11 +10,12 @@ import ServiceSchedule from "./ServiceSchedule";
 
 /**
  * The Service Schedule tab's connector: feeds ServiceSchedule the items with
- * their selections, their catalog links and suggestions and the plan's date
- * from `usePlan()`, and sends its changes back to the provider, which keeps
- * them while the user visits other tabs and items. A Link goes to the
- * `linkPcoSong` action with this plan's ids, and its revalidation brings the
- * new numbers back through the provider.
+ * their selections, how their saves stand, their catalog links and
+ * suggestions and the plan's date from `usePlan()`, and sends its changes
+ * back to the provider, which keeps them while the user visits other tabs
+ * and items, and saves them. A Link goes to the `linkPcoSong` action with
+ * this plan's ids, and its revalidation brings the new numbers back through
+ * the provider.
  */
 export default function ScheduleTab() {
     const {
@@ -23,9 +24,12 @@ export default function ScheduleTab() {
         catalog,
         suggestions,
         catalogError,
+        selectionsError,
         scheduleItems,
+        saves,
         chooseOption,
         setCustomText,
+        retrySave,
     } = usePlan();
 
     const onLink = useCallback<LinkSong>(
@@ -40,11 +44,14 @@ export default function ScheduleTab() {
             catalog={catalog}
             suggestions={suggestions}
             catalogError={catalogError}
+            selectionsError={selectionsError}
+            saves={saves}
             serviceTypeName={serviceType.name}
             planDate={planDateFromSortDate(plan.sortDate)}
             scheduleHref={routes.planSchedule(serviceType.id, plan.id)}
             onChooseOption={chooseOption}
             onCustomTextChange={setCustomText}
+            onRetrySave={retrySave}
             onLink={onLink}
         />
     );
