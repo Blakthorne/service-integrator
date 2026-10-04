@@ -4,6 +4,7 @@ import {
     SCHEDULE_OPTION_LABELS,
     catalogUnavailableMessage,
     differentSongTitle,
+    linkedNotice,
     scheduleChoices,
     scheduleSongView,
     type ScheduleCatalogState,
@@ -134,6 +135,28 @@ describe("scheduleChoices", () => {
             blank: "Leave blank",
             custom: "Custom",
         });
+    });
+});
+
+describe("linkedNotice", () => {
+    test("says the link went through, with the numbers the text will print", () => {
+        expect(linkedNotice({ kind: "linked", match: ABIDE })).toBe("Linked: R-517 / G-64");
+    });
+
+    test("says when the linked song is in no book", () => {
+        expect(linkedNotice({ kind: "linked", match: NOT_IN_A_BOOK })).toBe(
+            "Linked. The song is in no book, so there are no numbers to print."
+        );
+    });
+
+    test("says nothing while the card still shows the song as not linked", () => {
+        expect(
+            linkedNotice({ kind: "unlinked", pcoSongId: "20", suggestions: [NETTLETON] })
+        ).toBeNull();
+    });
+
+    test("says just that it is linked when the catalog could not be read again", () => {
+        expect(linkedNotice({ kind: "unknown" })).toBe("Linked.");
     });
 });
 

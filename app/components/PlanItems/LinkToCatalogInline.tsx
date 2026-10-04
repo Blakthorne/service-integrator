@@ -31,6 +31,12 @@ interface LinkToCatalogInlineProps {
     /** Where the new-song form comes back to: this Schedule tab. */
     returnTo: string;
     onLink: LinkSong;
+    /**
+     * Called once a Link has gone through. The revalidation that follows
+     * replaces this part of the card, focused button and all, so the card
+     * says what was linked and takes focus itself.
+     */
+    onLinked: () => void;
 }
 
 /**
@@ -40,9 +46,10 @@ interface LinkToCatalogInlineProps {
  * here) and "Find in catalog" (Reconcile, to search every catalog song).
  *
  * A link in progress lives in `useState`, not a transition (convention 15).
- * Once it is made, the action's revalidation re-renders the plan and the
- * card turns into the linked song's numbers; until then the suggestion says
- * "Linked". A refusal or failure shows its message below.
+ * Once it is made, `onLinked` tells the card, and the action's revalidation
+ * re-renders the plan and the card turns into the linked song's numbers;
+ * until then the suggestion says "Linked". A refusal or failure shows its
+ * message below.
  */
 export default function LinkToCatalogInline({
     pcoSongId,
@@ -50,6 +57,7 @@ export default function LinkToCatalogInline({
     songTitle,
     returnTo,
     onLink,
+    onLinked,
 }: LinkToCatalogInlineProps) {
     const headingId = useId();
     const [status, setStatus] = useState<LinkStatus | null>(null);
@@ -73,6 +81,7 @@ export default function LinkToCatalogInline({
         }
         if (result.ok) {
             setStatus({ songId, state: "linked" });
+            onLinked();
         } else {
             setStatus(null);
             setMessage(result.message);

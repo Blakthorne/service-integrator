@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogMatch, PlanItemWithSong, ScheduleSelection } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import {
     differentSongTitle,
+    linkedNotice,
     scheduleChoices,
     type ScheduleSongView,
 } from "@/lib/scheduleCards";
@@ -70,6 +72,13 @@ interface ScheduleSongCardProps {
  * The middle part is one slot and the choices always come last, so when a
  * link turns the card from suggestions to numbers React keeps the choices,
  * and a custom text being typed keeps its focus.
+ *
+ * A Link made here removes the button it was made with, so the card takes
+ * over, as Reconcile's rows do (`useRowNotice`): it says what was linked
+ * ("Linked: R-396 / G-317") in a status region that is always in the card,
+ * empty until then, so screen readers announce it, and moves focus to its
+ * heading rather than leave it on the page's body. Both wait for the
+ * revalidated plan to show the link.
  */
 export default function ScheduleSongCard({
     item,
@@ -79,9 +88,30 @@ export default function ScheduleSongCard({
     onCustomTextChange,
     onLink,
 }: ScheduleSongCardProps) {
+    const headingRef = useRef<HTMLHeadingElement>(null);
+    /** True once a Link made on this card has gone through. */
+    const [linkedHere, setLinkedHere] = useState(false);
+    const notice = linkedHere ? linkedNotice(view) : null;
+
+    // In a transition, like the revalidated plan the action brings, so the
+    // notice can land with it.
+    const onLinked = useCallback(() => {
+        startTransition(() => setLinkedHere(true));
+    }, []);
+
+    useEffect(() => {
+        if (notice !== null) {
+            headingRef.current?.focus();
+        }
+    }, [notice]);
+
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 space-y-3">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+            <h3
+                ref={headingRef}
+                tabIndex={-1}
+                className="text-lg font-medium text-gray-900 dark:text-gray-100 focus:outline-none"
+            >
                 {item.title}
             </h3>
             {view.kind === "linked" ? (
@@ -93,6 +123,7 @@ export default function ScheduleSongCard({
                     songTitle={differentSongTitle(item)}
                     returnTo={scheduleHref}
                     onLink={onLink}
+                    onLinked={onLinked}
                 />
             ) : view.kind === "ignored" ? (
                 <p className={NOTE_CLASS}>
@@ -109,6 +140,12 @@ export default function ScheduleSongCard({
             ) : view.kind === "no-song" ? (
                 <p className={NOTE_CLASS}>No Planning Center song, so no numbers.</p>
             ) : null}
+            <p
+                role="status"
+                className={notice === null ? "sr-only" : "text-sm font-medium text-green-700 dark:text-green-300"}
+            >
+                {notice}
+            </p>
             <ScheduleChoices
                 item={item}
                 choices={scheduleChoices(view)}

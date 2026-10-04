@@ -4,7 +4,7 @@ import type {
     PlanItemWithSong,
 } from "./domain";
 import type { ScheduleOption } from "./scheduleSelections";
-import { catalogMatchFor } from "./serviceSchedule";
+import { catalogMatchFor, formatScheduleNumbers } from "./serviceSchedule";
 
 /**
  * What the Schedule tab shows for each song item: which card, which choices,
@@ -69,6 +69,26 @@ export function scheduleChoices(view: ScheduleSongView): ScheduleOption[] {
     return view.kind === "linked" && view.match.entries.length > 0
         ? ["numbers", "blank", "custom"]
         : ["blank", "custom"];
+}
+
+/**
+ * What a card says, through its status region, once a Link made on it has
+ * gone through: "Linked: R-396 / G-317", the numbers the schedule text will
+ * print, or that the song is in no book. Null while the card still shows
+ * the song as not linked, before the action's revalidation has brought the
+ * link. Should the catalog be unreadable by then, just "Linked."
+ */
+export function linkedNotice(view: ScheduleSongView): string | null {
+    if (view.kind === "unlinked") {
+        return null;
+    }
+    if (view.kind !== "linked") {
+        return "Linked.";
+    }
+    const numbers = formatScheduleNumbers(view.match.entries);
+    return numbers === ""
+        ? "Linked. The song is in no book, so there are no numbers to print."
+        : `Linked: ${numbers}`;
 }
 
 /** The label of each choice. */
