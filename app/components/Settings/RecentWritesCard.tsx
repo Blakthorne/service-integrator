@@ -34,11 +34,12 @@ function Outcome({ outcome }: { outcome: WriteOutcome }) {
 /**
  * Where a write was made: a link to the plan when the log's ids are ones
  * `parsePcoId` accepts (they come from the database, but every id is checked
- * before it reaches a route builder, convention 19), else the log's own
- * words for it. Plan pages are data-heavy, so these links do not prefetch
- * (convention 13). The link sits in a line of text, where blue against the
- * grey around it is under the 3:1 a link needs (1.4:1 in light mode, 1.0:1
- * in dark) to be told apart by colour alone, so it is underlined.
+ * before it reaches a route builder, convention 19), and the item in it when
+ * the write made or changed one, else the log's own words for it. Plan pages
+ * are data-heavy, so these links do not prefetch (convention 13). A link sits
+ * in a line of text, where blue against the grey around it is under the 3:1
+ * a link needs (1.4:1 in light mode, 1.0:1 in dark) to be told apart by
+ * colour alone, so it is underlined.
  */
 function Place({ place, target }: Pick<WriteDescription, "place" | "target">) {
     if (place === null) {
@@ -59,7 +60,7 @@ function Place({ place, target }: Pick<WriteDescription, "place" | "target">) {
             ) : (
                 <>Plan {place.planId}</>
             )}
-            , item {place.itemId}
+            {place.itemId !== null && <>, item {place.itemId}</>}
         </>
     );
 }

@@ -268,6 +268,410 @@ describe("describeWrite: a plan's email", () => {
     });
 });
 
+/**
+ * The payloads and results `lib/queries/pcoSongs.ts` logs, as its tests pin
+ * them (`lib/queries/pcoSongs.test.ts`): a refused or failed write logs the
+ * same payload with `{ error, status?, details? }` for its result.
+ */
+const SONG_ID = "26000001";
+const SONG_SUMMARY = {
+    id: SONG_ID,
+    title: "O God, Our Help",
+    author: "Words: Isaac Watts; Music: William Croft",
+    copyright: "Public Domain",
+    ccliNumber: null,
+};
+const REFUSED = {
+    error: "author: is too long",
+    status: 422,
+    details: ["author: is too long"],
+};
+
+/** A row of `kind`, made unless `fields` say otherwise. */
+function songRow(kind: WriteLogRow["kind"], fields: Partial<WriteLogRow> = {}): WriteLogRow {
+    return { kind, target: `song ${SONG_ID}`, ok: true, payload: {}, result: {}, ...fields };
+}
+
+describe("describeWrite: a song's credits saved", () => {
+    const CREDITS = {
+        action: "credits",
+        title: "O God, Our Help",
+        previous: "Isaac Watts",
+        author: "Words: Isaac Watts; Music: William Croft",
+    };
+    const credits = (fields: Partial<WriteLogRow> = {}) =>
+        songRow("song", { payload: CREDITS, result: { song: SONG_SUMMARY }, ...fields });
+
+    test("says whose credits, what they said and what they say now", () => {
+        expect(describeWrite(credits())).toEqual({
+            what: 'Credits saved for "O God, Our Help"',
+            detail: 'Was "Isaac Watts"; now "Words: Isaac Watts; Music: William Croft".',
+            place: null,
+            target: `song ${SONG_ID}`,
+            outcome: { ok: true },
+        });
+    });
+
+    test("says only what they say now for a song that had no author", () => {
+        expect(describeWrite(credits({ payload: { ...CREDITS, previous: null } })).detail).toBe(
+            'Now "Words: Isaac Watts; Music: William Croft".'
+        );
+    });
+
+    test("still says whose credits when the payload lacks the author", () => {
+        expect(describeWrite(credits({ payload: { ...CREDITS, author: undefined } }))).toMatchObject({
+            what: 'Credits saved for "O God, Our Help"',
+            detail: null,
+        });
+    });
+
+    test("gives Planning Center's reasons when it refused the write, with the same words", () => {
+        expect(describeWrite(credits({ ok: false, result: REFUSED }))).toMatchObject({
+            what: 'Credits saved for "O God, Our Help"',
+            outcome: { ok: false, message: "author: is too long", status: 422 },
+        });
+    });
+
+    test.each([
+        ["no title", { ...CREDITS, title: undefined }],
+        ["a blank title", { ...CREDITS, title: "  " }],
+        ["a title that is not text", { ...CREDITS, title: 7 }],
+    ])("says only the kind and the target for %s", (_name, payload) => {
+        expect(describeWrite(credits({ payload }))).toMatchObject({
+            what: "Song write",
+            detail: null,
+            place: null,
+        });
+    });
+});
+
+describe("describeWrite: a song created in Planning Center", () => {
+    const CREATE_SONG = {
+        action: "create",
+        catalogSongId: 42,
+        title: "O God, Our Help",
+        author: "Words: Isaac Watts; Music: William Croft",
+        copyright: "Public Domain",
+    };
+    const created = (fields: Partial<WriteLogRow> = {}) =>
+        songRow("song", { payload: CREATE_SONG, result: { song: SONG_SUMMARY }, ...fields });
+
+    test("says which song, and the credits and copyright it was given", () => {
+        expect(describeWrite(created())).toEqual({
+            what: 'Song "O God, Our Help" created in Planning Center',
+            detail:
+                'With the credits "Words: Isaac Watts; Music: William Croft" and the copyright "Public Domain".',
+            place: null,
+            target: `song ${SONG_ID}`,
+            outcome: { ok: true },
+        });
+    });
+
+    test("says only the part it was given", () => {
+        expect(describeWrite(created({ payload: { ...CREATE_SONG, copyright: "" } })).detail).toBe(
+            'With the credits "Words: Isaac Watts; Music: William Croft".'
+        );
+        expect(describeWrite(created({ payload: { ...CREATE_SONG, author: "" } })).detail).toBe(
+            'With the copyright "Public Domain".'
+        );
+        expect(
+            describeWrite(created({ payload: { ...CREATE_SONG, author: "", copyright: "" } })).detail
+        ).toBeNull();
+    });
+
+    test("is the same for a song Planning Center refused, which has the catalog song for a target", () => {
+        expect(
+            describeWrite(created({ target: "catalog song 42", ok: false, result: REFUSED }))
+        ).toMatchObject({
+            what: 'Song "O God, Our Help" created in Planning Center',
+            target: "catalog song 42",
+            outcome: { ok: false, message: "author: is too long", status: 422 },
+        });
+    });
+
+    test("says only the kind and the target when the payload lacks the title", () => {
+        expect(describeWrite(created({ payload: { ...CREATE_SONG, title: undefined } })).what).toBe(
+            "Song write"
+        );
+    });
+});
+
+describe("describeWrite: a CCLI number set on a song", () => {
+    const CCLI = { action: "ccli-number", title: "O God, Our Help", ccliNumber: 22025 };
+
+    test("says which song and the number", () => {
+        expect(describeWrite(songRow("song", { payload: CCLI }))).toMatchObject({
+            what: 'CCLI number set on "O God, Our Help"',
+            detail: "CCLI song number 22025.",
+        });
+    });
+
+    test("still says which song when the payload lacks the number, or has a number that is not whole", () => {
+        for (const ccliNumber of [undefined, "22025", 4.5, null]) {
+            expect(describeWrite(songRow("song", { payload: { ...CCLI, ccliNumber } }))).toMatchObject({
+                what: 'CCLI number set on "O God, Our Help"',
+                detail: null,
+            });
+        }
+    });
+
+    test("says only the kind and the target when the payload lacks the title", () => {
+        expect(describeWrite(songRow("song", { payload: { ...CCLI, title: "" } })).what).toBe("Song write");
+    });
+});
+
+describe("describeWrite: typed details written back over CCLI's", () => {
+    const RESTORE = {
+        action: "restore-typed-details",
+        ccliNumber: 22025,
+        typed: { title: "O God, Our Help", author: "Words: Isaac Watts; Music: William Croft" },
+        fromCcli: { title: "O God Our Help In Ages Past", author: "Isaac Watts, William Croft" },
+    };
+
+    test("says what CCLI had put there and what is written back", () => {
+        expect(describeWrite(songRow("song", { payload: RESTORE }))).toMatchObject({
+            what: "Typed title and credits written back over CCLI's",
+            detail:
+                'Title was "O God Our Help In Ages Past"; now "O God, Our Help". Credits were "Isaac Watts, William Croft"; now "Words: Isaac Watts; Music: William Croft".',
+        });
+    });
+
+    test("says only the title, or only the credits, when that is all that was written back", () => {
+        const title = describeWrite(
+            songRow("song", {
+                payload: {
+                    ...RESTORE,
+                    typed: { title: "O God, Our Help" },
+                    fromCcli: { title: "O God Our Help In Ages Past" },
+                },
+            })
+        );
+        expect(title).toMatchObject({
+            what: "Typed title written back over CCLI's",
+            detail: 'Title was "O God Our Help In Ages Past"; now "O God, Our Help".',
+        });
+        const authorOnly = describeWrite(
+            songRow("song", {
+                payload: { ...RESTORE, typed: { author: "Words: Isaac Watts" }, fromCcli: { author: "Watts" } },
+            })
+        );
+        expect(authorOnly).toMatchObject({
+            what: "Typed credits written back over CCLI's",
+            detail: 'Credits were "Watts"; now "Words: Isaac Watts".',
+        });
+    });
+
+    test("says what is written back when the log has no record of what CCLI had put there", () => {
+        expect(
+            describeWrite(songRow("song", { payload: { ...RESTORE, fromCcli: undefined } })).detail
+        ).toBe(
+            'Title now "O God, Our Help". Credits now "Words: Isaac Watts; Music: William Croft".'
+        );
+    });
+
+    test("gives Planning Center's reasons when it refused the write", () => {
+        expect(describeWrite(songRow("song", { payload: RESTORE, ok: false, result: REFUSED }))).toMatchObject({
+            what: "Typed title and credits written back over CCLI's",
+            outcome: { ok: false, status: 422 },
+        });
+    });
+
+    test.each([
+        ["nothing typed", { ...RESTORE, typed: {} }],
+        ["no typed details", { ...RESTORE, typed: undefined }],
+        ["typed details that are not an object", { ...RESTORE, typed: "x" }],
+    ])("says only the kind and the target for %s", (_name, payload) => {
+        expect(describeWrite(songRow("song", { payload })).what).toBe("Song write");
+    });
+});
+
+describe("describeWrite: a song's rows it cannot read", () => {
+    test.each([
+        ["no payload", null],
+        ["a payload that is not an object", "x"],
+        ["an array", [1]],
+        ["an action it does not know", { action: "archive", title: "O God, Our Help" }],
+        ["no action", { title: "O God, Our Help" }],
+    ])("says only the kind and the target for %s", (_name, payload) => {
+        expect(describeWrite(songRow("song", { payload }))).toEqual({
+            what: "Song write",
+            detail: null,
+            place: null,
+            target: `song ${SONG_ID}`,
+            outcome: { ok: true },
+        });
+    });
+});
+
+describe("describeWrite: a song added to a plan", () => {
+    const ADD = {
+        action: "add-song",
+        serviceTypeId: "1405391",
+        planId: "81234567",
+        planDates: "October 11, 2026",
+        songId: SONG_ID,
+        title: "O God, Our Help",
+        arrangementId: "5001",
+        arrangement: "Default Arrangement",
+    };
+    const MADE_ITEM = { item: { id: "950", title: "O God, Our Help", sequence: 18 } };
+    const added = (fields: Partial<WriteLogRow> = {}) =>
+        songRow("item", {
+            target: "plan 81234567 item 950",
+            payload: ADD,
+            result: MADE_ITEM,
+            ...fields,
+        });
+
+    test("says which song and which plan, the arrangement, and where the item is", () => {
+        expect(describeWrite(added())).toEqual({
+            what: '"O God, Our Help" added to the plan for October 11, 2026',
+            detail: 'With the arrangement "Default Arrangement".',
+            place: { serviceTypeId: "1405391", planId: "81234567", itemId: "950" },
+            target: "plan 81234567 item 950",
+            outcome: { ok: true },
+        });
+    });
+
+    test("gives the plan but no item for an add Planning Center refused", () => {
+        expect(
+            describeWrite(
+                added({
+                    target: "plan 81234567",
+                    ok: false,
+                    result: { error: "title: can't be blank", status: 422, details: ["title: can't be blank"] },
+                })
+            )
+        ).toEqual({
+            what: '"O God, Our Help" added to the plan for October 11, 2026',
+            detail: 'With the arrangement "Default Arrangement".',
+            place: { serviceTypeId: "1405391", planId: "81234567", itemId: null },
+            target: "plan 81234567",
+            outcome: { ok: false, message: "title: can't be blank", status: 422 },
+        });
+    });
+
+    test("gives no item when the result does not name one", () => {
+        expect(describeWrite(added({ result: { item: { title: "x" } } })).place).toEqual({
+            serviceTypeId: "1405391",
+            planId: "81234567",
+            itemId: null,
+        });
+        expect(describeWrite(added({ result: null })).place?.itemId).toBeNull();
+    });
+
+    test("still says which song and plan when the payload lacks the arrangement, or the ids of the plan", () => {
+        expect(describeWrite(added({ payload: { ...ADD, arrangement: undefined } })).detail).toBeNull();
+        expect(describeWrite(added({ payload: { ...ADD, serviceTypeId: undefined } }))).toMatchObject({
+            what: '"O God, Our Help" added to the plan for October 11, 2026',
+            place: null,
+        });
+        expect(describeWrite(added({ payload: { ...ADD, planId: undefined } })).place).toBeNull();
+    });
+
+    test.each([
+        ["no title", { ...ADD, title: undefined }],
+        ["no date for the plan", { ...ADD, planDates: undefined }],
+        ["a blank date", { ...ADD, planDates: " " }],
+        ["an action it does not know", { ...ADD, action: "move-song" }],
+        ["no payload", null],
+    ])("says only the kind and the target for %s", (_name, payload) => {
+        expect(describeWrite(added({ payload }))).toEqual({
+            what: "Plan item write",
+            detail: null,
+            place: null,
+            target: "plan 81234567 item 950",
+            outcome: { ok: true },
+        });
+    });
+});
+
+describe("describeWrite: a song's tags set", () => {
+    const ASSIGN = {
+        action: "assign",
+        title: "Amazing Grace",
+        tags: [
+            { id: "81", name: "Advent" },
+            { id: "72", name: "Chorus" },
+            { id: "71", name: "Hymn" },
+        ],
+        previous: [{ id: "71", name: "Hymn" }],
+    };
+    const tagged = (fields: Partial<WriteLogRow> = {}) =>
+        songRow("tags", { payload: ASSIGN, result: { tagIds: ["81", "72", "71"] }, ...fields });
+
+    test("says which song, the tags it had and the tags it has now", () => {
+        expect(describeWrite(tagged())).toEqual({
+            what: 'Tags set on "Amazing Grace"',
+            detail: "Was Hymn; now Advent, Chorus, Hymn.",
+            place: null,
+            target: `song ${SONG_ID}`,
+            outcome: { ok: true },
+        });
+    });
+
+    test("says when every tag was taken off, and when it had none", () => {
+        expect(describeWrite(tagged({ payload: { ...ASSIGN, tags: [] } })).detail).toBe(
+            "Was Hymn; now no tags."
+        );
+        expect(describeWrite(tagged({ payload: { ...ASSIGN, previous: [] } })).detail).toBe(
+            "Was no tags; now Advent, Chorus, Hymn."
+        );
+    });
+
+    test("says only the tags it has now when the payload lacks the tags it had", () => {
+        expect(describeWrite(tagged({ payload: { ...ASSIGN, previous: undefined } })).detail).toBe(
+            "Now Advent, Chorus, Hymn."
+        );
+    });
+
+    test("names a tag by its id when it has no name, and says nothing of a list whose tags name nothing", () => {
+        expect(
+            describeWrite(tagged({ payload: { ...ASSIGN, tags: [{ id: "81" }, { name: "Chorus" }, 7, null] } }))
+                .detail
+        ).toBe("Was Hymn; now 81, Chorus.");
+        expect(describeWrite(tagged({ payload: { ...ASSIGN, tags: [{}, 7] } })).detail).toBeNull();
+    });
+
+    test("still says which song when the payload lacks the tags", () => {
+        expect(describeWrite(tagged({ payload: { ...ASSIGN, tags: undefined } }))).toMatchObject({
+            what: 'Tags set on "Amazing Grace"',
+            detail: null,
+        });
+    });
+
+    test("gives Planning Center's reasons when it refused the write, with the same words", () => {
+        expect(
+            describeWrite(
+                tagged({
+                    ok: false,
+                    result: { error: "Planning Center API responded with status: 500", status: 500 },
+                })
+            )
+        ).toMatchObject({
+            what: 'Tags set on "Amazing Grace"',
+            outcome: {
+                ok: false,
+                message: "Planning Center API responded with status: 500",
+                status: 500,
+            },
+        });
+    });
+
+    test.each([
+        ["no title", { ...ASSIGN, title: undefined }],
+        ["an action it does not know", { ...ASSIGN, action: "clear" }],
+        ["another kind's payload", { action: "credits", title: "Amazing Grace" }],
+        ["no payload", null],
+    ])("says only the kind and the target for %s", (_name, payload) => {
+        expect(describeWrite(tagged({ payload }))).toMatchObject({
+            what: "Song tags write",
+            detail: null,
+            place: null,
+        });
+    });
+});
+
 describe("describeWrite: rows it cannot read", () => {
     test.each([
         ["no payload", null],
