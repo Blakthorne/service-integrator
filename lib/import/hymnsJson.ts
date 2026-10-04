@@ -76,7 +76,7 @@ export const SEED_MERGES: readonly Omit<SeedMerge, "records">[] = [
     { kind: "tune-alias", from: "DARWAL", to: "DARWALL" },
     {
         kind: "hymn-alias",
-        from: "Rejoice – the Lord Is King",
+        from: "Rejoice \u2013 the Lord Is King",
         to: "Rejoice, the Lord Is King",
     },
     {

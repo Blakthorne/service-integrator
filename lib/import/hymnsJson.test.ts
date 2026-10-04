@@ -224,7 +224,7 @@ describe("planHymnsJsonImport on the real hymns.json", () => {
             { kind: "tune-alias", from: "DARWAL", to: "DARWALL", records: 1 },
             {
                 kind: "hymn-alias",
-                from: "Rejoice – the Lord Is King",
+                from: "Rejoice \u2013 the Lord Is King",
                 to: "Rejoice, the Lord Is King",
                 records: 1,
             },
@@ -290,8 +290,8 @@ describe("planHymnsJsonImport on the real hymns.json", () => {
                 title: "Rejoice, the Lord Is King",
                 aliases: [
                     {
-                        alias: "Rejoice – the Lord Is King!",
-                        normalized: "rejoice – the lord is king",
+                        alias: "Rejoice \u2013 the Lord Is King!",
+                        normalized: "rejoice \u2013 the lord is king",
                     },
                 ],
             },
