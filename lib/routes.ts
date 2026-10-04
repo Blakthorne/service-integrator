@@ -30,7 +30,6 @@ export const routes = {
         `/plans/${serviceTypeId}/${planId}/schedule` as const,
     planItem: (serviceTypeId: string, planId: string, itemId: string) =>
         `/plans/${serviceTypeId}/${planId}/items/${itemId}` as const,
-    unusedHymns: () => "/unused-hymns" as const,
     settings: () => "/settings" as const,
     catalog: () => "/catalog" as const,
     catalogSong: (songId: number) => `/catalog/songs/${songId}` as const,

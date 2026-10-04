@@ -14,7 +14,6 @@ describe("routes", () => {
     test("static routes", () => {
         expect(routes.home()).toBe("/");
         expect(routes.plans()).toBe("/plans");
-        expect(routes.unusedHymns()).toBe("/unused-hymns");
         expect(routes.settings()).toBe("/settings");
         expect(routes.catalog()).toBe("/catalog");
         expect(routes.catalogTunes()).toBe("/catalog/tunes");
@@ -71,7 +70,6 @@ describe("routes", () => {
             routes.plan("1", "2"),
             routes.planSchedule("1", "2"),
             routes.planItem("1", "2", "3"),
-            routes.unusedHymns(),
             routes.settings(),
             routes.catalog(),
             routes.catalogSong(1),
