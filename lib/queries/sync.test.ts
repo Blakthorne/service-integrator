@@ -224,7 +224,13 @@ describe("syncPcoSongs", () => {
     test("writes nothing when a page fails", async () => {
         stubPcoPacer();
         seedCatalog();
-        seedPcoSong(db, { id: "1001", title: "Amazing Grace" });
+        // Synced the day before, with none of the listing's fields, so an
+        // upsert at T1 would show.
+        seedPcoSong(db, {
+            id: "1001",
+            title: "Amazing Grace",
+            syncedAt: "2026-10-03T12:00:00.000Z",
+        });
         stubFetchRoutes({
             [FIRST_PAGE]: listPage(LIBRARY.slice(0, 2), { next: SECOND_PAGE, total: 4 }),
             [SECOND_PAGE]: () => json({ errors: [] }, { status: 500 }),
@@ -234,9 +240,9 @@ describe("syncPcoSongs", () => {
             name: "PcoError",
             status: 500,
         });
-        expect(listPcoSongs(db).map(({ id, syncedAt }) => [id, syncedAt])).toEqual([
-            ["1001", "2026-10-04T12:00:00.000Z"],
-        ]);
+        expect(
+            listPcoSongs(db).map(({ id, author, syncedAt }) => [id, author, syncedAt])
+        ).toEqual([["1001", null, "2026-10-03T12:00:00.000Z"]]);
         expect(links().every(([, pcoSongId]) => pcoSongId === null)).toBe(true);
     });
 
