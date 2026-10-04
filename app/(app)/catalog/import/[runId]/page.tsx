@@ -32,13 +32,20 @@ export async function generateMetadata({
     return { title: getCatalogImportRunLabel(runId) };
 }
 
+/** The id of the sentence that says why Apply is unavailable, which the button is described by. */
+const APPLY_REFUSAL_ID = "apply-refusal";
+
 interface RunNoticeProps {
     run: ImportRunDetail;
     /** Why Apply would be refused now, or null. */
     applyRefusal: ImportRunRefusal | null;
 }
 
-/** Where the run stands, in a sentence: a preview, one that cannot be applied, or one that is finished. */
+/**
+ * Where the run stands, in a sentence: a preview, one that cannot be applied,
+ * or one that is finished. A preview's Apply and Discard buttons sit beside
+ * the sentence, so a refusal's reason is next to the Apply it disables.
+ */
 function RunNotice({ run, applyRefusal }: RunNoticeProps) {
     switch (run.status) {
         case "applied":
@@ -57,25 +64,34 @@ function RunNotice({ run, applyRefusal }: RunNoticeProps) {
                     Discarded: nothing from this run was added to the catalog.
                 </ImportNotice>
             );
-        case "preview":
+        case "preview": {
+            const actions = (
+                <ImportRunActions
+                    runId={run.id}
+                    plannedText={describePlanned(run.planned)}
+                    applyUnavailableId={applyRefusal ? APPLY_REFUSAL_ID : undefined}
+                />
+            );
             return applyRefusal ? (
-                <ImportNotice tone="warning">
+                <ImportNotice tone="warning" id={APPLY_REFUSAL_ID} actions={actions}>
                     {applyRefusal.message} You can still review the report; discard
                     this preview when you are done.
                 </ImportNotice>
             ) : (
-                <ImportNotice tone="info">
+                <ImportNotice tone="info" actions={actions}>
                     This is a preview: nothing has been added to the catalog yet.
                     Review the report below, then apply it or discard it.
                 </ImportNotice>
             );
+        }
     }
 }
 
 /**
  * One import run: its status and its report. A preview offers Apply and
- * Discard, each behind a confirmation. An id that is not a catalog id, or a
- * run the catalog does not have, ends in `not-found.tsx`.
+ * Discard, each behind a confirmation, and Apply is unavailable while the
+ * catalog has books. An id that is not a catalog id, or a run the catalog
+ * does not have, ends in `not-found.tsx`.
  */
 export default async function ImportRunPage({
     params,
@@ -101,14 +117,6 @@ export default async function ImportRunPage({
                     { label: "Import", href: routes.catalogImport() },
                     { label },
                 ]}
-                actions={
-                    run.status === "preview" ? (
-                        <ImportRunActions
-                            runId={run.id}
-                            plannedText={describePlanned(run.planned)}
-                        />
-                    ) : undefined
-                }
             />
             <div className="w-full max-w-5xl mx-auto space-y-6">
                 <RunNotice run={run} applyRefusal={applyRefusal} />

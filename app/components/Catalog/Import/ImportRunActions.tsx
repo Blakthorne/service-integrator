@@ -12,6 +12,13 @@ interface ImportRunActionsProps {
     runId: number;
     /** What applying adds, as the confirmation says it: "2 books, 895 hymns, …". */
     plannedText: string;
+    /**
+     * Set when Apply is known to be refused (the catalog already has books):
+     * the id of the text beside the buttons that says why. Apply is then
+     * unavailable. The action still refuses on the server, so this only
+     * saves a click.
+     */
+    applyUnavailableId?: string;
 }
 
 interface ConfirmFormProps {
@@ -65,9 +72,14 @@ function ConfirmForm({
 
 /**
  * Apply and Discard for a previewed run, each confirmed in a dialog. A
- * refusal (the catalog already has books, the run was applied in another
- * tab) comes back from the action and shows inside the dialog, which stays
- * open; success redirects away.
+ * refusal the page could not know about (the run was applied in another tab)
+ * comes back from the action and shows inside the dialog, which stays open;
+ * success redirects away.
+ *
+ * When the page already knows Apply will be refused (`applyUnavailableId`),
+ * the button is `aria-disabled` rather than `disabled`, like `SubmitButton`:
+ * it stays focusable, is described by the text that gives the reason, and
+ * does nothing when pressed.
  *
  * Pending state comes from `useFormStatus` inside each form (SubmitButton),
  * never from a transition held open across the action, which would stall
@@ -76,7 +88,9 @@ function ConfirmForm({
 export default function ImportRunActions({
     runId,
     plannedText,
+    applyUnavailableId,
 }: ImportRunActionsProps) {
+    const applyUnavailable = applyUnavailableId !== undefined;
     const [open, setOpen] = useState<"apply" | "discard" | null>(null);
     const applyButtonRef = useRef<HTMLButtonElement>(null);
     const discardButtonRef = useRef<HTMLButtonElement>(null);
@@ -92,8 +106,18 @@ export default function ImportRunActions({
             <button
                 ref={applyButtonRef}
                 type="button"
-                onClick={() => setOpen("apply")}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors cursor-pointer"
+                aria-disabled={applyUnavailable || undefined}
+                aria-describedby={applyUnavailableId}
+                onClick={() => {
+                    if (!applyUnavailable) {
+                        setOpen("apply");
+                    }
+                }}
+                className={`px-4 py-2 text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors ${
+                    applyUnavailable
+                        ? "bg-gray-200 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400"
+                        : "bg-blue-500 text-white hover:bg-blue-600 cursor-pointer"
+                }`}
             >
                 Apply
             </button>

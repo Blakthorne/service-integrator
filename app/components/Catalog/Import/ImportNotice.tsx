@@ -13,16 +13,37 @@ const TONE_STYLES = {
 interface ImportNoticeProps {
     /** "warning" is for what stops Apply; "info", "success" and "neutral" say where a run stands. */
     tone: keyof typeof TONE_STYLES;
+    /** The id of the sentence, for a control that names it with `aria-describedby`. */
+    id?: string;
+    /** Buttons for what the notice is about: beside the sentence, and below it on a phone. */
+    actions?: ReactNode;
     children: ReactNode;
 }
 
-/** A boxed sentence or two above an import page's content. */
-export default function ImportNotice({ tone, children }: ImportNoticeProps) {
+/** A boxed sentence or two above an import page's content, with the buttons it is about, if any. */
+export default function ImportNotice({
+    tone,
+    id,
+    actions,
+    children,
+}: ImportNoticeProps) {
+    const box = `rounded-lg border px-4 py-3 text-sm ${TONE_STYLES[tone]}`;
+
+    if (!actions) {
+        return (
+            <p id={id} className={box}>
+                {children}
+            </p>
+        );
+    }
     return (
-        <p
-            className={`rounded-lg border px-4 py-3 text-sm ${TONE_STYLES[tone]}`}
+        <div
+            className={`${box} flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6`}
         >
-            {children}
-        </p>
+            <p id={id}>{children}</p>
+            <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                {actions}
+            </div>
+        </div>
     );
 }
