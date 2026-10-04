@@ -107,11 +107,18 @@ describe("saveSongCreditsAction", () => {
         },
     };
 
-    /** The action called with the song's id and the credits, either of which `overrides` replaces. */
-    function save(overrides: { pcoSongId?: unknown; credits?: unknown } = {}) {
-        const args = { pcoSongId: PCO_SONG, credits: CREDITS, ...overrides };
+    /** The author the card showed. */
+    const SHOWN = "Isaac Watts and Lowell Mason";
+
+    /** The action called with the song's id, the author shown and the credits, any of which `overrides` replaces. */
+    function save(overrides: { pcoSongId?: unknown; shownAuthor?: unknown; credits?: unknown } = {}) {
+        const args = { pcoSongId: PCO_SONG, shownAuthor: SHOWN, credits: CREDITS, ...overrides };
         // An action's arguments come from the network, so they may be anything.
-        return saveSongCreditsAction(args.pcoSongId as string, args.credits as Credit[]);
+        return saveSongCreditsAction(
+            args.pcoSongId as string,
+            args.shownAuthor as string | null,
+            args.credits as Credit[]
+        );
     }
 
     test("throws without a session, before it saves anything", async () => {
@@ -132,7 +139,7 @@ describe("saveSongCreditsAction", () => {
             credits: SAVED.credits,
         });
         expect(saveSongCredits).toHaveBeenCalledTimes(1);
-        expect(saveSongCredits).toHaveBeenCalledWith(PCO_SONG, CREDITS);
+        expect(saveSongCredits).toHaveBeenCalledWith(PCO_SONG, SHOWN, CREDITS);
         expect(revalidatePath.mock.calls).toEqual([
             ["/catalog", "layout"],
             ["/plans", "layout"],
@@ -151,6 +158,47 @@ describe("saveSongCreditsAction", () => {
             await expect(save({ pcoSongId: value })).resolves.toEqual({ ok: false, message: NOT_AN_ID });
         }
         expect(saveSongCredits).not.toHaveBeenCalled();
+    });
+
+    test("passes on a song shown with no author", async () => {
+        saveSongCredits.mockResolvedValue(SAVED);
+
+        await save({ shownAuthor: null });
+        await save({ shownAuthor: "" });
+        expect(saveSongCredits.mock.calls.map(([, shown]) => shown)).toEqual([null, ""]);
+    });
+
+    test("refuses an author shown that is not text or none, without saving", async () => {
+        for (const value of [undefined, 42, ["Isaac Watts"], { author: "Isaac Watts" }]) {
+            await expect(save({ shownAuthor: value })).resolves.toEqual({ ok: false, message: UNREADABLE });
+        }
+        expect(saveSongCredits).not.toHaveBeenCalled();
+    });
+
+    test("gives the author as it is now when it changed since the page loaded, and revalidates the catalog", async () => {
+        const current = {
+            author: "Words: Isaac Watts; Music: William Croft",
+            credits: {
+                status: "ok",
+                credits: [
+                    { role: "Words", names: ["Isaac Watts"] },
+                    { role: "Music", names: ["William Croft"] },
+                ],
+            },
+        };
+        saveSongCredits.mockResolvedValue({
+            ...refusal('The credits of "O God, Our Help" changed in Planning Center since this page loaded, so nothing was saved.'),
+            reason: "changed",
+            current,
+        });
+
+        await expect(save()).resolves.toEqual({
+            ok: false,
+            message: 'The credits of "O God, Our Help" changed in Planning Center since this page loaded, so nothing was saved.',
+            current,
+        });
+        // The mirror took the song as it is now: the song's page shows it.
+        expect(revalidatePath.mock.calls).toEqual([["/catalog", "layout"]]);
     });
 
     test("refuses credits that are not a list of roles with names, without saving", async () => {

@@ -92,7 +92,14 @@ export type SaveSongCreditsState =
           /** What that author reads as. */
           credits: SongCredits;
       }
-    | SongPageRefusal;
+    | (SongPageRefusal & {
+          /**
+           * When the author changed in Planning Center since the page showed
+           * it, so nothing was saved: the author it has now ("" for none)
+           * and what it reads as, for the card to start again from.
+           */
+          current?: { author: string; credits: SongCredits };
+      });
 
 const CREDITS_FAILURE_MESSAGE =
     "Something went wrong, so the credits may or may not have been saved. Look at the song in Planning Center before trying again; the server log has the details.";
@@ -101,12 +108,20 @@ const CREDITS_FAILURE_MESSAGE =
  * The Credits card's Save: write `credits` to Planning Center song
  * `pcoSongId`'s author in the labelled convention (`saveSongCredits`, which
  * reads the song afresh, writes only when its author changes, logs the
- * write and brings the mirror up to date). Then the catalog's pages are
- * revalidated, the song's page among them, and so are the plans', whose
- * copyright text prints the credits. The dashboard shows no credits.
+ * write and brings the mirror up to date). `shownAuthor` is the author the
+ * card showed and the person edited ("" or null for none): when Planning
+ * Center has another one now, nothing is written, and the refusal carries
+ * the author as it is now (`current`).
+ *
+ * After a save the catalog's pages are revalidated, the song's page among
+ * them, and so are the plans', whose copyright text prints the credits;
+ * the dashboard shows no credits. After a refusal because the author
+ * changed, the catalog's are revalidated too: the mirror took the song as
+ * it is now, so the page shows its author afresh.
  */
 export async function saveSongCreditsAction(
     pcoSongId: string,
+    shownAuthor: string | null,
     credits: readonly Credit[]
 ): Promise<SaveSongCreditsState> {
     await requireSession();
@@ -115,17 +130,22 @@ export async function saveSongCreditsAction(
         return { ok: false, message: NOT_AN_ID_MESSAGE };
     }
     const read = readCreditsInput(credits);
-    if (read === null) {
+    if (read === null || (shownAuthor !== null && typeof shownAuthor !== "string")) {
         return { ok: false, message: UNREADABLE_MESSAGE };
     }
     let result: SaveSongCreditsResult;
     try {
-        result = await saveSongCredits(id, read);
+        result = await saveSongCredits(id, shownAuthor, read);
     } catch (error) {
         return failed(`save the credits of Planning Center song ${id}`, error, CREDITS_FAILURE_MESSAGE);
     }
     if (!result.ok) {
-        return refused(result);
+        if (result.current === undefined) {
+            return refused(result);
+        }
+        revalidatePath(routes.catalog(), "layout");
+        const { author, credits: currentCredits } = result.current;
+        return { ok: false, message: result.message, current: { author, credits: currentCredits } };
     }
     revalidatePath(routes.catalog(), "layout");
     revalidatePath(routes.plans(), "layout");

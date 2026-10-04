@@ -9,6 +9,7 @@ import {
     canSplitCreditName,
     creditNameProblem,
     creditRows,
+    describeAuthorNow,
     describeCreditsDraft,
     hasCreditNameProblems,
     describeCreditsSave,
@@ -338,6 +339,14 @@ describe("the card's words", () => {
     test("refuses no names, and says what an action that never answered may have done", () => {
         expect(NO_CREDITS_MESSAGE).toBe("Enter at least one name: the credits would be empty.");
         expect(CREDITS_NO_ANSWER).toMatch(/may or may not have been saved/);
+    });
+
+    test("says what the author is now, after it changed in Planning Center", () => {
+        expect(describeAuthorNow("Words: Isaac Watts; Music: William Croft")).toBe(
+            'Planning Center has now: "Words: Isaac Watts; Music: William Croft".'
+        );
+        expect(describeAuthorNow("")).toBe("Planning Center has no credits for it now.");
+        expect(describeAuthorNow("  ")).toBe("Planning Center has no credits for it now.");
     });
 
     test("says what a save changed, or that it changed nothing", () => {

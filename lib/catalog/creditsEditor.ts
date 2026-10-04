@@ -300,6 +300,16 @@ export const NO_CREDITS_MESSAGE = "Enter at least one name: the credits would be
 export const CREDITS_NO_ANSWER =
     "The server did not answer, so the credits may or may not have been saved. Reload the page to see what the app has, and look at the song in Planning Center.";
 
+/**
+ * What the Credits card adds to a refusal because the author changed in
+ * Planning Center since the page loaded: the author it has now.
+ */
+export function describeAuthorNow(author: string): string {
+    return author.trim() === ""
+        ? "Planning Center has no credits for it now."
+        : `Planning Center has now: "${author}".`;
+}
+
 /** What the Credits card says once a save is done: what Planning Center has now. */
 export function describeCreditsSave({ changed, author }: { changed: boolean; author: string }): string {
     return changed

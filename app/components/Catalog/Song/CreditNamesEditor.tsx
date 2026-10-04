@@ -14,7 +14,7 @@ import { INPUT_CLASS } from "../SongForm/Fields";
 import { ADD_NAME_BUTTON_CLASS, REMOVE_BUTTON_CLASS, SMALL_BUTTON_CLASS } from "./styles";
 
 /** The id of the field of name `nameIndex` of row `rowIndex`, which focus is handed to. */
-function nameFieldId(idPrefix: string, rowIndex: number, nameIndex: number): string {
+export function nameFieldId(idPrefix: string, rowIndex: number, nameIndex: number): string {
     return `${idPrefix}-${rowIndex}-${nameIndex}`;
 }
 
