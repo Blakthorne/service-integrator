@@ -12,8 +12,7 @@ import {
     toOne,
 } from "./client";
 import { InvalidPcoIdError } from "./ids";
-import { pcoPacer } from "./pacer";
-import { calledRequests, stubFetchRoutes } from "./testing";
+import { calledRequests, stubFetchRoutes, stubPcoPacer } from "./testing";
 
 const BASE = "https://api.planningcenteronline.com/services/v2";
 const AUTH = `Basic ${Buffer.from("id:tok").toString("base64")}`;
@@ -976,9 +975,9 @@ describe("validation errors (422)", () => {
 describe("paced requests", () => {
     const songBody = jsonApi("Song", { title: "Amazing Grace" });
 
-    /** Stand in for the shared pacer: log each turn and grant it at once. */
+    /** Swap in the test's own pacer, whose turns are logged and granted at once. */
     function spyOnPacer(log: string[]) {
-        return vi.spyOn(pcoPacer(), "acquire").mockImplementation(async () => {
+        return vi.spyOn(stubPcoPacer(), "acquire").mockImplementation(async () => {
             log.push("turn");
         });
     }
@@ -997,7 +996,7 @@ describe("paced requests", () => {
     }
 
     test("are off by default: no read or write waits for the pacer", async () => {
-        const acquire = vi.spyOn(pcoPacer(), "acquire");
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
         stubFetch((url) =>
             json(
                 url === `${BASE}/songs`
@@ -1064,7 +1063,7 @@ describe("paced requests", () => {
 
     test("sends nothing, and starts no timeout, until the pacer grants the turn", async () => {
         let grant = () => {};
-        vi.spyOn(pcoPacer(), "acquire").mockImplementation(
+        vi.spyOn(stubPcoPacer(), "acquire").mockImplementation(
             () =>
                 new Promise<void>((resolve) => {
                     grant = resolve;
@@ -1085,7 +1084,7 @@ describe("paced requests", () => {
     });
 
     test("a URL the guard refuses takes no turn", async () => {
-        const acquire = vi.spyOn(pcoPacer(), "acquire").mockResolvedValue(undefined);
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire").mockResolvedValue(undefined);
         const fetchMock = stubFetch(() =>
             json(page([{ id: "1" }], { next: "https://evil.example/services/v2/songs" }))
         );

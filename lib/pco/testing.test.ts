@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { PCO_BASE, calledRequests, calledUrls, json, stubFetchRoutes } from "./testing";
+import { pcoPacer } from "./pacer";
+import {
+    PCO_BASE,
+    calledRequests,
+    calledUrls,
+    json,
+    stubFetchRoutes,
+    stubPcoPacer,
+} from "./testing";
 
 afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
 });
@@ -85,5 +94,32 @@ describe("calledRequests", () => {
         ]);
         // calledUrls still lists the URLs alone.
         expect(calledUrls(fetchMock)).toEqual([SONGS, SONGS, SONG]);
+    });
+});
+
+describe("stubPcoPacer", () => {
+    test("puts a pacer in the shared one's place until unstubAllGlobals", () => {
+        const shared = pcoPacer();
+        const stub = stubPcoPacer();
+        expect(stub).not.toBe(shared);
+        expect(pcoPacer()).toBe(stub);
+
+        vi.unstubAllGlobals();
+        expect(pcoPacer()).toBe(shared);
+    });
+
+    test("its default pacer runs on the fake clock", async () => {
+        vi.useFakeTimers();
+        const pacer = stubPcoPacer();
+        pacer.pause(1000);
+        let granted = false;
+        void pacer.acquire().then(() => {
+            granted = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(999);
+        expect(granted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(granted).toBe(true);
     });
 });

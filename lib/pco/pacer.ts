@@ -167,8 +167,9 @@ export function createPacer({
  * asks first creates it, and it is kept for the life of the process, so a
  * pacer of another shape would never replace it, not even on a dev server's
  * hot reload. Bump the version whenever the pacer's shape or defaults change.
+ * Exported for stubPcoPacer in testing.ts.
  */
-const PACER_GLOBAL = Symbol.for("service-integrator.pcoPacer.v2");
+export const PACER_GLOBAL = Symbol.for("service-integrator.pcoPacer.v2");
 
 /**
  * The pacer that every paced request in the process waits on, created on

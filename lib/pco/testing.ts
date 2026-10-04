@@ -3,6 +3,7 @@
  * stub. Only *.test.ts files import this module.
  */
 import { vi } from "vitest";
+import { PACER_GLOBAL, createPacer, type Pacer } from "./pacer";
 import type {
     PcoItemResource,
     PcoPlanResource,
@@ -76,6 +77,17 @@ export function stubFetchRoutes(routes: Record<string, unknown>) {
 /** The URLs a fetch mock was called with, in order. */
 export function calledUrls(fetchMock: ReturnType<typeof vi.fn>): string[] {
     return fetchMock.mock.calls.map(([url]) => String(url));
+}
+
+/**
+ * Put `pacer` in the shared pacer's place until vi.unstubAllGlobals(), so a
+ * test neither depends on nor changes the one the rest of its file shares
+ * (every PCO response feeds it; paced requests wait on it). The default is a
+ * fresh pacer on Date.now, which vi.useFakeTimers() drives.
+ */
+export function stubPcoPacer(pacer: Pacer = createPacer({ now: () => Date.now() })): Pacer {
+    vi.stubGlobal(PACER_GLOBAL, pacer);
+    return pacer;
 }
 
 /** One call a fetch mock received. */
