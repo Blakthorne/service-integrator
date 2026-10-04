@@ -1,4 +1,5 @@
 import init from "./0001_init";
+import catalog from "./0002_catalog";
 
 /** A schema change, applied once by `migrate()` and recorded in `schema_migrations`. */
 export interface Migration {
@@ -21,4 +22,4 @@ export interface Migration {
  * migration is never edited, reordered or removed, because a deployed
  * database has already run it. Change the schema with a new one at the end.
  */
-export const MIGRATIONS: readonly Migration[] = [init];
+export const MIGRATIONS: readonly Migration[] = [init, catalog];

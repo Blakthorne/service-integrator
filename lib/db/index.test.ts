@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { MIGRATIONS } from "./migrations";
 
 /** The key getDb() caches the connection under (see DB_GLOBAL in index.ts). */
 const DB_GLOBAL = Symbol.for("service-integrator.db.v1");
@@ -52,9 +53,9 @@ describe("getDb", () => {
         expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({
             foreign_keys: 1,
         });
-        expect(db.prepare("SELECT id FROM schema_migrations").all()).toEqual([
-            { id: "0001_init" },
-        ]);
+        expect(db.prepare("SELECT id FROM schema_migrations").all()).toEqual(
+            MIGRATIONS.map(({ id }) => ({ id }))
+        );
         expect(console.log).toHaveBeenCalledWith(
             `Database ${file}: applied migration 0001_init`
         );
@@ -80,7 +81,7 @@ describe("getDb", () => {
 
         const db = (await loadDbModule()).getDb();
         expect(db.prepare("SELECT count(*) AS n FROM schema_migrations").get())
-            .toEqual({ n: 1 });
+            .toEqual({ n: MIGRATIONS.length });
         expect(console.log).not.toHaveBeenCalled();
     });
 
