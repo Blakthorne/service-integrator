@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatLastScheduled } from "@/lib/catalog/lastScheduled";
+import { SONG_MARK_LABELS } from "@/lib/catalog/marks";
 import type { CatalogSongSummary } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import EntryLabels from "../EntryLabels";
@@ -88,9 +89,9 @@ function PcoLink({ song }: { song: CatalogSongSummary }) {
 }
 
 /**
- * Songs as table rows: the title, the tune (unless `showTune` is off), the
- * entry labels with their variant notes and, with `showLink`, the Planning
- * Center link. A row's title is a real link to the song, stretched over the
+ * Songs as table rows: the title with a badge for each of the song's marks
+ * ("To learn"), the tune (unless `showTune` is off), the entry labels with
+ * their variant notes and, with `showLink`, the Planning Center link. A row's title is a real link to the song, stretched over the
  * row; the tune is its own link above it. On phones the tune and the link
  * move under the title instead of taking columns.
  *
@@ -155,6 +156,14 @@ export default function SongsTable({
                                 >
                                     {song.title}
                                 </Link>
+                                {song.marks.map((mark) => (
+                                    <span
+                                        key={mark}
+                                        className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                                    >
+                                        {SONG_MARK_LABELS[mark]}
+                                    </span>
+                                ))}
                                 {showTune && (
                                     <span className="block sm:hidden mt-0.5 text-xs">
                                         <TuneName song={song} />

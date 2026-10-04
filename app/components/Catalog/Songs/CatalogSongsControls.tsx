@@ -1,7 +1,8 @@
 "use client";
 
 import Segmented, { type SegmentedOption } from "@/app/components/ui/Segmented";
-import type { CatalogLinked, CatalogSort, CatalogUsed } from "@/lib/catalog/filter";
+import { formatCount } from "@/lib/catalog/counts";
+import type { CatalogLinked, CatalogMark, CatalogSort, CatalogUsed } from "@/lib/catalog/filter";
 import type { Book, PcoTag, PcoTagGroup } from "@/lib/domain";
 import SearchBox from "../SearchBox";
 
@@ -46,6 +47,9 @@ interface CatalogSongsControlsProps {
     book: string;
     linked: CatalogLinked;
     used: CatalogUsed;
+    mark: CatalogMark;
+    /** How many songs are marked to learn, of every song: the count beside the mark filter. */
+    toLearnCount: number;
     /** The chosen tag's id, or `ANY_TAG`. */
     tag: string;
     sort: CatalogSort;
@@ -60,6 +64,7 @@ interface CatalogSongsControlsProps {
     onBookChange: (book: string) => void;
     onLinkedChange: (linked: CatalogLinked) => void;
     onUsedChange: (used: CatalogUsed) => void;
+    onMarkChange: (mark: CatalogMark) => void;
     onTagChange: (tag: string) => void;
     onSortChange: (sort: CatalogSort) => void;
     /** Called to download the songs the filters leave as a CSV file. */
@@ -110,17 +115,31 @@ function TagFilter({ tag, tagGroups, onTagChange }: TagFilterProps) {
     );
 }
 
+/** The mark filter's choices: every song, or the "to learn" shelf, with how many are on it. */
+function markOptions(toLearnCount: number): SegmentedOption<CatalogMark>[] {
+    return [
+        { value: "all", label: "All" },
+        {
+            value: "to-learn",
+            label: `To learn (${formatCount(toLearnCount)})`,
+            title: "Songs marked to learn on their pages",
+        },
+    ];
+}
+
 /**
- * The songs list's search, book, Planning Center link, usage and tag
+ * The songs list's search, book, Planning Center link, usage, mark and tag
  * filters and sort order, the count of what they leave, and the Export CSV
- * button. The tag filter shows only once the tags sync has brought some
- * tags.
+ * button. The mark filter says how many songs are marked to learn. The tag
+ * filter shows only once the tags sync has brought some tags.
  */
 export default function CatalogSongsControls({
     query,
     book,
     linked,
     used,
+    mark,
+    toLearnCount,
     tag,
     sort,
     books,
@@ -131,6 +150,7 @@ export default function CatalogSongsControls({
     onBookChange,
     onLinkedChange,
     onUsedChange,
+    onMarkChange,
     onTagChange,
     onSortChange,
     onExport,
@@ -187,6 +207,15 @@ export default function CatalogSongsControls({
                         options={USED_OPTIONS}
                         onChange={onUsedChange}
                         ariaLabel="Filter by usage"
+                    />
+                </div>
+                <div className="max-w-full space-y-1">
+                    <span className={GROUP_LABEL}>Shelf</span>
+                    <Segmented
+                        value={mark}
+                        options={markOptions(toLearnCount)}
+                        onChange={onMarkChange}
+                        ariaLabel="Filter by mark"
                     />
                 </div>
                 {tagGroups.length > 0 && (

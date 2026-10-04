@@ -5,10 +5,12 @@ import Pagination from "@/app/components/ui/Pagination";
 import { useUrlState } from "@/app/hooks/useUrlState";
 import {
     arrangeCatalogSongs,
+    countMarked,
     parseCatalogSongsQuery,
     parseCatalogTag,
     selectCatalogSongs,
     type CatalogLinked,
+    type CatalogMark,
     type CatalogSort,
     type CatalogTagFilter,
     type CatalogUsed,
@@ -39,13 +41,14 @@ interface CatalogSongsViewProps {
 /**
  * The songs list: search, filters, sort and pages over every song, in the
  * browser, with `lib/catalog/filter.ts`. The search (`?q=`), book (`?book=`),
- * Planning Center link (`?linked=`), usage (`?used=`), Planning Center tag
+ * Planning Center link (`?linked=`), usage (`?used=`), mark (`?mark=`, the
+ * "to learn" shelf, with how many songs are on it), Planning Center tag
  * (`?tag=`), sort (`?sort=`) and page (`?page=`) live in the URL, so a view
  * can be linked to and survives Back. Filters replace the history entry and
  * send the list back to page 1; pages push one, so Back steps through them.
  * A value at its default (no search, every book, linked or not, used or
- * not, any tag, by title, page 1) leaves the URL. "Export CSV" downloads
- * every song the filters leave, not just the page shown.
+ * not, marked or not, any tag, by title, page 1) leaves the URL. "Export
+ * CSV" downloads every song the filters leave, not just the page shown.
  */
 export default function CatalogSongsView({
     songs,
@@ -61,7 +64,7 @@ export default function CatalogSongsView({
         () => tagGroups.flatMap((group) => group.tags.map(({ id }) => id)),
         [tagGroups]
     );
-    const { q, book, linked, used, sort, page } = parseCatalogSongsQuery(
+    const { q, book, linked, used, mark, sort, page } = parseCatalogSongsQuery(
         searchParams,
         bookCodes
     );
@@ -71,9 +74,10 @@ export default function CatalogSongsView({
         [tagId, tagIdsBySong]
     );
     const shown = useMemo(
-        () => selectCatalogSongs(songs, { q, book, linked, used, tag, sort, page }, bookCodes),
-        [songs, q, book, linked, used, tag, sort, page, bookCodes]
+        () => selectCatalogSongs(songs, { q, book, linked, used, mark, tag, sort, page }, bookCodes),
+        [songs, q, book, linked, used, mark, tag, sort, page, bookCodes]
     );
+    const toLearnCount = useMemo(() => countMarked(songs, "to-learn"), [songs]);
 
     function handleQueryChange(next: string) {
         setSearchParams({ q: next === "" ? null : next, page: null }, { history: "replace" });
@@ -100,6 +104,13 @@ export default function CatalogSongsView({
         );
     }
 
+    function handleMarkChange(next: CatalogMark) {
+        setSearchParams(
+            { mark: next === "all" ? null : next, page: null },
+            { history: "replace" }
+        );
+    }
+
     function handleTagChange(next: string) {
         setSearchParams(
             { tag: next === ANY_TAG ? null : next, page: null },
@@ -119,7 +130,7 @@ export default function CatalogSongsView({
         // function as the page: what is exported is what is listed.
         const matching = arrangeCatalogSongs(
             songs,
-            { q, book, linked, used, tag, sort },
+            { q, book, linked, used, mark, tag, sort },
             bookCodes
         );
         downloadCsv(
@@ -145,6 +156,8 @@ export default function CatalogSongsView({
                 book={book ?? ALL_BOOKS}
                 linked={linked}
                 used={used}
+                mark={mark}
+                toLearnCount={toLearnCount}
                 tag={tagId ?? ANY_TAG}
                 sort={sort}
                 books={books}
@@ -155,6 +168,7 @@ export default function CatalogSongsView({
                 onBookChange={handleBookChange}
                 onLinkedChange={handleLinkedChange}
                 onUsedChange={handleUsedChange}
+                onMarkChange={handleMarkChange}
                 onTagChange={handleTagChange}
                 onSortChange={handleSortChange}
                 onExport={handleExport}
