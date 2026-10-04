@@ -65,6 +65,9 @@ function CreateConfirmation({ song, pending, onCancel, onConfirm }: CreateConfir
                         <dt className="text-sm font-medium text-gray-500 dark:text-gray-400">{line.label}</dt>
                         <dd className="text-sm">
                             <Sample>{line.value}</Sample>
+                            {line.note && (
+                                <span className="block text-gray-600 dark:text-gray-400">{line.note}</span>
+                            )}
                         </dd>
                     </div>
                 ))}

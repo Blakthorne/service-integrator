@@ -161,30 +161,65 @@ export const CCLI_SONG_NUMBER_HINT =
 
 /** What "Use CCLI's details" explains: what a CCLI number makes Planning Center do, and what the box changes. */
 export const USE_CCLI_DETAILS_HINT =
-    "Given a CCLI number, Planning Center fills in the song's title, credits and copyright from CCLI's records. Tick this to keep what CCLI gives. Leave it unticked to have the title and credits typed here written back over CCLI's; the copyright stays as Planning Center fills it in. Without a CCLI number this changes nothing.";
+    "Given a CCLI number, Planning Center fills in the song's title, credits and copyright from CCLI's records. Tick this to keep what CCLI gives. Leave it unticked to have the title, and the credits if any are typed, written back over CCLI's; the copyright stays CCLI's either way. Without a CCLI number this changes nothing.";
 
-/** One line of the confirmation: what Planning Center will get. */
+/** One line of the confirmation: what Planning Center will hold for one field. */
 export interface NewPcoSongSummaryLine {
     label: string;
+    /** What Planning Center will hold: what was typed, "None", or "From CCLI". */
     value: string;
+    /** How, when a CCLI number comes into it: written back over CCLI's, or CCLI's in place of what was typed. */
+    note?: string;
 }
 
-/** What the confirmation shows of the song about to be created, a line per field. */
+/** What the confirmation shows of a field Planning Center fills from CCLI. */
+const FROM_CCLI = "From CCLI";
+
+/** The note of a field whose typed value CCLI's replaces; none when nothing was typed. */
+function inPlaceOf(typed: string): string | undefined {
+    return typed === "" ? undefined : `in place of "${typed}", typed here`;
+}
+
+/**
+ * What the confirmation shows of the song about to be created: a line per
+ * field, saying what Planning Center will hold, as `createSongInPlanningCenter`
+ * makes it.
+ *
+ * Without a CCLI number it holds what was typed. With one, Planning Center
+ * fills the title, credits and copyright from CCLI's records. With "Use
+ * CCLI's details" they are all CCLI's; without it, the app writes the title
+ * back as typed, and the credits too when some were typed, while the
+ * copyright stays CCLI's.
+ */
 export function newPcoSongSummary(song: CheckedNewPcoSong): NewPcoSongSummaryLine[] {
-    let ccli = "None";
-    if (song.ccliNumber !== null) {
-        ccli = song.useCcliDetails
-            ? `${song.ccliNumber}, keeping the title, credits and copyright CCLI gives it`
-            : `${song.ccliNumber}, with the title and credits typed here written back over CCLI's`;
+    if (song.ccliNumber === null) {
+        return [
+            { label: "Title", value: song.title },
+            { label: "Author", value: song.author === "" ? "None" : song.author },
+            {
+                label: "Copyright",
+                value: song.copyright === "" ? 'None: the copyright text says "Public Domain."' : song.copyright,
+            },
+            { label: "CCLI number", value: "None" },
+        ];
+    }
+    const copyright = { label: "Copyright", value: FROM_CCLI, note: inPlaceOf(song.copyright) };
+    const ccli = { label: "CCLI number", value: String(song.ccliNumber) };
+    if (song.useCcliDetails) {
+        return [
+            { label: "Title", value: FROM_CCLI, note: inPlaceOf(song.title) },
+            { label: "Author", value: FROM_CCLI, note: inPlaceOf(song.author) },
+            copyright,
+            ccli,
+        ];
     }
     return [
-        { label: "Title", value: song.title },
-        { label: "Author", value: song.author === "" ? "None" : song.author },
-        {
-            label: "Copyright",
-            value: song.copyright === "" ? 'None: the copyright text says "Public Domain."' : song.copyright,
-        },
-        { label: "CCLI number", value: ccli },
+        { label: "Title", value: song.title, note: "written back over CCLI's title" },
+        song.author === ""
+            ? { label: "Author", value: FROM_CCLI, note: "no credits are typed to write back over CCLI's" }
+            : { label: "Author", value: song.author, note: "written back over CCLI's credits" },
+        copyright,
+        ccli,
     ];
 }
 

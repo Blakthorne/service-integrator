@@ -193,8 +193,9 @@ describe("newPcoSongSummary", () => {
         ccliNumber: null,
         useCcliDetails: false,
     };
+    const blank = { ...song, credits: [], author: "", copyright: "" };
 
-    test("lists what Planning Center will get", () => {
+    test("lists what was typed, without a CCLI number", () => {
         expect(newPcoSongSummary(song)).toEqual([
             { label: "Title", value: "Abba, Father (PRITCHARD)" },
             { label: "Author", value: "Words: A" },
@@ -203,19 +204,50 @@ describe("newPcoSongSummary", () => {
         ]);
     });
 
-    test("says what a blank author and copyright come to", () => {
-        const lines = newPcoSongSummary({ ...song, credits: [], author: "", copyright: "" });
-        expect(lines[1]).toEqual({ label: "Author", value: "None" });
-        expect(lines[2]).toEqual({ label: "Copyright", value: 'None: the copyright text says "Public Domain."' });
+    test("says what a blank author and copyright come to, without a CCLI number", () => {
+        expect(newPcoSongSummary(blank)).toEqual([
+            { label: "Title", value: "Abba, Father (PRITCHARD)" },
+            { label: "Author", value: "None" },
+            { label: "Copyright", value: 'None: the copyright text says "Public Domain."' },
+            { label: "CCLI number", value: "None" },
+        ]);
     });
 
-    test("says whether CCLI's details are kept with a CCLI number", () => {
-        expect(newPcoSongSummary({ ...song, ccliNumber: 22025 })[3].value).toBe(
-            "22025, with the title and credits typed here written back over CCLI's"
-        );
-        expect(newPcoSongSummary({ ...song, ccliNumber: 22025, useCcliDetails: true })[3].value).toBe(
-            "22025, keeping the title, credits and copyright CCLI gives it"
-        );
+    test("with a CCLI number, writes back the title and credits typed, and takes CCLI's copyright", () => {
+        expect(newPcoSongSummary({ ...song, ccliNumber: 22025 })).toEqual([
+            { label: "Title", value: "Abba, Father (PRITCHARD)", note: "written back over CCLI's title" },
+            { label: "Author", value: "Words: A", note: "written back over CCLI's credits" },
+            { label: "Copyright", value: "From CCLI", note: 'in place of "Public Domain", typed here' },
+            { label: "CCLI number", value: "22025" },
+        ]);
+    });
+
+    test("with a CCLI number and nothing typed but the title, takes CCLI's credits and copyright", () => {
+        expect(newPcoSongSummary({ ...blank, ccliNumber: 22025 })).toEqual([
+            { label: "Title", value: "Abba, Father (PRITCHARD)", note: "written back over CCLI's title" },
+            { label: "Author", value: "From CCLI", note: "no credits are typed to write back over CCLI's" },
+            { label: "Copyright", value: "From CCLI", note: undefined },
+            { label: "CCLI number", value: "22025" },
+        ]);
+    });
+
+    test("with CCLI's details kept, takes them all, saying what each replaces", () => {
+        expect(newPcoSongSummary({ ...song, ccliNumber: 22025, useCcliDetails: true })).toEqual([
+            { label: "Title", value: "From CCLI", note: 'in place of "Abba, Father (PRITCHARD)", typed here' },
+            { label: "Author", value: "From CCLI", note: 'in place of "Words: A", typed here' },
+            { label: "Copyright", value: "From CCLI", note: 'in place of "Public Domain", typed here' },
+            { label: "CCLI number", value: "22025" },
+        ]);
+        expect(newPcoSongSummary({ ...blank, ccliNumber: 22025, useCcliDetails: true })).toEqual([
+            { label: "Title", value: "From CCLI", note: 'in place of "Abba, Father (PRITCHARD)", typed here' },
+            { label: "Author", value: "From CCLI", note: undefined },
+            { label: "Copyright", value: "From CCLI", note: undefined },
+            { label: "CCLI number", value: "22025" },
+        ]);
+    });
+
+    test("ignores Use CCLI's details without a CCLI number", () => {
+        expect(newPcoSongSummary({ ...song, useCcliDetails: true })).toEqual(newPcoSongSummary(song));
     });
 });
 
