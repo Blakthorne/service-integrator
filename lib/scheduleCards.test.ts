@@ -9,6 +9,7 @@ import {
     scheduleChoices,
     scheduleSongView,
     selectionsUnavailableMessage,
+    settingsUnavailableMessage,
     type ScheduleCatalogState,
 } from "./scheduleCards";
 
@@ -145,6 +146,11 @@ describe("linkedNotice", () => {
         expect(linkedNotice({ kind: "linked", match: ABIDE })).toBe("Linked: R-517 / G-64");
     });
 
+    test("joins the numbers with the separator from the settings", () => {
+        expect(linkedNotice({ kind: "linked", match: ABIDE }, ", ")).toBe("Linked: R-517, G-64");
+        expect(linkedNotice({ kind: "linked", match: ABIDE }, " / ")).toBe("Linked: R-517 / G-64");
+    });
+
     test("says when the linked song is in no book", () => {
         expect(linkedNotice({ kind: "linked", match: NOT_IN_A_BOOK })).toBe(
             "Linked. The song is in no book, so there are no numbers to print."
@@ -255,5 +261,16 @@ describe("saveFailureText", () => {
             "Not saved. The server did not answer."
         );
         expect(saveFailureText("")).toBe("Not saved.");
+    });
+});
+
+describe("settingsUnavailableMessage", () => {
+    test("says why the settings are missing, and that the text uses the defaults", () => {
+        expect(settingsUnavailableMessage("database is locked")).toBe(
+            "The settings couldn't be read: database is locked. The text here uses the default settings."
+        );
+        expect(settingsUnavailableMessage("")).toBe(
+            "The settings couldn't be read. The text here uses the default settings."
+        );
     });
 });

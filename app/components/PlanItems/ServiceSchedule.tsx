@@ -11,22 +11,15 @@ import {
     catalogUnavailableMessage,
     scheduleSongView,
     selectionsUnavailableMessage,
+    settingsUnavailableMessage,
 } from "@/lib/scheduleCards";
 import type { ChooseOption, SetCustomText } from "@/lib/scheduleSelections";
 import type { SelectionSaveState } from "@/lib/scheduleSelectionsStore";
 import { buildScheduleCopyText } from "@/lib/serviceSchedule";
 import type { LinkSong } from "./LinkToCatalogInline";
+import PlanNotice from "./PlanNotice";
 import type { RetrySave } from "./PlanProvider";
 import ScheduleSongCard from "./ScheduleSongCard";
-
-/** A quiet banner above the cards: what the tab cannot do, and why. */
-function Notice({ children }: { children: React.ReactNode }) {
-    return (
-        <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            {children}
-        </p>
-    );
-}
 
 /** Props of ServiceSchedule. */
 export interface ServiceScheduleProps {
@@ -43,11 +36,17 @@ export interface ServiceScheduleProps {
     catalogError: string | null;
     /** Why the saved choices could not be read, or null; the tab then says choices won't be saved. */
     selectionsError: string | null;
+    /** Why the settings could not be read, or null; the tab then says the text uses the defaults. */
+    settingsError: string | null;
     /** How the saves of the changed songs stand, by item ID (see `SelectionSaveState`). */
     saves: Readonly<Record<string, SelectionSaveState>>;
     serviceTypeName: string;
     /** The plan's calendar date as `YYYY-MM-DD`, or null when it is unknown. */
     planDate: string | null;
+    /** The schedule text's header label, from the settings; null for no header. */
+    headerLabel: string | null;
+    /** What goes between a song's numbers, from the settings. */
+    numberSeparator: string;
     /** This tab's address, where the new-song form comes back to. */
     scheduleHref: string;
     /** Called when a song's option is chosen. */
@@ -64,8 +63,9 @@ export interface ServiceScheduleProps {
  * The Service Schedule tab: a card per song item, in sequence order, with
  * its numbers from its catalog link or a way to link it, and the choices for
  * its line (see `ScheduleSongCard`); a "Copy All" button for the schedule
- * text; and quiet banners when the catalog or the saved choices cannot be
- * read. It holds no selections itself; they come in with `items`, with how
+ * text, with the header and separator from the settings; and quiet banners
+ * when the catalog, the saved choices or the settings cannot be read. It
+ * holds no selections itself; they come in with `items`, with how
  * their saves stand in `saves`, and changes go out through the callbacks.
  */
 export default function ServiceSchedule({
@@ -74,9 +74,12 @@ export default function ServiceSchedule({
     suggestions,
     catalogError,
     selectionsError,
+    settingsError,
     saves,
     serviceTypeName,
     planDate,
+    headerLabel,
+    numberSeparator,
     scheduleHref,
     onChooseOption,
     onCustomTextChange,
@@ -98,14 +101,21 @@ export default function ServiceSchedule({
                                 catalog,
                                 serviceTypeName,
                                 planDate,
+                                headerLabel,
+                                numberSeparator,
                             })}
                         />
                     </div>
                 </div>
             </div>
-            {catalogError !== null && <Notice>{catalogUnavailableMessage(catalogError)}</Notice>}
+            {catalogError !== null && (
+                <PlanNotice>{catalogUnavailableMessage(catalogError)}</PlanNotice>
+            )}
             {selectionsError !== null && (
-                <Notice>{selectionsUnavailableMessage(selectionsError)}</Notice>
+                <PlanNotice>{selectionsUnavailableMessage(selectionsError)}</PlanNotice>
+            )}
+            {settingsError !== null && (
+                <PlanNotice>{settingsUnavailableMessage(settingsError)}</PlanNotice>
             )}
             <div className="space-y-4">
                 {items
@@ -117,6 +127,7 @@ export default function ServiceSchedule({
                             item={item}
                             view={scheduleSongView(item, catalogState)}
                             saveState={saves[item.id] ?? null}
+                            numberSeparator={numberSeparator}
                             scheduleHref={scheduleHref}
                             onChooseOption={onChooseOption}
                             onCustomTextChange={onCustomTextChange}

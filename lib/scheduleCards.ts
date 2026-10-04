@@ -74,18 +74,19 @@ export function scheduleChoices(view: ScheduleSongView): ScheduleOption[] {
 /**
  * What a card says, through its status region, once a Link made on it has
  * gone through: "Linked: R-396 / G-317", the numbers the schedule text will
- * print, or that the song is in no book. Null while the card still shows
- * the song as not linked, before the action's revalidation has brought the
- * link. Should the catalog be unreadable by then, just "Linked."
+ * print (joined with `separator`, the `numberSeparator` setting), or that
+ * the song is in no book. Null while the card still shows the song as not
+ * linked, before the action's revalidation has brought the link. Should the
+ * catalog be unreadable by then, just "Linked."
  */
-export function linkedNotice(view: ScheduleSongView): string | null {
+export function linkedNotice(view: ScheduleSongView, separator?: string): string | null {
     if (view.kind === "unlinked") {
         return null;
     }
     if (view.kind !== "linked") {
         return "Linked.";
     }
-    const numbers = formatScheduleNumbers(view.match.entries);
+    const numbers = formatScheduleNumbers(view.match.entries, separator);
     return numbers === ""
         ? "Linked. The song is in no book, so there are no numbers to print."
         : `Linked: ${numbers}`;
@@ -158,3 +159,12 @@ export function saveFailureText(message: string): string {
 
 /** What a card's status region says once a save that had failed has gone through. */
 export const SAVED_AFTER_FAILURE_NOTICE = "Saved.";
+
+/**
+ * What a plan's tabs say when the settings cannot be read (see
+ * `PlanDetail.settingsError`): their text then follows the defaults, which
+ * give the text the app printed before it had settings.
+ */
+export function settingsUnavailableMessage(error: string): string {
+    return `${withReason("The settings couldn't be read", error)} The text here uses the default settings.`;
+}

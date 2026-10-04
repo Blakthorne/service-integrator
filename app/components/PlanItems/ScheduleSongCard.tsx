@@ -94,6 +94,8 @@ interface ScheduleSongCardProps {
     view: ScheduleSongView;
     /** How the save of its choice stands; null when it is saved, or was never changed. */
     saveState: SelectionSaveState | null;
+    /** What goes between a song's numbers, from the settings, for what a Link says. */
+    numberSeparator: string;
     /** This Schedule tab's address, where the new-song form comes back to. */
     scheduleHref: string;
     onChooseOption: ChooseOption;
@@ -135,6 +137,7 @@ export default function ScheduleSongCard({
     item,
     view,
     saveState,
+    numberSeparator,
     scheduleHref,
     onChooseOption,
     onCustomTextChange,
@@ -144,7 +147,7 @@ export default function ScheduleSongCard({
     const headingRef = useRef<HTMLHeadingElement>(null);
     /** True once a Link made on this card has gone through. */
     const [linkedHere, setLinkedHere] = useState(false);
-    const linkNotice = linkedHere ? linkedNotice(view) : null;
+    const linkNotice = linkedHere ? linkedNotice(view, numberSeparator) : null;
     const failure = saveState?.status === "failed" ? saveState : null;
     /** True once a save has gone through after a failure, until the next save starts. */
     const [savedAgain, setSavedAgain] = useState(false);

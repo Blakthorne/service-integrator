@@ -31,6 +31,7 @@ import {
     type PlanSelectionsStore,
     type SelectionSaveState,
 } from "@/lib/scheduleSelectionsStore";
+import type { PlanTextSettings } from "@/lib/settings";
 
 /** Save the choice of a song after its save failed. */
 export type RetrySave = (itemId: string) => void;
@@ -61,6 +62,14 @@ export interface PlanContextValue {
      * starts on its default, and no choice is saved.
      */
     selectionsError: string | null;
+    /**
+     * The settings the plan's text follows, for its service type: the
+     * schedule text's header and number separator, and the copyright
+     * blocks' CCLI license number.
+     */
+    scheduleSettings: PlanTextSettings;
+    /** Why the settings could not be read, or null; `scheduleSettings` then holds the defaults. */
+    settingsError: string | null;
     /**
      * `items` with the Schedule tab's selections merged in: a song with
      * numbers starts on Numbers, every other item on Leave blank, unless a
@@ -154,6 +163,8 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
         suggestions,
         catalogError,
         selectionsError,
+        scheduleSettings,
+        settingsError,
     } = detail;
     const [store] = useState(() => storeFor(detail));
     const { selections, saves } = useSyncExternalStore(
@@ -195,6 +206,8 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             suggestions,
             catalogError,
             selectionsError,
+            scheduleSettings,
+            settingsError,
             scheduleItems,
             saves,
             chooseOption,
@@ -209,6 +222,8 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             suggestions,
             catalogError,
             selectionsError,
+            scheduleSettings,
+            settingsError,
             scheduleItems,
             saves,
             chooseOption,
