@@ -74,6 +74,12 @@ export type PcoWriteRefusalReason =
     | "busy"
     /** The song has no arrangement to put in a plan. */
     | "no-arrangement"
+    /**
+     * What the write would change has changed in Planning Center since the
+     * page showed it, so nothing was written: the page should show it
+     * afresh first.
+     */
+    | "changed"
     /** Planning Center refused the write as invalid (a 422); `details` gives its reasons. */
     | "refused";
 
@@ -794,14 +800,14 @@ export async function addSongToPlan(
 export type SaveSongTagsResult =
     | {
           ok: true;
-          /** False when the song had exactly these tags already, so nothing was sent. */
+          /** False when the song's tags in Planning Center already had the changes, so nothing was sent. */
           changed: boolean;
-          /** The song's whole set of tags now, as sent (or as it was, when unchanged). */
+          /** The song's whole set of tags in Planning Center now. */
           tagIds: string[];
           /**
            * Tags the song has in Planning Center that the mirror does not
-           * know yet (made since the last tags sync), so nobody could have
-           * chosen to drop them: they were kept.
+           * know yet (made since the last tags sync), so nobody saw them:
+           * they were left as they are.
            */
           kept: SongTag[];
       }
@@ -812,29 +818,41 @@ function tagSummaries(tags: readonly Pick<PcoTag, "id" | "name">[]) {
     return tags.map(({ id, name }) => ({ id, name }));
 }
 
+/** The ids in `ids` that are not in `without`, each once, in order. */
+function idsNotIn(ids: Iterable<string>, without: ReadonlySet<string>): string[] {
+    return [...new Set(ids)].filter((id) => !without.has(id));
+}
+
 /**
- * Give mirrored Planning Center song `pcoSongId` the song tags `tagIds`
- * from the tag editor: the whole set it should have of the mirror's song
- * tag groups.
+ * Apply the tag editor's changes to mirrored Planning Center song
+ * `pcoSongId`'s tags as Planning Center has them now. `shown` is the set
+ * of tags the editor showed the song with, and `wanted` the set it was
+ * saved with: what the person changed is only the tags they added
+ * (`wanted` but not `shown`) and the ones they removed (`shown` but not
+ * `wanted`). Every other tag is left exactly as Planning Center has it
+ * now, so a tag set in Planning Center since the page loaded, or one the
+ * mirror does not know yet, is never dropped, and one removed there is
+ * never put back.
  *
- * Every id must be a tag of one of the mirror's song tag groups (never an
- * arrangement group's, which Planning Center would silently ignore), and a
- * group that takes one tag may have only one chosen. The song's tags are
- * then read afresh, and, since `assign_tags` replaces all of them, the full
- * new set is sent: the ids chosen, plus any tag the song has that the
- * mirror does not know yet, kept as it is (`kept`). Nothing is sent when
- * the song has exactly that set already. The write is logged (`tags`, with
- * the tags' names before and after), and the mirror's tags for the song
- * replaced.
+ * Each tag added must be a tag of one of the mirror's song tag groups
+ * (never an arrangement group's, which Planning Center would silently
+ * ignore), and a group that takes one tag may end with one at most. The
+ * song's tags are read afresh, the changes applied to them, and, since
+ * `assign_tags` replaces them all, the whole resulting set is sent, unless
+ * it is the set the song has already. The write is logged (`tags`, with
+ * the tags' names before and after, and those added and removed), and the
+ * mirror's tags for the song replaced with what it has now.
  *
  * Refused when the song id is not one, the mirror or Planning Center has
- * no such song, a tag is not a mirrored song tag or a group has too many,
- * or Planning Center refuses the write. Throws when Planning Center or the
- * database fails.
+ * no such song, a tag added is not a mirrored song tag, a group that takes
+ * one tag would end with more (because one was chosen, or because the song
+ * has another of its tags in Planning Center now), or Planning Center
+ * refuses the write. Throws when Planning Center or the database fails.
  */
 export async function saveSongTags(
     pcoSongId: string,
-    tagIds: readonly string[],
+    shown: readonly string[],
+    wanted: readonly string[],
     now: Date = new Date()
 ): Promise<SaveSongTagsResult> {
     const id = parsePcoId(pcoSongId);
@@ -848,41 +866,61 @@ export async function saveSongTags(
     }
     const groups = listSongTagGroups(db);
     const known = new Map(groups.flatMap((group) => group.tags.map((tag) => [tag.id, tag] as const)));
-    const wanted = new Set(tagIds);
-    for (const tagId of wanted) {
-        if (!known.has(tagId)) {
-            return refusal(
-                "invalid",
-                "One of the tags chosen is not a song tag in Planning Center any more. Sync the tags and choose again."
-            );
-        }
+    const added = idsNotIn(wanted, new Set(shown));
+    const removed = new Set(idsNotIn(shown, new Set(wanted)));
+    if (added.some((tagId) => !known.has(tagId))) {
+        return refusal(
+            "invalid",
+            "One of the tags chosen is not a song tag in Planning Center any more. Sync the tags and choose again."
+        );
     }
+    const wantedSet = new Set(wanted);
     for (const group of groups) {
-        if (!group.allowMultiple && group.tags.filter((tag) => wanted.has(tag.id)).length > 1) {
+        if (!group.allowMultiple && group.tags.filter((tag) => wantedSet.has(tag.id)).length > 1) {
             return refusal("invalid", `Choose one tag at most of "${group.name}".`);
         }
     }
-    // In the mirror's order: by group, then by name.
-    const chosen = [...known.values()].filter((tag) => wanted.has(tag.id));
 
     const current = await unlessMissing(fetchSongTags(id));
     if (current === null) {
         return refusal("not-found", NO_SUCH_PCO_SONG);
     }
-    const kept = current.filter((tag) => !known.has(tag.id));
-    const next = [...chosen.map((tag) => tag.id), ...kept.map((tag) => tag.id)];
-    const before = new Set(current.map((tag) => tag.id));
-    const changed = next.length !== before.size || next.some((tagId) => !before.has(tagId));
+    const currentIds = new Set(current.map((tag) => tag.id));
+    const next = new Set([...idsNotIn(currentIds, removed), ...added]);
+    for (const group of groups) {
+        if (!group.allowMultiple && group.tags.filter((tag) => next.has(tag.id)).length > 1) {
+            return refusal(
+                "changed",
+                `"${group.name}" takes one tag, and "${mirrored.title}" has another of its tags in Planning Center now, set since this page loaded, so nothing was saved. Reload the page and choose again.`
+            );
+        }
+    }
+    // The mirror's tags in its order (by group, then by name), then any it
+    // does not know that stay: the person never saw them, so they are kept.
+    const kept = current.filter((tag) => !known.has(tag.id) && next.has(tag.id));
+    const nextIds = [
+        ...[...known.keys()].filter((tagId) => next.has(tagId)),
+        ...kept.map((tag) => tag.id),
+    ];
+    const changed = nextIds.length !== currentIds.size || nextIds.some((tagId) => !currentIds.has(tagId));
     if (changed) {
+        const nameOf = new Map<string, string>([
+            ...current.map((tag) => [tag.id, tag.name] as const),
+            ...[...known.values()].map((tag) => [tag.id, tag.name] as const),
+        ]);
+        const summary = (ids: Iterable<string>) =>
+            tagSummaries([...ids].map((tagId) => ({ id: tagId, name: nameOf.get(tagId) ?? tagId })));
         const target = `song ${id}`;
         const payload = {
             action: "assign",
             title: mirrored.title,
-            tags: tagSummaries([...chosen, ...kept]),
+            tags: summary(nextIds),
             previous: tagSummaries(current),
+            added: summary(added.filter((tagId) => !currentIds.has(tagId))),
+            removed: summary([...removed].filter((tagId) => currentIds.has(tagId))),
         };
         try {
-            await assignSongTags(id, next);
+            await assignSongTags(id, nextIds);
         } catch (error) {
             logWrite(db, { kind: "tags", target, ok: false, payload, result: writeError(error) }, now);
             const refused = refusedByPco(error, `the tags of "${mirrored.title}"`);
@@ -891,8 +929,9 @@ export async function saveSongTags(
             }
             throw error;
         }
-        logWrite(db, { kind: "tags", target, ok: true, payload, result: { tagIds: next } }, now);
+        logWrite(db, { kind: "tags", target, ok: true, payload, result: { tagIds: nextIds } }, now);
     }
-    replaceSongTags(db, id, changed ? next : current.map((tag) => tag.id));
-    return { ok: true, changed, tagIds: changed ? next : current.map((tag) => tag.id), kept };
+    const tagIds = changed ? nextIds : current.map((tag) => tag.id);
+    replaceSongTags(db, id, tagIds);
+    return { ok: true, changed, tagIds, kept };
 }
