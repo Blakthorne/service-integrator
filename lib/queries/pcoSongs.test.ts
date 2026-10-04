@@ -62,6 +62,8 @@ const urls = {
     arrangements: (id = SONG) => `${PCO_BASE}/songs/${id}/arrangements?per_page=100`,
     plan: (st = ST, plan = PLAN) => `${PCO_BASE}/service_types/${st}/plans/${plan}`,
     serviceType: (st = ST) => `${PCO_BASE}/service_types/${st}`,
+    planItems: (st = ST, plan = PLAN) =>
+        `${PCO_BASE}/service_types/${st}/plans/${plan}/items?include=song,item_notes&per_page=100`,
     items: (st = ST, plan = PLAN) => `${PCO_BASE}/service_types/${st}/plans/${plan}/items`,
     serviceTypes: `${PCO_BASE}/service_types?per_page=100`,
     upcoming: (st: string) =>
@@ -844,6 +846,12 @@ describe("addSongToPlan", () => {
             ]),
             [urls.serviceType()]: { data: serviceTypeResource({ name: "Sunday Morning" }, ST) },
             [urls.upcoming(ST)]: listPage([later, plan]),
+            [urls.planItems()]: listPage([
+                itemResource("900", { title: "Welcome", item_type: "header", sequence: 1 }),
+                itemResource("901", { title: "Amazing Grace", sequence: 2 }, {
+                    song: { data: { type: "Song", id: "1002" } },
+                }),
+            ]),
         };
     }
 
@@ -857,7 +865,7 @@ describe("addSongToPlan", () => {
             [`POST ${urls.items()}`]: () => json({ data: added }, { status: 201 }),
         });
 
-        const result = await addSongToPlan(ST, PLAN, SONG, T0);
+        const result = await addSongToPlan(ST, PLAN, SONG, {}, T0);
 
         expect(result).toMatchObject({
             ok: true,
@@ -950,6 +958,7 @@ describe("addSongToPlan", () => {
             ...readRoutes(),
             [urls.serviceType(EVENING)]: { data: serviceTypeResource({ name: "Sunday Evening" }, EVENING) },
             [urls.upcoming(EVENING)]: listPage([planResource({ id: "201" })]),
+            [urls.planItems(EVENING)]: listPage([]),
         });
         await expect(addSongToPlan(EVENING, PLAN, SONG)).resolves.toMatchObject({
             ok: false,
@@ -969,6 +978,79 @@ describe("addSongToPlan", () => {
             ok: false,
             reason: "not-upcoming",
             message: "Old Service is archived in Planning Center, so nothing was added to its plans.",
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("refuses, writing nothing, a plan that holds the song already, naming its items", async () => {
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            [urls.planItems()]: listPage([
+                itemResource("901", { title: "Amazing Grace", sequence: 2 }, { song: { data: { type: "Song", id: "1002" } } }),
+                itemResource("905", { title: "O God, Our Help (v. 1-3)", sequence: 5 }, {
+                    song: { data: { type: "Song", id: SONG } },
+                }),
+                itemResource("909", { title: "O God, Our Help (reprise)", sequence: 9 }, {
+                    song: { data: { type: "Song", id: SONG } },
+                }),
+            ]),
+        });
+
+        await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toEqual({
+            ok: false,
+            reason: "already-in-plan",
+            message:
+                'The plan for October 11, 2026 has "O God, Our Help" already, as its item "O God, Our Help (v. 1-3)", so nothing was added. Add another only if the song should be in the plan twice.',
+            existingItems: [
+                { id: "905", title: "O God, Our Help (v. 1-3)", sequence: 5 },
+                { id: "909", title: "O God, Our Help (reprise)", sequence: 9 },
+            ],
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+        expect(writes()).toEqual([]);
+    });
+
+    test("adds another anyway when allowed, without reading the plan's items, and logs that it was", async () => {
+        const routes = readRoutes();
+        delete routes[urls.planItems()];
+        const fetchMock = stubFetchRoutes({
+            ...routes,
+            [`POST ${urls.items()}`]: () => json({ data: added }, { status: 201 }),
+        });
+
+        await expect(addSongToPlan(ST, PLAN, SONG, { allowDuplicate: true })).resolves.toMatchObject({
+            ok: true,
+            item: { id: "950" },
+        });
+        expect(writesSent(fetchMock)).toHaveLength(1);
+        expect(writes()[0].payload).toMatchObject({ action: "add-song", allowDuplicate: true });
+    });
+
+    test("only an item of the song counts: another song's, or an item that is not a song, does not", async () => {
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            [urls.planItems()]: listPage([
+                itemResource("901", { title: "O God, Our Help", item_type: "header" }, {
+                    song: { data: { type: "Song", id: SONG } },
+                }),
+                itemResource("902", { title: "O God, Our Help" }),
+                itemResource("903", { title: "Amazing Grace" }, { song: { data: { type: "Song", id: "1002" } } }),
+            ]),
+            [`POST ${urls.items()}`]: () => json({ data: added }, { status: 201 }),
+        });
+        await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toMatchObject({ ok: true });
+        expect(writesSent(fetchMock)).toHaveLength(1);
+    });
+
+    test("refuses a plan whose items Planning Center cannot find", async () => {
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            [urls.planItems()]: () => json({ errors: [] }, { status: 404 }),
+        });
+        await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toEqual({
+            ok: false,
+            reason: "not-found",
+            message: "There is no such plan.",
         });
         expect(writesSent(fetchMock)).toEqual([]);
     });

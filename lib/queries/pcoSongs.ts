@@ -25,6 +25,7 @@ import {
     assignSongTags,
     createSong,
     createSongItem,
+    fetchPlanItems,
     fetchSong,
     fetchSongTags,
     fetchUpcomingPlans,
@@ -77,6 +78,8 @@ export type PcoWriteRefusalReason =
     | "no-arrangement"
     /** The plan is not an upcoming one any more, or its service type is archived. */
     | "not-upcoming"
+    /** The plan holds the song already; adding it again needs `allowDuplicate`. */
+    | "already-in-plan"
     /**
      * What the write would change has changed in Planning Center since the
      * page showed it, so nothing was written: the page should show it
@@ -713,6 +716,9 @@ export function defaultArrangement(
     return first;
 }
 
+/** An item of a plan, as a refusal names it. */
+export type PlanItemSummary = Pick<PlanItem, "id" | "title" | "sequence">;
+
 /** What `addSongToPlan` did. */
 export type AddSongToPlanResult =
     | {
@@ -724,7 +730,19 @@ export type AddSongToPlanResult =
           /** The arrangement it uses. */
           arrangement: SongArrangement;
       }
-    | PcoWriteRefusal;
+    | (PcoWriteRefusal & {
+          /** With an "already-in-plan" refusal: the plan's items for the song, in plan order. */
+          existingItems?: PlanItemSummary[];
+      });
+
+/** Options for `addSongToPlan`. */
+export interface AddSongToPlanOptions {
+    /**
+     * Add the song even when the plan holds it already: what the dialog
+     * sends once the person has chosen to add another anyway.
+     */
+    allowDuplicate?: boolean;
+}
 
 const NO_SUCH_PLAN = "There is no such plan.";
 
@@ -736,27 +754,33 @@ const NO_SUCH_PLAN = "There is no such plan.";
  * no arrangement.
  *
  * It reads, afresh and in parallel, the song, its arrangements, the service
- * type and the service type's upcoming plans, and goes ahead only when the
- * plan is still one of those (`filter=future`, which keeps today's plans
- * all day) and the service type is not archived: a dialog opened on Sunday
- * and confirmed on Monday never adds to last Sunday's plan. Then it adds the
- * item (logged as `item`, with the plan's date and the song's title), and
- * mirrors the song as it was read and derives its credits (its last
- * scheduled date catches up at the next sync; a mirror that cannot be
- * written is only logged, since the item is in the plan). One write, no
- * undo.
+ * type, the service type's upcoming plans and the plan's items, and goes
+ * ahead only when the plan is still one of those upcoming plans
+ * (`filter=future`, which keeps today's plans all day) and the service
+ * type is not archived: a dialog opened on Sunday and confirmed on Monday
+ * never adds to last Sunday's plan. A plan that holds an item for the song
+ * already is refused ("already-in-plan", naming its items) unless
+ * `allowDuplicate` says the person chose to add another anyway: the app
+ * cannot take an item out again, so a retry after an answer that was lost
+ * never adds a second one unasked. Then it adds the item (logged as
+ * `item`, with the plan's date and the song's title), and mirrors the song
+ * as it was read and derives its credits (its last scheduled date catches
+ * up at the next sync; a mirror that cannot be written is only logged,
+ * since the item is in the plan). One write, no undo.
  *
  * Refused when an id is not a Planning Center id, Planning Center has no
  * such song, service type or plan, the plan is not upcoming any more or
  * its service type is archived ("not-upcoming"), the song has no
- * arrangement that is not archived, or Planning Center refuses the item.
- * Throws when Planning Center or the database fails. It revalidates
- * nothing: the action that calls it does.
+ * arrangement that is not archived, the plan holds the song already and
+ * no duplicate is allowed, or Planning Center refuses the item. Throws
+ * when Planning Center or the database fails. It revalidates nothing: the
+ * action that calls it does.
  */
 export async function addSongToPlan(
     serviceTypeId: string,
     planId: string,
     pcoSongId: string,
+    { allowDuplicate = false }: AddSongToPlanOptions = {},
     now: Date = new Date()
 ): Promise<AddSongToPlanResult> {
     const st = parsePcoId(serviceTypeId);
@@ -770,16 +794,17 @@ export async function addSongToPlan(
     }
     const { settings } = getSettings();
     const db = getDb();
-    const [song, arrangements, serviceType, upcoming] = await Promise.all([
+    const [song, arrangements, serviceType, upcoming, planItems] = await Promise.all([
         unlessMissing(fetchSong(songId)),
         unlessMissing(getSongArrangements(songId)),
         unlessMissing(getServiceType(st)),
         unlessMissing(fetchUpcomingPlans(st)),
+        allowDuplicate ? null : unlessMissing(fetchPlanItems(st, planIdChecked)),
     ]);
     if (song === null || arrangements === null) {
         return refusal("not-found", NO_SUCH_PCO_SONG);
     }
-    if (serviceType === null || upcoming === null) {
+    if (serviceType === null || upcoming === null || (!allowDuplicate && planItems === null)) {
         return refusal("not-found", NO_SUCH_PLAN);
     }
     if (serviceType.archived) {
@@ -802,6 +827,19 @@ export async function addSongToPlan(
             `"${song.title}" has no arrangement in Planning Center to put in a plan.`
         );
     }
+    const existingItems: PlanItemSummary[] = (planItems?.items ?? [])
+        .filter((item) => item.itemType === "song" && item.songId === songId)
+        .map(({ id, title, sequence }) => ({ id, title, sequence }));
+    if (existingItems.length > 0) {
+        const [first] = existingItems;
+        return {
+            ...refusal(
+                "already-in-plan",
+                `The plan for ${plan.dates} has "${song.title}" already, as its item "${first.title}", so nothing was added. Add another only if the song should be in the plan twice.`
+            ),
+            existingItems,
+        };
+    }
     const payload = {
         action: "add-song",
         serviceTypeId: st,
@@ -811,6 +849,7 @@ export async function addSongToPlan(
         title: song.title,
         arrangementId: arrangement.id,
         arrangement: arrangement.name,
+        ...(allowDuplicate ? { allowDuplicate: true } : {}),
     };
     let item: PlanItem;
     try {
