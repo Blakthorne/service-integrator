@@ -29,8 +29,8 @@ interface SubmitButtonProps {
     pendingLabel?: string;
     /**
      * "danger" is for an action that deletes or throws something away, and
-     * "secondary" for a quieter one beside a primary button (Ignore beside
-     * Link). Defaults to "primary".
+     * "secondary" for a quieter one that should not draw the eye (Reconcile's
+     * Ignore, Undo and Unignore). Defaults to "primary".
      */
     variant?: keyof typeof VARIANT_CLASSES;
 }
