@@ -659,6 +659,111 @@ describe("syncHymnNotes", () => {
         ]);
     });
 
+    describe("with the plan the preview showed", () => {
+        /** The preview's items, as the dialog would pass them back. */
+        async function previewItems() {
+            const status = await previewHymnNotes(ST, PLAN);
+            if (status.kind !== "ready") {
+                throw new Error(`The preview is ${status.kind}`);
+            }
+            return JSON.parse(JSON.stringify(status.items));
+        }
+
+        test("writes what the preview showed when nothing changed since", async () => {
+            seedAppNotes(...APP_NOTES);
+            const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
+            const previewed = await previewItems();
+
+            const result = await syncHymnNotes(ST, PLAN, previewed);
+
+            expect(writesSent(fetchMock).map(({ method, url }) => `${method} ${url}`)).toEqual([
+                `POST ${urls.notes("1")}`,
+                `PATCH ${urls.note("2", "9002")}`,
+                `DELETE ${urls.note("3", "9003")}`,
+                `DELETE ${urls.note("4", "9005")}`,
+            ]);
+            expect(result).toMatchObject({ ok: true, counts: { changed: 0, failed: 0 } });
+        });
+
+        test("writes only the items still as previewed, and reports the others as changed", async () => {
+            seedAppNotes(...APP_NOTES);
+            let reads = 0;
+            const fetchMock = stubFetchRoutes({
+                ...readRoutes(),
+                ...writeRoutes(),
+                [urls.items]: () => {
+                    reads += 1;
+                    const page = planItems();
+                    if (reads > 1) {
+                        // Since the preview: someone retyped item 2's note, and
+                        // deleted item 3's.
+                        page.included = (page.included as Included[]).map((resource) =>
+                            resource.id === "9002" ? hymnalNote("9002", "R-77") : resource
+                        );
+                        page.data[2] = itemResource("3", { title: "A Song Not In The Hymnbooks", sequence: 3 }, songLink("99"));
+                    }
+                    return json(page);
+                },
+            });
+            const previewed = await previewItems();
+
+            const result = await syncHymnNotes(ST, PLAN, previewed);
+
+            // Item 2 would now change "R-77", not the "R-99" the preview
+            // showed; item 3 has no note left to delete.
+            expect(writesSent(fetchMock).map(({ method, url }) => `${method} ${url}`)).toEqual([
+                `POST ${urls.notes("1")}`,
+                `DELETE ${urls.note("4", "9005")}`,
+            ]);
+            expect(
+                result.ok && result.items.map(({ itemId, action, outcome, made }) => [itemId, action, outcome, made.length])
+            ).toEqual([
+                ["1", "create", "done", 1],
+                ["2", "update", "changed", 0],
+                ["3", "none", "changed", 0],
+                ["4", "dedupe", "done", 1],
+                ["5", "unchanged", "nothing-to-do", 0],
+            ]);
+            expect(result).toMatchObject({
+                ok: true,
+                counts: { created: 1, updated: 0, deleted: 1, unchanged: 1, failed: 0, changed: 2 },
+            });
+        });
+
+        test("does not write an item the preview did not have", async () => {
+            const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
+            const previewed = (await previewItems()).filter(({ itemId }: { itemId: string }) => itemId !== "1");
+
+            const result = await syncHymnNotes(ST, PLAN, previewed);
+
+            expect(writesSent(fetchMock).map(({ url }) => url)).not.toContain(urls.notes("1"));
+            expect(result.ok && result.items[0]).toMatchObject({ itemId: "1", outcome: "changed", made: [] });
+        });
+
+        test("writes nothing for a previewed plan that is not one", async () => {
+            seedAppNotes(...APP_NOTES);
+            for (const previewed of [
+                "all of them",
+                [{ itemId: "1", action: "create", changes: "all" }],
+                [null],
+                [],
+            ]) {
+                const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
+
+                const result = await syncHymnNotes(ST, PLAN, previewed as never);
+
+                expect(writesSent(fetchMock)).toEqual([]);
+                expect(result.ok && result.items.map(({ outcome }) => outcome)).toEqual([
+                    "changed",
+                    "changed",
+                    "changed",
+                    "changed",
+                    "changed",
+                ]);
+            }
+        });
+    });
+
     test("refuses when the category is missing, and writes nothing", async () => {
         const fetchMock = stubFetchRoutes({ ...readRoutes(["Band"]), ...writeRoutes() });
 

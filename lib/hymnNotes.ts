@@ -374,6 +374,80 @@ export function hymnNotesToSync(diffs: readonly HymnNoteDiff[]): HymnNoteDiff[] 
 }
 
 /**
+ * What a preview showed of one song item's hymnal note: what the sync
+ * checks each item against before it writes (`matchesPreview`), so Confirm
+ * writes what the person saw. The dialog passes the preview's items back
+ * as it got them (a `HymnNoteDiff` fits). They come from a browser, so they
+ * are only compared, never trusted: every write is still the sync's own,
+ * from its fresh read.
+ */
+export type PreviewedHymnNote = Pick<HymnNoteDiff, "itemId" | "action" | "changes">;
+
+/** The fields a write is compared by, or null when `change` is not shaped like a write. */
+function changeFields(change: unknown): (string | null)[] | null {
+    if (typeof change !== "object" || change === null) {
+        return null;
+    }
+    const record = change as Record<string, unknown>;
+    const fields = ["kind", "noteId", "content", "from", "reason"].map((key) => record[key]);
+    if (fields.some((value) => value !== undefined && value !== null && typeof value !== "string")) {
+        return null;
+    }
+    return fields.map((value) => (typeof value === "string" ? value : null));
+}
+
+/** Whether two writes are the same: kind, target note, words, and what it replaces or why. */
+function sameChange(fresh: HymnNoteChange, previewed: unknown): boolean {
+    const a = changeFields(fresh);
+    const b = changeFields(previewed);
+    return a !== null && b !== null && a.every((value, i) => value === b[i]);
+}
+
+/**
+ * Whether a song item's fresh diff is what the preview showed for it: the
+ * same action and the same writes, in order, each to the same note with the
+ * same words (and, for an update, from the same words). `previewed` came
+ * from a browser, so anything not shaped like a previewed item, or nothing
+ * at all (an item the preview did not have), does not match.
+ */
+export function matchesPreview(
+    diff: Pick<HymnNoteDiff, "action" | "changes">,
+    previewed: unknown
+): boolean {
+    if (typeof previewed !== "object" || previewed === null) {
+        return false;
+    }
+    const { action, changes } = previewed as { action?: unknown; changes?: unknown };
+    return (
+        action === diff.action &&
+        Array.isArray(changes) &&
+        changes.length === diff.changes.length &&
+        diff.changes.every((change, i) => sameChange(change, changes[i]))
+    );
+}
+
+/**
+ * The previewed items by item id, for `matchesPreview`. A preview that is
+ * not a list gives none, and an entry without a text item id is left out.
+ */
+export function previewedByItem(previewed: unknown): Map<string, unknown> {
+    const byItem = new Map<string, unknown>();
+    if (!Array.isArray(previewed)) {
+        return byItem;
+    }
+    for (const entry of previewed) {
+        const itemId =
+            typeof entry === "object" && entry !== null
+                ? (entry as { itemId?: unknown }).itemId
+                : undefined;
+        if (typeof itemId === "string") {
+            byItem.set(itemId, entry);
+        }
+    }
+    return byItem;
+}
+
+/**
  * What a song card says of its hymnal note: "in-sync" (it says what it
  * should), "differs" (it says something else, there are extras of the
  * app's, or it should go), or "missing" (it should exist and does not).

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { ItemNote } from "./domain";
 import {
+    CHANGED_SINCE_PREVIEW_TEXT,
     MISSING_CATEGORY_HELP,
     SYNC_DIALOG_DESCRIPTION,
     cardNoteBadge,
@@ -273,6 +274,15 @@ describe("resultLines", () => {
         ).toEqual(["Failed: No reason was given."]);
     });
 
+    test("an item that changed since the preview says it was not written", () => {
+        expect(
+            resultLines(syncItem({ itemId: "1", action: "update", outcome: "changed" })).map(said)
+        ).toEqual([`Not written: ${CHANGED_SINCE_PREVIEW_TEXT}`]);
+        expect(CHANGED_SINCE_PREVIEW_TEXT).toBe(
+            "Changed since the preview, so nothing was written. Preview again to see what a sync would do now."
+        );
+    });
+
     test("a note that needed nothing, the notes left alone, and a song with no note", () => {
         expect(
             resultLines(syncItem({ itemId: "1", action: "unchanged", outcome: "nothing-to-do" })).map(
@@ -301,10 +311,28 @@ describe("resultRows", () => {
         expect(rows.map((row) => row.itemId)).toEqual(["2", "4", "1", "3"]);
         expect(rows[0]).toMatchObject({ title: "Song 2" });
     });
+
+    test("puts the items that changed since the preview with the failures", () => {
+        const rows = resultRows([
+            syncItem({ itemId: "1" }),
+            syncItem({ itemId: "3", outcome: "changed" }),
+            syncItem({ itemId: "2", outcome: "failed", error: "boom" }),
+        ]);
+        expect(rows.map((row) => row.itemId)).toEqual(["2", "3", "1"]);
+    });
 });
 
 function counts(overrides: Partial<HymnNoteSyncCounts>): HymnNoteSyncCounts {
-    return { created: 0, updated: 0, deleted: 0, unchanged: 0, kept: 0, failed: 0, ...overrides };
+    return {
+        created: 0,
+        updated: 0,
+        deleted: 0,
+        unchanged: 0,
+        kept: 0,
+        failed: 0,
+        changed: 0,
+        ...overrides,
+    };
 }
 
 describe("resultSummary", () => {
@@ -316,6 +344,27 @@ describe("resultSummary", () => {
             "Changed 1 note. 1 song's note could not be written."
         );
         expect(resultSummary(counts({ failed: 2 }))).toBe("2 songs' notes could not be written.");
+    });
+
+    test("says how many songs changed since the preview, and were not written", () => {
+        expect(resultSummary(counts({ created: 1, changed: 1 }))).toBe(
+            "Added 1 note. 1 song changed since the preview, so it was not written: preview again."
+        );
+        expect(resultSummary(counts({ changed: 2, unchanged: 1 }))).toBe(
+            "2 songs changed since the preview, so they were not written: preview again. 1 song needed nothing."
+        );
+    });
+
+    test("reads counts made before they counted changed songs as none", () => {
+        const older: HymnNoteSyncCounts = {
+            created: 0,
+            updated: 0,
+            deleted: 0,
+            unchanged: 1,
+            kept: 0,
+            failed: 0,
+        };
+        expect(resultSummary(older)).toBe("Nothing needed writing. 1 song needed nothing.");
     });
 
     test("says what needed nothing, and what was left alone", () => {

@@ -209,14 +209,22 @@ export function previewSummary(diffs: readonly HymnNoteDiff[]): string {
     return sentences.join(" ");
 }
 
+/** What a result says of an item not written because it changed since the preview. */
+export const CHANGED_SINCE_PREVIEW_TEXT =
+    "Changed since the preview, so nothing was written. Preview again to see what a sync would do now.";
+
 /**
  * What became of a song item's notes in a sync, line by line: the failure
- * first, with Planning Center's reason; then each write made, in order;
- * then, for an item that needed nothing, that its note is in sync; then the
- * notes left alone. An item with none of these has no note and no numbers.
+ * first, with Planning Center's reason, or that it changed since the
+ * preview and was not written; then each write made, in order; then, for an
+ * item that needed nothing, that its note is in sync; then the notes left
+ * alone. An item with none of these has no note and no numbers.
  */
 export function resultLines(item: HymnNoteSyncItem): HymnNoteLine[] {
     const lines: HymnNoteLine[] = [];
+    if (item.outcome === "changed") {
+        lines.push(line("failed", "Not written", CHANGED_SINCE_PREVIEW_TEXT));
+    }
     if (item.outcome === "failed") {
         const reason = item.error?.trim() ?? "";
         lines.push(line("failed", "Failed", reason === "" ? "No reason was given." : reason));
@@ -229,15 +237,21 @@ export function resultLines(item: HymnNoteSyncItem): HymnNoteLine[] {
     return lines.length > 0 ? lines : [NO_NOTE_LINE];
 }
 
+/** Whether a result needs the person's attention: its writes failed, or were not made. */
+function needsAttention(item: HymnNoteSyncItem): boolean {
+    return item.outcome === "failed" || item.outcome === "changed";
+}
+
 /**
- * The results' rows: the song items whose writes failed first, so they are
- * seen, then the rest; each group in sequence order.
+ * The results' rows: the song items whose writes failed, or were not made
+ * because they changed since the preview, first, so they are seen; then
+ * the rest; each group in sequence order.
  */
 export function resultRows(items: readonly HymnNoteSyncItem[]): HymnNoteRow[] {
     return [...items]
         .sort(
             (a, b) =>
-                Number(a.outcome !== "failed") - Number(b.outcome !== "failed") ||
+                Number(!needsAttention(a)) - Number(!needsAttention(b)) ||
                 a.sequence - b.sequence
         )
         .map((item) => ({ itemId: item.itemId, title: item.title, lines: resultLines(item) }));
@@ -246,11 +260,13 @@ export function resultRows(items: readonly HymnNoteSyncItem[]): HymnNoteRow[] {
 /**
  * What the results say above their rows: the writes made ("Added 2 notes,
  * changed 1 and removed 1."), or that nothing needed writing; how many
- * songs' notes could not be written; how many songs needed nothing; and
- * how many notes were left alone.
+ * songs' notes could not be written; how many changed since the preview and
+ * were not written; how many songs needed nothing; and how many notes were
+ * left alone.
  */
 export function resultSummary(counts: HymnNoteSyncCounts): string {
     const made = counts.created + counts.updated + counts.deleted;
+    const changed = counts.changed ?? 0;
     const sentences: string[] = [];
     if (made > 0) {
         sentences.push(
@@ -271,7 +287,14 @@ export function resultSummary(counts: HymnNoteSyncCounts): string {
                 : `${counts.failed} songs' notes could not be written.`
         );
     }
-    if (made === 0 && counts.failed === 0) {
+    if (changed > 0) {
+        sentences.push(
+            changed === 1
+                ? "1 song changed since the preview, so it was not written: preview again."
+                : `${changed} songs changed since the preview, so they were not written: preview again.`
+        );
+    }
+    if (made === 0 && counts.failed === 0 && changed === 0) {
         sentences.push("Nothing needed writing.");
     }
     if (counts.unchanged > 0) {

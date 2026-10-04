@@ -12,8 +12,10 @@ import type { CatalogMatch, ItemNote, ItemNoteCategory, PlanItem, ServiceType } 
 import {
     ambiguousCategoryMessage,
     matchHymnNoteCategory,
+    matchesPreview,
     missingCategoryMessage,
     planHymnNoteStatus,
+    previewedByItem,
     settingsUnavailableMessage,
     songItemNoteIds,
     type HymnNoteAction,
@@ -22,6 +24,7 @@ import {
     type HymnNoteKeep,
     type HymnNoteStatus,
     type ItemNoteCategoriesRead,
+    type PreviewedHymnNote,
 } from "@/lib/hymnNotes";
 import {
     PcoError,
@@ -186,11 +189,15 @@ export interface HymnNoteSyncItem {
     /** What the diff called for. */
     action: HymnNoteAction;
     /**
-     * "done": every change was made; "failed": a change failed, and the
-     * item's later changes were not tried; "nothing-to-do": none was
-     * needed ("unchanged", "keep" or "none").
+     * - "done": every change was made;
+     * - "failed": a change failed, and the item's later changes were not
+     *   tried;
+     * - "nothing-to-do": none was needed ("unchanged", "keep" or "none");
+     * - "changed": what it needs now is not what the preview showed (or the
+     *   preview did not have it), so nothing was written for it: changed
+     *   since the preview; preview again.
      */
-    outcome: "done" | "failed" | "nothing-to-do";
+    outcome: "done" | "failed" | "nothing-to-do" | "changed";
     /** The changes made, in order. */
     made: HymnNoteChange[];
     /** The notes it left alone because the app did not write them. */
@@ -210,6 +217,12 @@ export interface HymnNoteSyncCounts {
     kept: number;
     /** Items with a change that failed. */
     failed: number;
+    /**
+     * Items not written because they changed since the preview. The sync
+     * always counts them; optional in the type only so that results built
+     * before it existed (a test's fixture) still type.
+     */
+    changed?: number;
 }
 
 /** What `syncHymnNotes` did. */
@@ -349,15 +362,22 @@ async function syncItem(
     };
 }
 
-/** The changes made, the notes left alone, and the items that failed or needed nothing. */
-function countSync(items: readonly HymnNoteSyncItem[]): HymnNoteSyncCounts {
-    const counts: HymnNoteSyncCounts = {
+/** An item the sync writes nothing for, with why (`outcome`). */
+function unwrittenItem(diff: HymnNoteDiff, outcome: "changed"): HymnNoteSyncItem {
+    const { itemId, title, sequence, action } = diff;
+    return { itemId, title, sequence, action, outcome, made: [], keep: [], error: null };
+}
+
+/** The changes made, the notes left alone, and the items that failed, changed or needed nothing. */
+function countSync(items: readonly HymnNoteSyncItem[]): Required<HymnNoteSyncCounts> {
+    const counts: Required<HymnNoteSyncCounts> = {
         created: 0,
         updated: 0,
         deleted: 0,
         unchanged: 0,
         kept: 0,
         failed: 0,
+        changed: 0,
     };
     for (const item of items) {
         counts.kept += item.keep.length;
@@ -365,6 +385,8 @@ function countSync(items: readonly HymnNoteSyncItem[]): HymnNoteSyncCounts {
             counts.unchanged += 1;
         } else if (item.outcome === "failed") {
             counts.failed += 1;
+        } else if (item.outcome === "changed") {
+            counts.changed += 1;
         }
         for (const change of item.made) {
             if (change.kind === "create") {
@@ -390,8 +412,17 @@ function countSync(items: readonly HymnNoteSyncItem[]): HymnNoteSyncCounts {
  * and which of the items' notes the write log says the app wrote: the only
  * ones it deletes (any other is kept, so a note typed by hand, or one the
  * log has lost track of, is never deleted). It recomputes the diff from
- * these, so it writes what is needed now, not what a preview showed. Then
- * it makes the changes one at a time, unpaced
+ * these, so it writes what is needed now, not what a preview showed.
+ *
+ * `previewed` is the plan the preview showed: its items as the dialog got
+ * them (`status.items`). With it, the sync writes an item only when its
+ * fresh diff is what the preview showed (`matchesPreview`: the same action
+ * and writes, each to the same note with the same words), so Confirm writes
+ * what the person saw; any other item is reported "changed", and nothing is
+ * written for it. It comes from a browser and is only compared: every write
+ * is the sync's own. Left out, every item's fresh diff is written.
+ *
+ * Then it makes the changes one at a time, unpaced
  * (someone is waiting), recording a `write_log` row (`item-note`) for each,
  * with what it asked for and what came of it or Planning Center's error.
  * An item whose change fails stops there, and the sync goes on to the next
@@ -404,7 +435,8 @@ function countSync(items: readonly HymnNoteSyncItem[]): HymnNoteSyncCounts {
  */
 export async function syncHymnNotes(
     serviceTypeId: string,
-    planId: string
+    planId: string,
+    previewed?: readonly PreviewedHymnNote[]
 ): Promise<HymnNotesSyncResult> {
     const st = assertPcoId(serviceTypeId);
     const plan = assertPcoId(planId);
@@ -433,8 +465,13 @@ export async function syncHymnNotes(
     if (status.kind !== "ready") {
         return { ok: false, kind: status.kind, message: status.message };
     }
+    const expected = previewed === undefined ? null : previewedByItem(previewed);
     const results: HymnNoteSyncItem[] = [];
     for (const diff of status.items) {
+        if (expected !== null && !matchesPreview(diff, expected.get(diff.itemId))) {
+            results.push(unwrittenItem(diff, "changed"));
+            continue;
+        }
         results.push(await syncItem(db, st, plan, status.category, diff));
     }
     return { ok: true, category: status.category, items: results, counts: countSync(results) };

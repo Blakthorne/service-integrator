@@ -11,8 +11,10 @@ import {
     hymnNoteState,
     hymnNotesToSync,
     matchHymnNoteCategory,
+    matchesPreview,
     missingCategoryMessage,
     planHymnNoteStatus,
+    previewedByItem,
     sameCategoryName,
     songItemNoteIds,
     type HymnNoteAction,
@@ -520,6 +522,74 @@ describe("summaries", () => {
         };
         for (const [action, state] of Object.entries(states)) {
             expect([action, hymnNoteState({ action: action as HymnNoteAction })]).toEqual([action, state]);
+        }
+    });
+});
+
+describe("matchesPreview and previewedByItem", () => {
+    const stale = note("R-12");
+    const extra = note("R-13");
+    const [diff] = diffHymnNotes(
+        [songItem("1", ST_ANNE, [stale, extra])],
+        HYMNAL,
+        SETTINGS,
+        written(stale, extra)
+    );
+
+    test("an item's fresh diff matches the preview that showed it", () => {
+        expect(diff.changes).toHaveLength(2);
+        expect(matchesPreview(diff, diff)).toBe(true);
+        // As it comes back from a browser: the same data, a new object.
+        expect(matchesPreview(diff, JSON.parse(JSON.stringify(diff)))).toBe(true);
+        expect(matchesPreview(diff, { action: diff.action, changes: diff.changes })).toBe(true);
+    });
+
+    test("does not match another action, or other writes", () => {
+        const [update, remove] = diff.changes;
+        const cases: unknown[] = [
+            { ...diff, action: "create" },
+            { ...diff, changes: [update] },
+            { ...diff, changes: [remove, update] },
+            { ...diff, changes: [{ ...update, noteId: "1" }, remove] },
+            { ...diff, changes: [{ ...update, content: "R-1" }, remove] },
+            { ...diff, changes: [{ ...update, from: "R-1" }, remove] },
+            { ...diff, changes: [update, { ...remove, reason: "nothing-to-say" }] },
+            { ...diff, changes: [update, { ...remove, kind: "create" }] },
+        ];
+        for (const previewed of cases) {
+            expect(matchesPreview(diff, previewed)).toBe(false);
+        }
+    });
+
+    test("nothing, or anything not shaped like a previewed item, does not match", () => {
+        const [update, remove] = diff.changes;
+        for (const previewed of [
+            undefined,
+            null,
+            "update",
+            42,
+            { action: diff.action },
+            { action: diff.action, changes: "all" },
+            { action: diff.action, changes: [update, null] },
+            { action: diff.action, changes: [update, { ...remove, content: 7 }] },
+            { action: diff.action, changes: [update, { ...remove, noteId: BigInt(1) }] },
+        ]) {
+            expect(matchesPreview(diff, previewed)).toBe(false);
+        }
+    });
+
+    test("a diff with no writes matches only a preview of the same action with none", () => {
+        const [none] = diffHymnNotes([songItem("2", null)], HYMNAL, SETTINGS, new Set());
+        expect(matchesPreview(none, { action: "none", changes: [] })).toBe(true);
+        expect(matchesPreview(none, { action: "keep", changes: [] })).toBe(false);
+    });
+
+    test("previewedByItem indexes a preview's items by id, ignoring what is not one", () => {
+        const byItem = previewedByItem([diff, { itemId: 2 }, null, "x", { itemId: "3", action: "none" }]);
+        expect([...byItem.keys()]).toEqual(["1", "3"]);
+        expect(byItem.get("1")).toBe(diff);
+        for (const previewed of [undefined, null, "items", { "1": diff }]) {
+            expect(previewedByItem(previewed).size).toBe(0);
         }
     });
 });
