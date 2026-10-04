@@ -112,10 +112,11 @@ describe("0005_credits_tags: pco_song_credits", () => {
 });
 
 describe("0005_credits_tags: the song tag mirror", () => {
-    test("holds tag groups, their tags, and which songs have each tag", () => {
+    test("holds tag groups, their tags, which songs have each tag, and when each song's were written", () => {
         expect(columns("pco_tag_groups")).toEqual(["id", "name", "tags_for", "allow_multiple"]);
         expect(columns("pco_tags")).toEqual(["id", "group_id", "name"]);
         expect(columns("pco_song_tags")).toEqual(["pco_song_id", "tag_id"]);
+        expect(columns("pco_song_tags_written")).toEqual(["pco_song_id", "written_at"]);
     });
 
     test("a group's and a tag's ids are exactly what parsePcoId accepts", () => {
@@ -166,5 +167,38 @@ describe("0005_credits_tags: the song tag mirror", () => {
         db.prepare("DELETE FROM pco_tag_groups WHERE id = '2'").run();
         expect(db.prepare("SELECT id FROM pco_tags ORDER BY id").all()).toEqual([{ id: "11" }]);
         expect(count("pco_song_tags")).toBe(0);
+    });
+});
+
+describe("0005_credits_tags: when each song's tags were written", () => {
+    function written(pcoSongId: SQLInputValue, writtenAt: SQLInputValue = "2026-10-04T12:00:00.000Z") {
+        db.prepare("INSERT INTO pco_song_tags_written (pco_song_id, written_at) VALUES (?, ?)").run(
+            pcoSongId,
+            writtenAt
+        );
+    }
+
+    beforeEach(() => {
+        seedPcoSong(db, { id: "1001" });
+    });
+
+    test("has one row per song, of a song the mirror has", () => {
+        written("1001");
+        expect(() => written("1001")).toThrow(
+            /UNIQUE constraint failed: pco_song_tags_written.pco_song_id/
+        );
+        expect(() => written("2002")).toThrow(/FOREIGN KEY constraint failed/);
+    });
+
+    test("needs the time", () => {
+        expect(() => written("1001", null)).toThrow(
+            /NOT NULL constraint failed: pco_song_tags_written.written_at/
+        );
+    });
+
+    test("deleting the song deletes its row", () => {
+        written("1001");
+        db.prepare("DELETE FROM pco_songs WHERE id = '1001'").run();
+        expect(count("pco_song_tags_written")).toBe(0);
     });
 });

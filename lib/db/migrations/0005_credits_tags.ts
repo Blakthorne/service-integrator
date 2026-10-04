@@ -24,6 +24,16 @@ import type { Migration } from ".";
  * - `pco_tags`: each group's tags. `pco_song_tags`: which mirrored songs
  *   have each tag. Deleting a group deletes its tags, and deleting a tag
  *   takes it off every song.
+ * - `pco_song_tags_written`: when each mirrored song's tags were last
+ *   written into the mirror (`written_at`, ISO 8601 UTC), one row per song
+ *   and none for a song whose tags never were. The tags sync writes every
+ *   song's tags from its listing, and a save of one song's tags (the song
+ *   page's Tags card) writes that song's. The sync reads Planning Center for
+ *   a while before it writes, so a save can land in between: the sync then
+ *   leaves as it was every song whose tags were written after its listing
+ *   began, since what the listing says of them may be older than the save
+ *   (`replaceListedSongTags` in lib/db/tags.ts), as the song sync does with
+ *   `pco_songs.synced_at`.
  *
  * Ids are Planning Center's: a CHECK holds a group's and a tag's to what
  * `parsePcoId` accepts, as for `pco_songs`, and foreign keys hold the rest
@@ -72,6 +82,11 @@ const migration: Migration = {
         ) STRICT;
 
         CREATE INDEX pco_song_tags_tag_id ON pco_song_tags (tag_id);
+
+        CREATE TABLE pco_song_tags_written (
+            pco_song_id TEXT PRIMARY KEY REFERENCES pco_songs (id) ON DELETE CASCADE,
+            written_at TEXT NOT NULL
+        ) STRICT;
     `,
 };
 
