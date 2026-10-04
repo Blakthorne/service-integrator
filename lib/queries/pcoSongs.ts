@@ -27,7 +27,8 @@ import {
     createSongItem,
     fetchSong,
     fetchSongTags,
-    getPlan,
+    fetchUpcomingPlans,
+    getServiceType,
     getServiceTypes,
     getSongArrangements,
     getUpcomingPlans,
@@ -74,6 +75,8 @@ export type PcoWriteRefusalReason =
     | "busy"
     /** The song has no arrangement to put in a plan. */
     | "no-arrangement"
+    /** The plan is not an upcoming one any more, or its service type is archived. */
+    | "not-upcoming"
     /**
      * What the write would change has changed in Planning Center since the
      * page showed it, so nothing was written: the page should show it
@@ -723,6 +726,8 @@ export type AddSongToPlanResult =
       }
     | PcoWriteRefusal;
 
+const NO_SUCH_PLAN = "There is no such plan.";
+
 /**
  * Add Planning Center song `pcoSongId` to plan `planId` of service type
  * `serviceTypeId`, as a new item at the end of the plan, titled with the
@@ -730,15 +735,23 @@ export type AddSongToPlanResult =
  * the spike found an item given only its song is called "New Item" and has
  * no arrangement.
  *
- * It reads the song, its arrangements and the plan afresh, in parallel;
- * adds the item (logged as `item`, with the plan's date and the song's
- * title); then mirrors the song as it was read and derives its credits
- * (its last scheduled date catches up at the next sync; a mirror that
- * cannot be written is only logged, since the item is in the plan). One
- * write, no undo. Refused when an id is not a Planning Center id, Planning Center has
- * no such song or plan, the song has no arrangement that is not archived,
- * or Planning Center refuses the item. Throws when Planning Center or the
- * database fails. It revalidates nothing: the action that calls it does.
+ * It reads, afresh and in parallel, the song, its arrangements, the service
+ * type and the service type's upcoming plans, and goes ahead only when the
+ * plan is still one of those (`filter=future`, which keeps today's plans
+ * all day) and the service type is not archived: a dialog opened on Sunday
+ * and confirmed on Monday never adds to last Sunday's plan. Then it adds the
+ * item (logged as `item`, with the plan's date and the song's title), and
+ * mirrors the song as it was read and derives its credits (its last
+ * scheduled date catches up at the next sync; a mirror that cannot be
+ * written is only logged, since the item is in the plan). One write, no
+ * undo.
+ *
+ * Refused when an id is not a Planning Center id, Planning Center has no
+ * such song, service type or plan, the plan is not upcoming any more or
+ * its service type is archived ("not-upcoming"), the song has no
+ * arrangement that is not archived, or Planning Center refuses the item.
+ * Throws when Planning Center or the database fails. It revalidates
+ * nothing: the action that calls it does.
  */
 export async function addSongToPlan(
     serviceTypeId: string,
@@ -750,23 +763,37 @@ export async function addSongToPlan(
     const planIdChecked = parsePcoId(planId);
     const songId = parsePcoId(pcoSongId);
     if (st === null || planIdChecked === null) {
-        return refusal("not-found", "There is no such plan.");
+        return refusal("not-found", NO_SUCH_PLAN);
     }
     if (songId === null) {
         return refusal("not-found", NO_SUCH_PCO_SONG);
     }
     const { settings } = getSettings();
     const db = getDb();
-    const [song, arrangements, plan] = await Promise.all([
+    const [song, arrangements, serviceType, upcoming] = await Promise.all([
         unlessMissing(fetchSong(songId)),
         unlessMissing(getSongArrangements(songId)),
-        unlessMissing(getPlan(st, planIdChecked)),
+        unlessMissing(getServiceType(st)),
+        unlessMissing(fetchUpcomingPlans(st)),
     ]);
     if (song === null || arrangements === null) {
         return refusal("not-found", NO_SUCH_PCO_SONG);
     }
-    if (plan === null) {
-        return refusal("not-found", "There is no such plan.");
+    if (serviceType === null || upcoming === null) {
+        return refusal("not-found", NO_SUCH_PLAN);
+    }
+    if (serviceType.archived) {
+        return refusal(
+            "not-upcoming",
+            `${serviceType.name} is archived in Planning Center, so nothing was added to its plans.`
+        );
+    }
+    const plan = upcoming.find(({ id }) => id === planIdChecked);
+    if (plan === undefined) {
+        return refusal(
+            "not-upcoming",
+            `That plan of ${serviceType.name} is not an upcoming plan any more, so nothing was added. Choose one of the plans ahead.`
+        );
     }
     const arrangement = defaultArrangement(arrangements);
     if (arrangement === null) {

@@ -116,9 +116,11 @@ export const getNextPlan = cache(async (serviceTypeId: string): Promise<Plan | n
  * (`filter=future`, which keeps all of today's plans for the whole day, as
  * the spike found), earliest first by `sort_date` (asked for, and sorted
  * here too, so the order stands whatever order the pages come in). Every
- * page. Throws InvalidPcoIdError or PcoError.
+ * page, read afresh every time: for a write that must check a plan is
+ * still ahead. Throws InvalidPcoIdError or PcoError (404 when there is no
+ * such service type).
  */
-export const getUpcomingPlans = cache(async (serviceTypeId: string): Promise<Plan[]> => {
+export async function fetchUpcomingPlans(serviceTypeId: string): Promise<Plan[]> {
     const id = assertPcoId(serviceTypeId);
     const { data } = await pcoFetchAll<PcoPlanResource>(
         `/service_types/${id}/plans?filter=future&order=sort_date&per_page=100`,
@@ -128,4 +130,7 @@ export const getUpcomingPlans = cache(async (serviceTypeId: string): Promise<Pla
     return data
         .map((plan) => toPlan(plan, id))
         .sort((a, b) => (a.sortDate < b.sortDate ? -1 : a.sortDate > b.sortDate ? 1 : 0));
-});
+}
+
+/** `fetchUpcomingPlans`, deduped within a request: what pages read. */
+export const getUpcomingPlans = cache(fetchUpcomingPlans);

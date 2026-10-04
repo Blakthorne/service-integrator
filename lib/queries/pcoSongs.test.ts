@@ -61,6 +61,7 @@ const urls = {
     song: (id = SONG) => `${PCO_BASE}/songs/${id}`,
     arrangements: (id = SONG) => `${PCO_BASE}/songs/${id}/arrangements?per_page=100`,
     plan: (st = ST, plan = PLAN) => `${PCO_BASE}/service_types/${st}/plans/${plan}`,
+    serviceType: (st = ST) => `${PCO_BASE}/service_types/${st}`,
     items: (st = ST, plan = PLAN) => `${PCO_BASE}/service_types/${st}/plans/${plan}/items`,
     serviceTypes: `${PCO_BASE}/service_types?per_page=100`,
     upcoming: (st: string) =>
@@ -831,8 +832,9 @@ describe("defaultArrangement", () => {
 describe("addSongToPlan", () => {
     const song = songResource(SONG, { title: "O God, Our Help", author: "Isaac Watts" });
     const plan = planResource({ id: PLAN }, { dates: "October 11, 2026", sort_date: "2026-10-11T11:00:00Z" });
+    const later = planResource({ id: "81234599" }, { dates: "October 18, 2026", sort_date: "2026-10-18T11:00:00Z" });
 
-    /** Planning Center's reads for the song and the plan. */
+    /** Planning Center's reads: the song, its arrangements, the service type and its upcoming plans. */
     function readRoutes(): Record<string, unknown> {
         return {
             [urls.song()]: { data: song },
@@ -840,7 +842,8 @@ describe("addSongToPlan", () => {
                 arrangementResource("5002", { name: "Choir", created_at: "2021-01-01T00:00:00Z" }),
                 arrangementResource("5001"),
             ]),
-            [urls.plan()]: { data: plan },
+            [urls.serviceType()]: { data: serviceTypeResource({ name: "Sunday Morning" }, ST) },
+            [urls.upcoming(ST)]: listPage([later, plan]),
         };
     }
 
@@ -912,20 +915,72 @@ describe("addSongToPlan", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    test("refuses a song or a plan Planning Center does not have, writing nothing", async () => {
+    test("refuses a song or a service type Planning Center does not have, writing nothing", async () => {
         const missing = () => json({ errors: [] }, { status: 404 });
         let fetchMock = stubFetchRoutes({ ...readRoutes(), [urls.song()]: missing });
         await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toMatchObject({ ok: false, reason: "not-found" });
         expect(writesSent(fetchMock)).toEqual([]);
 
-        fetchMock = stubFetchRoutes({ ...readRoutes(), [urls.plan()]: missing });
+        for (const gone of [urls.serviceType(), urls.upcoming(ST)]) {
+            fetchMock = stubFetchRoutes({ ...readRoutes(), [gone]: missing });
+            await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toEqual({
+                ok: false,
+                reason: "not-found",
+                message: "There is no such plan.",
+            });
+            expect(writesSent(fetchMock)).toEqual([]);
+        }
+        expect(writes()).toEqual([]);
+    });
+
+    test("refuses, writing nothing, a plan that is not upcoming any more: a dialog opened Sunday, confirmed Monday", async () => {
+        const fetchMock = stubFetchRoutes({ ...readRoutes(), [urls.upcoming(ST)]: listPage([later]) });
         await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toEqual({
             ok: false,
-            reason: "not-found",
-            message: "There is no such plan.",
+            reason: "not-upcoming",
+            message:
+                "That plan of Sunday Morning is not an upcoming plan any more, so nothing was added. Choose one of the plans ahead.",
         });
         expect(writesSent(fetchMock)).toEqual([]);
         expect(writes()).toEqual([]);
+    });
+
+    test("refuses a plan of another service type: only that type's upcoming plans count", async () => {
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            [urls.serviceType(EVENING)]: { data: serviceTypeResource({ name: "Sunday Evening" }, EVENING) },
+            [urls.upcoming(EVENING)]: listPage([planResource({ id: "201" })]),
+        });
+        await expect(addSongToPlan(EVENING, PLAN, SONG)).resolves.toMatchObject({
+            ok: false,
+            reason: "not-upcoming",
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("refuses, writing nothing, a plan of an archived service type", async () => {
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            [urls.serviceType()]: {
+                data: serviceTypeResource({ name: "Old Service", archived_at: "2026-01-01T00:00:00Z" }, ST),
+            },
+        });
+        await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toEqual({
+            ok: false,
+            reason: "not-upcoming",
+            message: "Old Service is archived in Planning Center, so nothing was added to its plans.",
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("reads the upcoming plans afresh for every add, not from an earlier read", async () => {
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            [`POST ${urls.items()}`]: () => json({ data: added }, { status: 201 }),
+        });
+        await addSongToPlan(ST, PLAN, SONG);
+        await addSongToPlan(ST, PLAN, SONG);
+        expect(calledRequests(fetchMock).filter(({ url }) => url === urls.upcoming(ST))).toHaveLength(2);
     });
 
     test("refuses a song whose every arrangement is archived", async () => {

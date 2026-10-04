@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PcoError } from "./client";
 import { InvalidPcoIdError } from "./ids";
 import {
+    fetchUpcomingPlans,
     getAllPlans,
     getNextPlan,
     getPlan,
@@ -284,6 +285,14 @@ describe("getUpcomingPlans", () => {
     test("is empty when nothing lies ahead", async () => {
         stubFetchRoutes({ [upcomingUrl(EVENING)]: listPage([]) });
         await expect(getUpcomingPlans(EVENING)).resolves.toEqual([]);
+    });
+
+    test("fetchUpcomingPlans reads the same, afresh every time", async () => {
+        const fetchMock = stubFetchRoutes({ [upcomingUrl(MORNING)]: listPage([morningPlan]) });
+        await expect(fetchUpcomingPlans(MORNING)).resolves.toMatchObject([{ id: "101" }]);
+        await fetchUpcomingPlans(MORNING);
+        expect(calledUrls(fetchMock)).toEqual([upcomingUrl(MORNING), upcomingUrl(MORNING)]);
+        await expect(fetchUpcomingPlans("0")).rejects.toBeInstanceOf(InvalidPcoIdError);
     });
 
     test("refuses an id that is not a Planning Center id before fetching", async () => {

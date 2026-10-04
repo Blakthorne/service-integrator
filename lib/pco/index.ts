@@ -24,6 +24,7 @@ export {
     getAllPlans,
     getNextPlan,
     getPlan,
+    fetchUpcomingPlans,
     getPlansForServiceType,
     getUpcomingPlans,
     type AllPlans,
