@@ -9,6 +9,7 @@ import {
     getCatalogSongLabel,
 } from "@/lib/queries/catalog";
 import { getMirroredPcoSong } from "@/lib/queries/catalogEdit";
+import { pcoSongTitleFor } from "@/lib/queries/pcoSongs";
 import { getSettings } from "@/lib/queries/settings";
 import { getPcoSongTags, getSongTagGroups } from "@/lib/queries/tags";
 import { routes } from "@/lib/routes";
@@ -29,13 +30,15 @@ export async function generateMetadata({
 /**
  * A catalog song: where it is in the books, its hymn and its tune, and the
  * Planning Center song it is linked to, as the app's copy of the library
- * has it, with its credits and tags. An ID that is not a catalog ID, or
- * that no song has, ends in `not-found.tsx`.
+ * has it, with its credits and tags; or, for a song that is not linked,
+ * what "Create in Planning Center" starts with. An ID that is not a catalog
+ * ID, or that no song has, ends in `not-found.tsx`.
  *
  * The page reads only the local database (the settings never throw), so it
  * has no `loading.tsx`: a link to it keeps the previous page on screen until
  * it is ready, and a prefetch of it costs no Planning Center request. What
- * writes to Planning Center is a server action, called from a click.
+ * reads Planning Center (the upcoming plans) or writes to it is a server
+ * action, called from a click.
  */
 export default async function CatalogSongPage({ params }: CatalogSongPageProps) {
     const songId = parseCatalogId((await params).songId) ?? notFound();
@@ -68,6 +71,11 @@ export default async function CatalogSongPage({ params }: CatalogSongPageProps) 
                 books={books}
                 pcoSong={pcoSong}
                 creditSettings={{ creditRoles, creditPhrases }}
+                newPcoSongTitle={pcoSongTitleFor(
+                    song.hymn.title,
+                    tune?.name ?? null,
+                    song.otherTunes.length > 0
+                )}
                 tagGroups={tagGroups}
                 songTags={songTags}
             />
