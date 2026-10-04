@@ -113,7 +113,12 @@ export function getCatalogImportRun(runId: number): ImportRunReview | null {
 
 /** What applying a run did: the rows it added, or why it was refused. */
 export type ApplyCatalogImportResult =
-    | { ok: true; counts: ImportCounts }
+    | {
+          ok: true;
+          counts: ImportCounts;
+          /** The code of the book a book's file was imported into, to go to; null for the seed, which adds the books. */
+          bookCode: string | null;
+      }
     | ({ ok: false } & ImportRunRefusal);
 
 /**
@@ -124,8 +129,12 @@ export type ApplyCatalogImportResult =
  * it would not add what the preview showed.
  */
 export function applyCatalogImport(runId: number): ApplyCatalogImportResult {
+    const db = getDb();
     try {
-        return { ok: true, counts: applyImportRun(getDb(), runId) };
+        const counts = applyImportRun(db, runId);
+        // Read once it is applied, so a run that is refused is never read for nothing.
+        const run = findImportRun(db, runId);
+        return { ok: true, counts, bookCode: run?.kind === "csv" ? run.report.book.code : null };
     } catch (error) {
         if (error instanceof ImportRunError) {
             return { ok: false, ...refusalOf(error.reason) };

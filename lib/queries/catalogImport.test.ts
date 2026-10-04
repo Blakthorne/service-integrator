@@ -63,7 +63,7 @@ describe("the seed import, end to end", () => {
         expect(review?.run.kind === "hymns-json" && review.run.report.splitPairs).toHaveLength(3);
         expect(countCatalog(db).books).toBe(0);
 
-        expect(applyCatalogImport(first)).toEqual({ ok: true, counts: SEED_COUNTS });
+        expect(applyCatalogImport(first)).toEqual({ ok: true, counts: SEED_COUNTS, bookCode: null });
         expect(countCatalog(db)).toEqual({
             books: 2,
             hymns: 895,
@@ -194,6 +194,8 @@ describe("a book's CSV file, end to end", () => {
                 songsWithoutTune: 0,
                 entries: 1,
             },
+            // Where applying a book's file goes: to the book.
+            bookCode: "R",
         });
         expect(findBook(db, "R")?.entries.map(({ label, title }) => [label, title])).toEqual([["R-400", "Be Thou My Vision"]]);
         expect(applyCatalogImport(runId)).toMatchObject({ ok: false, reason: "not-preview" });

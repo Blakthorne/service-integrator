@@ -3,12 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { parseCatalogId } from "@/lib/catalog/ids";
+import { csvTextProblem } from "@/lib/catalog/csvUpload";
+import { parseBookCode, parseCatalogId } from "@/lib/catalog/ids";
+import { CSV_FIX_FIELDS_MESSAGE } from "@/lib/catalog/importText";
+import { validateBookCsvUpload, type BookCsvPart } from "@/lib/catalog/validation";
+import { FORM_FAILURE_MESSAGE, formError, type FormState } from "@/lib/forms";
 import {
     applyCatalogImport,
     discardCatalogImport,
+    previewBookCsvImport,
     previewSeedImport,
     type ApplyCatalogImportResult,
+    type BookCsvPreviewResult,
     type DiscardCatalogImportResult,
 } from "@/lib/queries/catalogImport";
 import { routes } from "@/lib/routes";
@@ -77,11 +83,73 @@ export async function previewSeedImportAction(): Promise<ImportActionState> {
 }
 
 /**
+ * What the Import a book from CSV form is told: a refusal to show (a field to
+ * fix, a failure), or the run to go to. Unlike the other import forms this one
+ * is not a `useActionState` form action: it calls the action from `onSubmit`
+ * with its pending state in `useState`, as Settings' forms do, and goes to the
+ * run's page itself (convention 15), so success comes back as a value and not
+ * as a `redirect()`.
+ */
+export type PreviewBookCsvState = FormState<BookCsvPart> | { status: "previewed"; runId: number };
+
+/** Log a failure nobody expected and give the CSV form the generic message. */
+function csvFailed(what: string, error: unknown): PreviewBookCsvState {
+    console.error(`Failed to ${what}:`, error);
+    return formError(FORM_FAILURE_MESSAGE);
+}
+
+/**
+ * The Import a book from CSV form's action: read its fields
+ * (`validateBookCsvUpload`: the book's id, and a file that is not empty and at
+ * most 1 MB), read the file's text, which must be UTF-8 (`csvTextProblem`), and
+ * plan it against the book as a preview run (`previewBookCsvImport`). The
+ * file's own problems (a header that does not fit, a number taken, ...) are in
+ * the run's report and block applying it, so they are not refusals here: a
+ * refusal is only a field that needs fixing, or a book that is not in the
+ * catalog. On success it revalidates the import pages and returns the run's id
+ * for the form to go to.
+ */
+export async function previewBookCsvAction(formData: FormData): Promise<PreviewBookCsvState> {
+    await requireSession();
+    const checked = validateBookCsvUpload(formData);
+    if (!checked.ok) {
+        return formError(CSV_FIX_FIELDS_MESSAGE, { fieldErrors: checked.fieldErrors });
+    }
+    const { bookId, file, sourceName } = checked.input;
+    let text: string;
+    try {
+        text = await file.text();
+    } catch (error) {
+        return csvFailed(`read the uploaded CSV file ${sourceName}`, error);
+    }
+    const textProblem = csvTextProblem(text);
+    if (textProblem !== null) {
+        return formError(CSV_FIX_FIELDS_MESSAGE, { fieldErrors: { file: { message: textProblem } } });
+    }
+    let result: BookCsvPreviewResult;
+    try {
+        result = previewBookCsvImport({ bookId, sourceName, text });
+    } catch (error) {
+        return csvFailed(`preview the CSV file ${sourceName} for book ${bookId}`, error);
+    }
+    if (!result.ok) {
+        const part: BookCsvPart = result.reason === "book-not-found" ? "book" : "file";
+        return formError(CSV_FIX_FIELDS_MESSAGE, { fieldErrors: { [part]: { message: result.message } } });
+    }
+    revalidatePath(routes.catalogImport(), "layout");
+    return { status: "previewed", runId: result.runId };
+}
+
+/**
  * The Apply form's action: add the previewed run's rows to the catalog, then
- * revalidate every catalog page (they read what it just added) and go to the
- * songs list. A refusal (the run is not a preview, or the catalog already
- * has books) is returned for the form to show, and the import pages are
- * revalidated.
+ * revalidate what shows them and go to the book a book's file was imported
+ * into (the songs list after the seed, which adds the books). What shows them
+ * is every catalog page; the plan pages and the dashboard too, since a book's
+ * file adds entries to songs that are linked to Planning Center, and those
+ * entries are numbers in the schedule text and the hymnal notes. A refusal
+ * (the run is not a preview, the catalog already has books, or a book's file
+ * has problems or no longer fits the catalog) is returned for the form to
+ * show, and the import pages are revalidated.
  */
 export async function applyImportAction(
     _state: ImportActionState,
@@ -102,7 +170,11 @@ export async function applyImportAction(
         return refused(result.message);
     }
     revalidatePath(routes.catalog(), "layout");
-    redirect(routes.catalog());
+    revalidatePath(routes.plans(), "layout");
+    revalidatePath(routes.home());
+    // The code is the book's own, from its stored report; it is parsed all the same (convention 19).
+    const bookCode = result.bookCode === null ? null : parseBookCode(result.bookCode);
+    redirect(bookCode === null ? routes.catalog() : routes.catalogBook(bookCode));
 }
 
 /**
