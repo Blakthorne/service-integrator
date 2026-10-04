@@ -6,21 +6,28 @@ import {
     seedEntry,
     seedHymn,
     seedPcoSong,
+    seedScheduleSelection,
+    seedSetting,
     seedSong,
     seedTune,
 } from "@/lib/db/testing";
 import {
     PCO_BASE,
     calledUrls,
+    itemNoteCategoryResource,
+    itemNoteResource,
     itemResource,
     json,
     listPage,
+    noteLinks,
     planResource,
     serviceTypeResource,
     songResource,
     stubFetchRoutes,
     stubPcoCredentials,
 } from "@/lib/pco/testing";
+import { mergeScheduleSelections } from "@/lib/scheduleSelections";
+import { DEFAULT_SETTINGS } from "@/lib/settings";
 
 // vi.hoisted: vi.mock factories run before the module's own declarations.
 const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
@@ -46,13 +53,18 @@ const urls = {
     plan: `${PCO_BASE}/service_types/${MORNING}/plans/${PLAN}`,
     serviceType: `${PCO_BASE}/service_types/${MORNING}`,
     items: `${PCO_BASE}/service_types/${MORNING}/plans/${PLAN}/items?include=song,item_notes&per_page=100`,
+    categories: `${PCO_BASE}/service_types/${MORNING}/item_note_categories?per_page=100`,
 };
 
 const songLink = (id: string) => ({ song: { data: { type: "Song" as const, id } } });
 
-/** The three PCO responses behind a plan's detail view. */
+/** The four PCO responses behind a plan's detail view. */
 function planDetailRoutes(): Record<string, unknown> {
     return {
+        [urls.categories]: listPage([
+            itemNoteCategoryResource("501", { name: "Band" }),
+            itemNoteCategoryResource("503", { name: "Hymnal" }),
+        ]),
         [urls.plan]: { data: planResource({ id: PLAN }, { dates: "October 4, 2026" }) },
         [urls.serviceType]: {
             data: serviceTypeResource({ name: "Sunday Morning" }, MORNING),
@@ -149,14 +161,15 @@ describe("getPlansByDate", () => {
 });
 
 describe("getPlanDetail", () => {
-    test("loads the plan, its service type and its items", async () => {
+    test("loads the plan, its service type, its items and the type's item note categories", async () => {
         const fetchMock = stubFetchRoutes(planDetailRoutes());
         const { getPlanDetail } = await loadQueries();
 
         const { plan, serviceType, items } = await getPlanDetail(MORNING, PLAN);
 
+        // The categories, for the hymnal notes' status, are the fourth request.
         expect(calledUrls(fetchMock).sort()).toEqual(
-            [urls.plan, urls.serviceType, urls.items].sort()
+            [urls.plan, urls.serviceType, urls.items, urls.categories].sort()
         );
         expect(plan).toMatchObject({ id: PLAN, serviceTypeId: MORNING, dates: "October 4, 2026" });
         expect(serviceType).toMatchObject({ id: MORNING, name: "Sunday Morning" });
@@ -339,7 +352,8 @@ describe("getPlanDetail's catalog links", () => {
         );
         await getPlanDetail(MORNING, PLAN);
         const fewSongs = prepare.mock.calls.length;
-        expect(fewSongs).toBe(7);
+        // Seven for the catalog links, one for the saved choices, one for the settings.
+        expect(fewSongs).toBe(9);
 
         prepare.mockClear();
         stubFetchRoutes(
@@ -357,15 +371,15 @@ describe("getPlanDetail's catalog links", () => {
         prepare.mockClear();
         stubFetchRoutes(routesWith([songItem("1", "30", "Abide with Me")], []));
         await getPlanDetail(MORNING, PLAN);
-        expect(prepare.mock.calls.length).toBe(2);
+        expect(prepare.mock.calls.length).toBe(4);
 
-        // No song items: nothing to ask.
+        // No song items: no catalog to ask; the saved choices and the settings still are.
         prepare.mockClear();
         stubFetchRoutes(
             routesWith([itemResource("1", { title: "Welcome", item_type: "header" })], [])
         );
         await getPlanDetail(MORNING, PLAN);
-        expect(prepare).not.toHaveBeenCalled();
+        expect(prepare).toHaveBeenCalledTimes(2);
     });
 
     // It used to fail the whole plan page, the Copyright tab included.
@@ -406,7 +420,10 @@ describe("getPlanDetail's catalog links", () => {
         expect(catalogError).toMatch(/not open/i);
     });
 
-    test("does not open the database for a plan whose items schedule no Planning Center song", async () => {
+    test("reads no catalog for a plan whose items schedule no Planning Center song", async () => {
+        // The database is opened for the saved choices and the settings even
+        // so; when it cannot be, the catalog is not what failed.
+        vi.spyOn(console, "error").mockImplementation(() => {});
         getDb.mockImplementation(() => {
             throw new Error("Could not open the database at /srv/data/x: denied");
         });
@@ -421,12 +438,250 @@ describe("getPlanDetail's catalog links", () => {
         );
         const { getPlanDetail } = await loadQueries();
 
-        const { catalog, suggestions, catalogError } = await getPlanDetail(MORNING, PLAN);
+        const detail = await getPlanDetail(MORNING, PLAN);
 
-        expect(getDb).not.toHaveBeenCalled();
-        expect(catalog).toEqual({});
-        expect(suggestions).toEqual({});
-        expect(catalogError).toBeNull();
+        expect(getDb).toHaveBeenCalledTimes(2);
+        expect(detail.catalog).toEqual({});
+        expect(detail.suggestions).toEqual({});
+        expect(detail.catalogError).toBeNull();
+        expect(detail.selectionsError).toMatch(/Could not open the database/);
+        expect(detail.settingsError).toMatch(/Could not open the database/);
+    });
+});
+
+describe("getPlanDetail's saved choices", () => {
+    test("gives the plan's saved choices for its items, custom text kept as typed", async () => {
+        seedScheduleSelection(db, { planId: PLAN, itemId: "2", option: "custom", customText: " vv. 1, 4" });
+        seedScheduleSelection(db, { planId: PLAN, itemId: "3", option: "blank" });
+        seedScheduleSelection(db, { planId: PLAN, itemId: "4", option: "numbers" });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { selections, selectionsError } = await getPlanDetail(MORNING, PLAN);
+
+        expect(selections).toEqual({
+            "2": { option: "custom", customText: " vv. 1, 4" },
+            "3": { option: "blank" },
+            "4": { option: "numbers" },
+        });
+        expect(selectionsError).toBeNull();
+    });
+
+    test("leaves out a newer build's option, an item no longer in the plan and other plans', deleting none", async () => {
+        seedScheduleSelection(db, { planId: PLAN, itemId: "2", option: "newer-option" });
+        seedScheduleSelection(db, { planId: PLAN, itemId: "99", option: "blank" });
+        seedScheduleSelection(db, { planId: "999", itemId: "3", option: "blank" });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { selections } = await getPlanDetail(MORNING, PLAN);
+
+        expect(selections).toEqual({});
+        expect(db.prepare("SELECT count(*) AS n FROM schedule_selections").get()).toEqual({ n: 3 });
+    });
+
+    test("keeps Numbers for a song that is not linked; the Schedule tab shows its default", async () => {
+        seedScheduleSelection(db, { planId: PLAN, itemId: "4", option: "numbers" });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { items, selections, catalog } = await getPlanDetail(MORNING, PLAN);
+
+        expect(selections).toEqual({ "4": { option: "numbers" } });
+        const merged = mergeScheduleSelections(items, selections, catalog);
+        expect(merged.find((item) => item.id === "4")?.option).toBe("blank");
+    });
+
+    test("without a database: no choices, and why", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const cause = new Error("Could not open the database at /srv/data/x: denied");
+        getDb.mockImplementation(() => {
+            throw cause;
+        });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { selections, selectionsError } = await getPlanDetail(MORNING, PLAN);
+
+        expect(selections).toEqual({});
+        expect(selectionsError).toBe("Could not open the database at /srv/data/x: denied");
+        expect(consoleError).toHaveBeenCalledWith(
+            `Failed to read the saved choices of plan ${MORNING}/${PLAN}:`,
+            cause
+        );
+    });
+});
+
+describe("getPlanDetail's settings", () => {
+    test("by default: today's header for the service type, separator and CCLI number", async () => {
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { scheduleSettings, settingsError } = await getPlanDetail(MORNING, PLAN);
+
+        expect(scheduleSettings).toEqual({
+            headerLabel: "Sunday AM",
+            numberSeparator: " / ",
+            ccliLicenseNumber: "1564484",
+        });
+        expect(settingsError).toBeNull();
+    });
+
+    test("what is saved, with the header label of this plan's service type", async () => {
+        seedSetting(db, "scheduleHeaderLabels", { [MORNING]: "Morning Worship", [EVENING]: "Evening" });
+        seedSetting(db, "numberSeparator", ", ");
+        seedSetting(db, "ccliLicenseNumber", "7654321");
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { scheduleSettings } = await getPlanDetail(MORNING, PLAN);
+
+        expect(scheduleSettings).toEqual({
+            headerLabel: "Morning Worship",
+            numberSeparator: ", ",
+            ccliLicenseNumber: "7654321",
+        });
+    });
+
+    test("the defaults, and why, when the settings cannot be read", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { scheduleSettings, settingsError } = await getPlanDetail(MORNING, PLAN);
+
+        expect(scheduleSettings).toEqual({
+            headerLabel: "Sunday AM",
+            numberSeparator: DEFAULT_SETTINGS.numberSeparator,
+            ccliLicenseNumber: DEFAULT_SETTINGS.ccliLicenseNumber,
+        });
+        expect(settingsError).toBe("Could not open the database at /srv/data/x: denied");
+    });
+});
+
+describe("getPlanDetail's hymnal notes", () => {
+    /** Abide with Me linked to Planning Center song 30, at R-517 and G-64. */
+    function seedAbide() {
+        const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns" });
+        const great = seedBook(db, { code: "G", name: "Great Hymns of the Faith" });
+        const abide = seedSong(db, {
+            hymnId: seedHymn(db, { title: "Abide with Me" }),
+            tuneId: seedTune(db, { name: "EVENTIDE" }),
+            pcoSongId: "30",
+            linkedAt: "2026-10-01T12:00:00.000Z",
+            linkedBy: "manual",
+        });
+        seedEntry(db, { bookId: rejoice, songId: abide, number: 517 });
+        seedEntry(db, { bookId: great, songId: abide, number: 64 });
+    }
+
+    /** The plan's routes with its items' notes: a stale hymnal note on an unlinked song, a Vocals note on another. */
+    function routesWithNotes(): Record<string, unknown> {
+        return {
+            ...planDetailRoutes(),
+            [urls.items]: listPage(
+                [
+                    itemResource("2", { title: "Come, Thou Fount of Every Blessing", sequence: 2 }, {
+                        song: { data: { type: "Song", id: "20" } },
+                        ...noteLinks("9002"),
+                    }),
+                    itemResource("3", { title: "Abide with Me", sequence: 3 }, songLink("30")),
+                    itemResource("4", { title: "A Song Not In The Hymnbooks", sequence: 4 }, {
+                        song: { data: { type: "Song", id: "40" } },
+                        ...noteLinks("9004"),
+                    }),
+                ],
+                {
+                    included: [
+                        itemNoteResource("9002", { category_name: "Hymnal", content: "R-553" }, "503"),
+                        itemNoteResource("9004", { category_name: "Vocals", content: "Solo" }, "502"),
+                    ],
+                }
+            ),
+        };
+    }
+
+    test("gives each song item's note against the category, from the catalog links", async () => {
+        seedAbide();
+        stubFetchRoutes(routesWithNotes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus, items } = await getPlanDetail(MORNING, PLAN);
+
+        expect(hymnNoteStatus.kind === "ready" && hymnNoteStatus.category).toEqual({ id: "503", name: "Hymnal" });
+        expect(
+            hymnNoteStatus.kind === "ready" &&
+                hymnNoteStatus.items.map(({ itemId, action, content, current }) => [itemId, action, content, current])
+        ).toEqual([
+            ["2", "delete", null, "R-553"],
+            ["3", "create", "R-517 / G-64", null],
+            ["4", "none", null, null],
+        ]);
+        // The items carry their notes for the pages too.
+        expect(items.map((item) => item.notes.map(({ id }) => id))).toEqual([["9002"], [], ["9004"]]);
+    });
+
+    test("follows the settings' separator and category name", async () => {
+        seedAbide();
+        seedSetting(db, "numberSeparator", ", ");
+        seedSetting(db, "hymnNoteCategoryName", "band");
+        stubFetchRoutes(routesWithNotes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus } = await getPlanDetail(MORNING, PLAN);
+
+        expect(hymnNoteStatus).toMatchObject({ kind: "ready", category: { id: "501", name: "Band" } });
+        expect(hymnNoteStatus.kind === "ready" && hymnNoteStatus.items[1].content).toBe("R-517, G-64");
+    });
+
+    test("asks for the category when the service type has none", async () => {
+        stubFetchRoutes({
+            ...planDetailRoutes(),
+            [urls.categories]: listPage([itemNoteCategoryResource("501", { name: "Band" })]),
+        });
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus } = await getPlanDetail(MORNING, PLAN);
+
+        expect(hymnNoteStatus).toEqual({
+            kind: "no-category",
+            categoryName: "Hymnal",
+            message: 'Create an item note category named "Hymnal" in Planning Center for Sunday Morning.',
+        });
+    });
+
+    test("keeps the plan when the categories cannot be read, and says why", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        stubFetchRoutes({
+            ...planDetailRoutes(),
+            [urls.categories]: () => json({ errors: [] }, { status: 500 }),
+        });
+        const { getPlanDetail } = await loadQueries();
+
+        const detail = await getPlanDetail(MORNING, PLAN);
+
+        expect(detail.items).toHaveLength(4);
+        expect(detail.hymnNoteStatus).toMatchObject({ kind: "unavailable", reason: "categories" });
+        expect(consoleError).toHaveBeenCalledWith(
+            `Failed to read the item note categories of service type ${MORNING}:`,
+            expect.objectContaining({ name: "PcoError", status: 500 })
+        );
+    });
+
+    test("cannot compare the notes when the catalog cannot be read", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        stubFetchRoutes(routesWithNotes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus } = await getPlanDetail(MORNING, PLAN);
+
+        expect(hymnNoteStatus).toMatchObject({ kind: "unavailable", reason: "catalog" });
     });
 });
 
