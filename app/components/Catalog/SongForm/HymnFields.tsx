@@ -16,8 +16,8 @@ import ChoiceFromList from "./ChoiceFromList";
 import { FieldErrorText, FormPart, TextField } from "./Fields";
 
 const MODE_OPTIONS: readonly SegmentedOption<HymnMode>[] = [
-    { value: "existing", label: "From the catalog" },
-    { value: "new", label: "New hymn" },
+    { value: "existing", label: "Existing", title: "A hymn the catalog has" },
+    { value: "new", label: "New", title: "A hymn the catalog does not have yet" },
 ];
 
 interface HymnFieldsProps {
@@ -56,12 +56,14 @@ export default function HymnFields({
         >
             <input type="hidden" name="hymn" value={mode} />
             <input type="hidden" name="hymnId" value={chosen ? String(chosen.id) : ""} />
-            <Segmented
-                value={mode}
-                options={MODE_OPTIONS}
-                onChange={(next) => onChange({ hymn: next })}
-                ariaLabel="Hymn"
-            />
+            <div>
+                <Segmented
+                    value={mode}
+                    options={MODE_OPTIONS}
+                    onChange={(next) => onChange({ hymn: next })}
+                    ariaLabel="Hymn"
+                />
+            </div>
             {mode === "existing" ? (
                 <ChoiceFromList
                     options={hymns}

@@ -54,21 +54,25 @@ export default function EntryFields({ books, values, onChange, error }: EntryFie
             errorId={errorId}
         >
             <input type="hidden" name="bookId" value={book ? String(book.id) : NO_BOOK} />
-            <Segmented
-                value={book ? String(book.id) : NO_BOOK}
-                options={bookOptions}
-                onChange={(bookId) => onChange({ bookId })}
-                ariaLabel="Book"
-            />
+            <div>
+                <Segmented
+                    value={book ? String(book.id) : NO_BOOK}
+                    options={bookOptions}
+                    onChange={(bookId) => onChange({ bookId })}
+                    ariaLabel="Book"
+                />
+            </div>
             {book?.numbered && (
                 <>
                     <input type="hidden" name="placement" value={placement} />
-                    <Segmented
-                        value={placement}
-                        options={PLACEMENT_OPTIONS}
-                        onChange={(next) => onChange({ placement: next })}
-                        ariaLabel={`Where ${book.name} has the song`}
-                    />
+                    <div>
+                        <Segmented
+                            value={placement}
+                            options={PLACEMENT_OPTIONS}
+                            onChange={(next) => onChange({ placement: next })}
+                            ariaLabel={`Where ${book.name} has the song`}
+                        />
+                    </div>
                     {placement === "number" ? (
                         <TextField
                             id="entry-number"

@@ -16,9 +16,9 @@ import ChoiceFromList from "./ChoiceFromList";
 import { FieldErrorText, FormPart, HINT_CLASS, TextField } from "./Fields";
 
 const MODE_OPTIONS: readonly SegmentedOption<TuneMode>[] = [
-    { value: "existing", label: "From the catalog" },
-    { value: "new", label: "New tune" },
-    { value: "none", label: "None" },
+    { value: "existing", label: "Existing", title: "A tune the catalog has" },
+    { value: "new", label: "New", title: "A tune the catalog does not have yet" },
+    { value: "none", label: "None", title: "The tune is not known" },
 ];
 
 interface TuneFieldsProps {
@@ -61,12 +61,14 @@ export default function TuneFields({
         >
             <input type="hidden" name="tune" value={mode} />
             <input type="hidden" name="tuneId" value={chosen ? String(chosen.id) : ""} />
-            <Segmented
-                value={mode}
-                options={MODE_OPTIONS}
-                onChange={(next) => onChange({ tune: next })}
-                ariaLabel="Tune"
-            />
+            <div>
+                <Segmented
+                    value={mode}
+                    options={MODE_OPTIONS}
+                    onChange={(next) => onChange({ tune: next })}
+                    ariaLabel="Tune"
+                />
+            </div>
             {mode === "existing" && (
                 <ChoiceFromList
                     options={tunes}

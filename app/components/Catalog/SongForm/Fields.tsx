@@ -122,10 +122,11 @@ interface PartProps {
 /** One part of the form, as a fieldset with its legend, its explanation and its fields. */
 export function FormPart({ legend, description, errorId, children }: PartProps) {
     return (
-        <fieldset
-            aria-describedby={errorId}
-            className="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-5 first-of-type:border-t-0 first-of-type:pt-0"
-        >
+        // min-w-0: a fieldset is otherwise as wide as its widest content,
+        // so a row of buttons would widen the form past a phone's screen.
+        <fieldset aria-describedby={errorId} className="min-w-0 space-y-3">
+            {/* A legend sits on its fieldset's border, so the rule above each
+                part is a line of its own, not the fieldset's border. */}
             <legend className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {legend}
             </legend>

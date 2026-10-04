@@ -95,6 +95,7 @@ export default function SongForm({
                 onSearchChange={setHymnSearch}
                 error={fieldErrorOf(state, "hymn")}
             />
+            <hr className="border-gray-200 dark:border-gray-700" />
             <TuneFields
                 tunes={tunes}
                 values={values}
@@ -103,6 +104,7 @@ export default function SongForm({
                 onSearchChange={setTuneSearch}
                 error={fieldErrorOf(state, "tune")}
             />
+            <hr className="border-gray-200 dark:border-gray-700" />
             <EntryFields
                 books={books}
                 values={values}
