@@ -7,9 +7,11 @@ import {
     describeSongOption,
     describeTuneOption,
     filterUnlinkedPcoSongs,
+    rowAfter,
     searchHymnOptions,
     searchSongOptions,
     searchTuneOptions,
+    songOptionLabel,
     type HymnOption,
     type TuneOption,
 } from "./pickers";
@@ -199,5 +201,26 @@ describe("describePickerMatches", () => {
         expect(describePickerMatches("a", { matches: [1, 2], total: 54 })).toBe(
             "Showing 2 of 54 matches: type more to narrow them."
         );
+    });
+});
+
+describe("songOptionLabel", () => {
+    test("names a song by its title and tune, or its title alone", () => {
+        expect(songOptionLabel(SONGS[2])).toBe("Amazing Grace (NEW BRITAIN)");
+        expect(songOptionLabel(SONGS[3])).toBe("Doxology");
+    });
+});
+
+describe("rowAfter", () => {
+    test("moves to the row after, or before the last one", () => {
+        expect(rowAfter(["a", "b", "c"], "a")).toBe("b");
+        expect(rowAfter(["a", "b", "c"], "b")).toBe("c");
+        expect(rowAfter(["a", "b", "c"], "c")).toBe("b");
+    });
+
+    test("is null for the only row, or one not in the list", () => {
+        expect(rowAfter(["a"], "a")).toBeNull();
+        expect(rowAfter(["a", "b"], "z")).toBeNull();
+        expect(rowAfter([], "a")).toBeNull();
     });
 });

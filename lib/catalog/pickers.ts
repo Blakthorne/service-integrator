@@ -31,6 +31,11 @@ export interface TuneOption {
 /** How many matches a picker shows at once. */
 export const PICKER_LIMIT = 8;
 
+/** A catalog song's name, as the server's labels give it: "Amazing Grace (NEW BRITAIN)", or the title alone with no tune. */
+export function songOptionLabel(song: Pick<CatalogSongOption, "title" | "tuneName">): string {
+    return song.tuneName === null ? song.title : `${song.title} (${song.tuneName})`;
+}
+
 /** A song option's line under its title: its tune ("no tune" when unknown) and its entries' labels. */
 export function describeSongOption(song: CatalogSongOption): string {
     return [song.tuneName ?? "no tune", song.labels.join(", ")].filter(Boolean).join(" · ");
@@ -226,4 +231,17 @@ export function filterUnlinkedPcoSongs(
         const text = `${foldForSearch(pcoSong.title)}\n${foldForSearch(pcoSong.author ?? "")}`;
         return search.words.every((word) => text.includes(word));
     });
+}
+
+/**
+ * The row to move focus to when the row `id` leaves a list of `ids` (it was
+ * linked or ignored): the one after it, else the one before it, else null
+ * when it was the only one (or is not in the list).
+ */
+export function rowAfter(ids: readonly string[], id: string): string | null {
+    const index = ids.indexOf(id);
+    if (index === -1) {
+        return null;
+    }
+    return ids[index + 1] ?? ids[index - 1] ?? null;
 }

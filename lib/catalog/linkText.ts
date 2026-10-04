@@ -51,3 +51,23 @@ export function describeNotInPcoCount(count: number): string {
         ? "Every catalog song is linked to Planning Center."
         : `${countOf(count, "catalog song")} ${count === 1 ? "is" : "are"} not in Planning Center.`;
 }
+
+/** What Reconcile says once a Planning Center song is linked: 'Linked "Abba, Father" to Abba, Father (PRITCHARD).' */
+export function linkedMessage(pcoTitle: string, songLabel: string): string {
+    return `Linked "${pcoTitle}" to ${songLabel}.`;
+}
+
+/** What Reconcile says once a Planning Center song is ignored. */
+export function ignoredMessage(pcoTitle: string): string {
+    return `Ignored "${pcoTitle}". It is under Ignored songs, at the end of the page.`;
+}
+
+/** What Reconcile says once an auto-link is undone. */
+export function undoneMessage(pcoTitle: string, songLabel: string): string {
+    return `Unlinked "${pcoTitle}" from ${songLabel}. It is back on the list of songs not in the catalog, and no sync will link it again.`;
+}
+
+/** What Reconcile says once an ignored song is put back. */
+export function unignoredMessage(pcoTitle: string): string {
+    return `"${pcoTitle}" is back on the list of songs not in the catalog.`;
+}
