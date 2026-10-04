@@ -2,11 +2,14 @@ import { describe, expect, test } from "vitest";
 import type { ItemNote } from "./domain";
 import {
     CHANGED_SINCE_PREVIEW_TEXT,
+    HYMN_NOTE_STATE_WORDS,
     MISSING_CATEGORY_HELP,
     NOT_ATTEMPTED_TEXT,
     SYNC_DIALOG_DESCRIPTION,
     cardNoteBadge,
     confirmLabel,
+    hymnNoteBadgeLabel,
+    hymnNoteStateTag,
     previewLines,
     previewRows,
     previewSummary,
@@ -420,16 +423,42 @@ describe("SYNC_DIALOG_DESCRIPTION", () => {
     });
 });
 
+describe("HYMN_NOTE_STATE_WORDS", () => {
+    test("one wording for each state: badges put Note before it, the dialog's tags start with a capital", () => {
+        expect(HYMN_NOTE_STATE_WORDS).toEqual({
+            "in-sync": "in sync",
+            differs: "needs sync",
+            missing: "missing",
+            kept: "left alone",
+        });
+        expect(["in-sync", "differs", "missing", "kept"].map((s) => hymnNoteBadgeLabel(s as "kept"))).toEqual([
+            "Note in sync",
+            "Note needs sync",
+            "Note missing",
+            "Note left alone",
+        ]);
+        expect(hymnNoteStateTag("in-sync")).toBe("In sync");
+        expect(hymnNoteStateTag("kept")).toBe("Left alone");
+    });
+
+    test("the dialog tags a note in sync, and one left alone, with the same words", () => {
+        const inSync = previewLines(diffOf(songItem("1", ST_ANNE, [note("R-396 / G-317")])));
+        const leftAlone = previewLines(diffOf(songItem("2", null, [note("Key of A")])));
+        expect(inSync[0].label).toBe(hymnNoteStateTag("in-sync"));
+        expect(leftAlone[0].label).toBe(hymnNoteStateTag("kept"));
+    });
+});
+
 describe("cardNoteBadge", () => {
     test.each([
-        ["unchanged", "in-sync", "Hymnal note in sync"],
-        ["create", "missing", "Hymnal note missing"],
-        ["update", "needs-update", "Hymnal note needs update"],
-        ["dedupe", "needs-update", "Hymnal note needs update"],
-        ["delete", "needs-update", "Hymnal note needs update"],
-        ["keep", "kept", "Hymnal note kept: not written by the app"],
-    ] as const)("%s is %s", (action, state, label) => {
-        expect(cardNoteBadge({ action })).toEqual({ state, label });
+        ["unchanged", "in-sync", "Note in sync", null],
+        ["create", "missing", "Note missing", null],
+        ["update", "differs", "Note needs sync", null],
+        ["dedupe", "differs", "Note needs sync", null],
+        ["delete", "differs", "Note needs sync", null],
+        ["keep", "kept", "Note left alone", "not written by the app"],
+    ] as const)("%s is %s", (action, state, label, detail) => {
+        expect(cardNoteBadge({ action })).toEqual({ state, label, detail });
     });
 
     test("is null with nothing to say, or no diff to read", () => {

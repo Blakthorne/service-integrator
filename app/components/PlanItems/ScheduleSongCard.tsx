@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogMatch, PlanItemWithSong, ScheduleSelection } from "@/lib/domain";
-import type { CardNoteBadge, CardNoteState } from "@/lib/hymnNoteText";
+import type { CardNoteBadge, HymnNoteShownState } from "@/lib/hymnNoteText";
 import { routes } from "@/lib/routes";
 import {
     SAVED_AFTER_FAILURE_NOTICE,
@@ -28,23 +28,23 @@ const NOTE_CLASS = "text-sm text-gray-600 dark:text-gray-400";
 
 /**
  * Each hymnal note status's badge colours, as the dashboard's: green in
- * sync, amber to be synced, grey for a note left alone. The words say the
- * same, so colour is never the only sign.
+ * sync, amber to be synced, grey for a note left alone, as the sync dialog
+ * tags it. The words say the same, so colour is never the only sign.
  */
-const NOTE_BADGE_CLASSES: Readonly<Record<CardNoteState, string>> = {
+const NOTE_BADGE_CLASSES: Readonly<Record<HymnNoteShownState, string>> = {
     "in-sync":
         "bg-green-50 text-green-800 ring-green-200 dark:bg-green-950 dark:text-green-200 dark:ring-green-900",
-    "needs-update":
+    differs:
         "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900",
     missing:
         "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900",
     kept: "bg-gray-50 text-gray-700 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700",
 };
 
-/** A card's hymnal note status, under its title: "Hymnal note in sync". */
+/** A card's hymnal note status, under its title: "Note in sync"; and, for a note left alone, why. */
 function NoteBadge({ badge }: { badge: CardNoteBadge }) {
     return (
-        <p>
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
             <span
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                     NOTE_BADGE_CLASSES[badge.state]
@@ -52,6 +52,9 @@ function NoteBadge({ badge }: { badge: CardNoteBadge }) {
             >
                 {badge.label}
             </span>
+            {badge.detail !== null && (
+                <span className="text-xs text-gray-600 dark:text-gray-400">{badge.detail}</span>
+            )}
         </p>
     );
 }
@@ -139,7 +142,7 @@ interface ScheduleSongCardProps {
 
 /**
  * A song item on the Schedule tab: its title and its hymnal note's status
- * (in sync, needs update, missing, or kept: a note the app did not write),
+ * (in sync, needs sync, missing, or left alone: a note the app did not write),
  * then what the catalog knows of it, then the choices for its line in the
  * schedule text.
  *

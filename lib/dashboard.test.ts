@@ -70,9 +70,9 @@ describe("hymnNoteBadge", () => {
     test.each<[HymnNoteAction, string | null]>([
         ["unchanged", "Note in sync"],
         ["create", "Note missing"],
-        ["update", "Note differs"],
-        ["dedupe", "Note differs"],
-        ["delete", "Note differs"],
+        ["update", "Note needs sync"],
+        ["dedupe", "Note needs sync"],
+        ["delete", "Note needs sync"],
         ["none", null],
     ])("%s: %s", (action, label) => {
         expect(hymnNoteBadge(noted(action))?.label ?? null).toBe(label);

@@ -90,7 +90,7 @@ function changeLine(change: HymnNoteChange, tense: Tense): HymnNoteLine {
 
 /** A note left alone: "Left alone", not written by the app (an extra one, or one the song no longer needs). */
 function keepLine(keep: HymnNoteKeep): HymnNoteLine {
-    return line("left-alone", "Left alone", keep.content, {
+    return line("left-alone", hymnNoteStateTag("kept"), keep.content, {
         why:
             keep.reason === "duplicate"
                 ? "an extra note, not written by the app"
@@ -110,7 +110,7 @@ const NO_NOTE_LINE = line("no-note", "No note", "No numbers, so no note.");
 export function previewLines(diff: HymnNoteDiff): HymnNoteLine[] {
     const lines: HymnNoteLine[] = [];
     if ((diff.action === "unchanged" || diff.action === "dedupe") && diff.content !== null) {
-        lines.push(line("in-sync", "In sync", diff.content));
+        lines.push(line("in-sync", hymnNoteStateTag("in-sync"), diff.content));
     }
     lines.push(...diff.changes.map((change) => changeLine(change, "preview")));
     lines.push(...diff.keep.map(keepLine));
@@ -238,7 +238,7 @@ export function resultLines(item: HymnNoteSyncItem): HymnNoteLine[] {
     }
     lines.push(...item.made.map((change) => changeLine(change, "result")));
     if (item.outcome === "nothing-to-do" && item.action === "unchanged") {
-        lines.push(line("in-sync", "In sync", "No change needed."));
+        lines.push(line("in-sync", hymnNoteStateTag("in-sync"), "No change needed."));
     }
     lines.push(...item.keep.map(keepLine));
     return lines.length > 0 ? lines : [NO_NOTE_LINE];
@@ -346,43 +346,70 @@ export const SYNC_DIALOG_DESCRIPTION =
 export const MISSING_CATEGORY_HELP =
     "Planning Center's API can't create one, so add it in Planning Center's web app, then sync again. The category's name is a setting.";
 
-/** A song card's hymnal note status (see `cardNoteBadge`). */
-export type CardNoteState = "in-sync" | "needs-update" | "missing" | "kept";
+/**
+ * A hymnal note's state as the pages show it: `hymnNoteState`'s three (in
+ * sync, differs, missing), and "kept": a note the app did not write, on a
+ * song with nothing to say, which a sync leaves alone.
+ */
+export type HymnNoteShownState = HymnNoteState | "kept";
+
+/**
+ * The words for a hymnal note's state, one wording wherever it shows: the
+ * dashboard's song rows and the Schedule tab's cards put "Note" before them
+ * (`hymnNoteBadgeLabel`), and the sync dialog tags its notes with them
+ * (`hymnNoteStateTag`). "Needs sync" covers a note that says something else
+ * and a note of the app's to remove; "left alone", a note the app did not
+ * write, which it would otherwise remove.
+ */
+export const HYMN_NOTE_STATE_WORDS: Readonly<Record<HymnNoteShownState, string>> = {
+    "in-sync": "in sync",
+    differs: "needs sync",
+    missing: "missing",
+    kept: "left alone",
+};
+
+/** A badge's words for a note's state: "Note in sync", "Note needs sync". */
+export function hymnNoteBadgeLabel(state: HymnNoteShownState): string {
+    return `Note ${HYMN_NOTE_STATE_WORDS[state]}`;
+}
+
+/** A dialog tag's words for a note's state: "In sync", "Left alone". */
+export function hymnNoteStateTag(state: HymnNoteShownState): string {
+    const words = HYMN_NOTE_STATE_WORDS[state];
+    return `${words[0].toUpperCase()}${words.slice(1)}`;
+}
+
+/** Why a note is left alone, beside its badge on a card. */
+const LEFT_ALONE_DETAIL = "not written by the app";
 
 /** A song card's hymnal note status, in words that do not rely on colour. */
 export interface CardNoteBadge {
-    state: CardNoteState;
+    state: HymnNoteShownState;
+    /** The badge: "Note in sync", as the dashboard's. */
     label: string;
+    /** Said beside the badge, when it needs saying why: a note left alone was not written by the app. */
+    detail: string | null;
 }
 
-const CARD_NOTE_LABELS: Readonly<Record<CardNoteState, string>> = {
-    "in-sync": "Hymnal note in sync",
-    "needs-update": "Hymnal note needs update",
-    missing: "Hymnal note missing",
-    kept: "Hymnal note kept: not written by the app",
-};
-
-/** A card's state for each state the dashboard's badges use (`hymnNoteState`). */
-const CARD_NOTE_STATES: Readonly<Record<HymnNoteState, CardNoteState>> = {
-    "in-sync": "in-sync",
-    differs: "needs-update",
-    missing: "missing",
-};
-
 /**
- * What a song card says of its hymnal note, from its diff (`hymnNoteDiffFor`):
- * in sync; needs update (it says something else, or there are notes of the
- * app's to remove); missing (it should exist and does not); or kept (the
- * song has nothing to say, and its notes are not the app's, so they stay).
- * Null when there is no diff (the notes cannot be compared) or nothing to
- * say: no note, and no numbers.
+ * What a song card says of its hymnal note, from its diff (`hymnNoteDiffFor`),
+ * in the words of `HYMN_NOTE_STATE_WORDS`: in sync; needs sync (it says
+ * something else, or there are notes of the app's to remove); missing (it
+ * should exist and does not); or left alone (the song has nothing to say,
+ * and its notes are not the app's, so they stay). Null when there is no
+ * diff (the notes cannot be compared) or nothing to say: no note, and no
+ * numbers.
  */
 export function cardNoteBadge(diff: Pick<HymnNoteDiff, "action"> | null): CardNoteBadge | null {
     if (diff === null) {
         return null;
     }
-    const noteState = hymnNoteState(diff);
-    const state: CardNoteState | null =
-        diff.action === "keep" ? "kept" : noteState === null ? null : CARD_NOTE_STATES[noteState];
-    return state === null ? null : { state, label: CARD_NOTE_LABELS[state] };
+    const state: HymnNoteShownState | null = diff.action === "keep" ? "kept" : hymnNoteState(diff);
+    return state === null
+        ? null
+        : {
+              state,
+              label: hymnNoteBadgeLabel(state),
+              detail: state === "kept" ? LEFT_ALONE_DETAIL : null,
+          };
 }

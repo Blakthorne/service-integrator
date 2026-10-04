@@ -1,3 +1,4 @@
+import { hymnNoteBadgeLabel } from "./hymnNoteText";
 import {
     hymnNoteState,
     type HymnNoteDiff,
@@ -72,11 +73,15 @@ export function songNumbersView(song: {
     }
 }
 
-/** What a song row's badge says of each hymnal note state. */
+/**
+ * What a song row's badge says of each hymnal note state: the words the
+ * Schedule tab's cards and the sync dialog use too (`HYMN_NOTE_STATE_WORDS`
+ * in lib/hymnNoteText.ts), so "Note needs sync" covers a note to remove.
+ */
 export const HYMN_NOTE_BADGE_LABELS: Readonly<Record<HymnNoteState, string>> = {
-    "in-sync": "Note in sync",
-    differs: "Note differs",
-    missing: "Note missing",
+    "in-sync": hymnNoteBadgeLabel("in-sync"),
+    differs: hymnNoteBadgeLabel("differs"),
+    missing: hymnNoteBadgeLabel("missing"),
 };
 
 /** A song row's hymnal-note badge. */
