@@ -13,6 +13,8 @@ import { IDLE_FORM, formStateKey } from "@/lib/forms";
 import { routes } from "@/lib/routes";
 import CatalogCard, { CardField, LINK_CLASS, NoValue } from "../CatalogCard";
 import PcoSongWebLink from "../Reconcile/PcoSongWebLink";
+import AddToPlanAction from "./AddToPlanAction";
+import { SECONDARY_BUTTON_CLASS } from "./styles";
 
 /** A catalog song's link to Planning Center, as its page shows it. */
 export interface SongPcoLink {
@@ -25,7 +27,7 @@ export interface SongPcoLink {
 
 interface PcoLinkCardProps {
     songId: number;
-    /** The catalog song's label, "Amazing Grace (NEW BRITAIN)", for the confirmation. */
+    /** The catalog song's label, "Amazing Grace (NEW BRITAIN)", for the confirmations. */
     songLabel: string;
     /** The song's link, or null when it is not linked. */
     link: SongPcoLink | null;
@@ -95,9 +97,10 @@ function LinkedSongFields({ link }: { link: SongPcoLink }) {
  * The song page's Planning Center card: the Planning Center song the
  * catalog song is linked to (its title, author, copyright and when it was
  * last scheduled, as the app's copy of the library has them, and a link to
- * it in Planning Center), how and when the link was made, and Unlink,
- * confirmed in a dialog. A song that is not linked says so, with a link to
- * Reconcile, where links are made.
+ * it in Planning Center), how and when the link was made, "Add to a plan…"
+ * (for a song still in Planning Center) and Unlink, confirmed in a dialog.
+ * A song that is not linked says so, with a link to Reconcile, where links
+ * are made.
  *
  * It is a client component so that it stays mounted when Unlink's
  * revalidation swaps its content: it then says what was unlinked, and moves
@@ -163,14 +166,23 @@ export default function PcoLinkCard({ songId, songLabel, link }: PcoLinkCardProp
                             <LinkSource linkedBy={link.linkedBy} linkedAt={link.linkedAt} />
                         </CardField>
                     </dl>
-                    <button
-                        ref={unlinkButtonRef}
-                        type="button"
-                        onClick={() => setOpen(true)}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer"
-                    >
-                        Unlink
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                        {!link.pcoSong?.removedAt && (
+                            <AddToPlanAction
+                                pcoSongId={link.pcoSongId}
+                                songLabel={songLabel}
+                                pcoTitle={pcoTitle}
+                            />
+                        )}
+                        <button
+                            ref={unlinkButtonRef}
+                            type="button"
+                            onClick={() => setOpen(true)}
+                            className={SECONDARY_BUTTON_CLASS}
+                        >
+                            Unlink
+                        </button>
+                    </div>
                 </div>
             )}
 
