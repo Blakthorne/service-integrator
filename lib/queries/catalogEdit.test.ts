@@ -29,10 +29,14 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 }));
 
 import {
+    addCatalogEntry,
     createSong,
+    deleteCatalogEntry,
+    editCatalogEntry,
     getMirroredPcoSong,
     getNewSongBooks,
     getNewSongFormData,
+    moveCatalogEntry,
     unlinkCatalogSong,
 } from "./catalogEdit";
 
@@ -320,5 +324,49 @@ describe("unlinkCatalogSong", () => {
             reason: "not-linked",
         });
         expect(findCatalogSong(db, songs.amazingGrace)?.pcoSongId).toBe("1001");
+    });
+});
+
+describe("the song page's entries, end to end", () => {
+    test("adds, edits, moves and deletes entries, refusing a number that is taken", () => {
+        const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns" });
+        const chorus = seedBook(db, { code: "CB", name: "Chorus Book", numbered: false });
+        const song = seedSong(db, { hymnId: seedHymn(db, { title: "Jesus Loves Me" }) });
+        const other = seedSong(db, { hymnId: seedHymn(db, { title: "Deep and Wide" }) });
+        seedEntry(db, { bookId: chorus, songId: other, position: 1 });
+        seedEntry(db, { bookId: rejoice, songId: other, number: 7 });
+
+        const added = addCatalogEntry({
+            songId: song,
+            bookId: rejoice,
+            placement: { kind: "number", number: 7 },
+            variantNote: null,
+        });
+        expect(added).toMatchObject({ ok: false, problems: [{ reason: "number-taken" }] });
+
+        const numbered = addCatalogEntry({
+            songId: song,
+            bookId: rejoice,
+            placement: { kind: "number", number: 8 },
+            variantNote: null,
+        });
+        const inChorus = addCatalogEntry({
+            songId: song,
+            bookId: chorus,
+            placement: { kind: "position", position: 1 },
+            variantNote: null,
+        });
+        expect(numbered).toMatchObject({ ok: true, label: "R-8" });
+        expect(inChorus).toMatchObject({ ok: true, label: "Chorus Book" });
+        const entryIds = [numbered, inChorus].map((result) => (result.ok ? result.entryId : 0));
+
+        expect(
+            editCatalogEntry({ entryId: entryIds[0], placement: { kind: "number", number: 9 }, variantNote: null })
+        ).toMatchObject({ ok: true, label: "R-9" });
+        expect(moveCatalogEntry(entryIds[1], "down")).toEqual({ ok: true, changed: true, position: 2 });
+        expect(deleteCatalogEntry(entryIds[0])).toEqual({ ok: true, songId: song, label: "R-9" });
+        expect(findCatalogSong(db, song)?.entries.map(({ label, position }) => [label, position])).toEqual([
+            ["Chorus Book", 2],
+        ]);
     });
 });

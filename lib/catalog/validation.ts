@@ -436,13 +436,13 @@ type PartRead<T> = { ok: true; value: T } | { ok: false; message: string };
  * A form's check from its parts' readings: the input `build` makes of their
  * values when every part read, else each failed part's message.
  */
-function checkParts<P extends string, R extends Record<P, PartRead<unknown>>, T>(
+function checkParts<R extends Record<string, PartRead<unknown>>, T>(
     parts: R,
     build: (values: { [K in keyof R]: R[K] extends PartRead<infer V> ? V : never }) => T
-): FormCheck<T, P> {
-    const fieldErrors: FieldErrors<P> = {};
+): FormCheck<T, keyof R & string> {
+    const fieldErrors: FieldErrors<keyof R & string> = {};
     const values = {} as Record<string, unknown>;
-    for (const [part, read] of Object.entries(parts) as [P, PartRead<unknown>][]) {
+    for (const [part, read] of Object.entries(parts) as [keyof R & string, PartRead<unknown>][]) {
         if (read.ok) {
             values[part] = read.value;
         } else {
@@ -512,5 +512,190 @@ export function validateSongMark(formData: FormData): FormCheck<SongMarkInput, S
             note: readOptionalLine(formData, "note", MARK_NOTE_MAX_LENGTH, "A note"),
         },
         ({ song, mark, note }) => ({ songId: song, mark, note })
+    );
+}
+
+// Entries ----------------------------------------------------------------------
+
+/** The longest variant note ("Descant - last stanza only") an entry takes. */
+export const VARIANT_NOTE_MAX_LENGTH = 100;
+
+/** The highest position an entry of an unnumbered book may be given. */
+export const ENTRY_POSITION_MAX = 99_999;
+
+/**
+ * Where an entry goes in its book:
+ *
+ * - "number" and "location": a numbered book's number (R-396), or a place
+ *   without one, such as the front cover;
+ * - "end" and "position": an unnumbered book's order, at its end or at a
+ *   position (1 is first), which moves the entries from there on down. A
+ *   position past the end is the end.
+ */
+export type EntryPlacement =
+    | { kind: "number"; number: number }
+    | { kind: "location"; locationLabel: string }
+    | { kind: "end" }
+    | { kind: "position"; position: number };
+
+/** The placements the entry forms post. */
+export const ENTRY_PLACEMENTS = ["number", "location", "end", "position"] as const;
+
+/** A new entry of a song in a book. */
+export interface NewEntryInput {
+    songId: number;
+    bookId: number;
+    placement: EntryPlacement;
+    /** Null for a plain entry. */
+    variantNote: string | null;
+}
+
+/** An entry changed in place: in the same book, for the same song. */
+export interface EntryEditInput {
+    entryId: number;
+    placement: EntryPlacement;
+    /** Null for a plain entry. */
+    variantNote: string | null;
+}
+
+/**
+ * The fields the song page's entry forms post. Adding posts the song and
+ * the book; editing posts the entry. Each posts the placement, the field
+ * it needs (`number`, `location` or `position`) and the variant note.
+ */
+export const ENTRY_FIELDS = [
+    "songId",
+    "entryId",
+    "bookId",
+    /** One of `ENTRY_PLACEMENTS`. */
+    "placement",
+    "number",
+    "location",
+    "position",
+    "variantNote",
+] as const;
+
+/** The parts of the entry forms, each of which shows at most one error. */
+export type EntryPart = "song" | "entry" | "book" | "placement" | "variantNote";
+
+/**
+ * The placement a form posts, with the field it needs: a number of 1 to
+ * `ENTRY_NUMBER_MAX`, a location of at most `LOCATION_MAX_LENGTH`
+ * characters, or a position of 1 to `ENTRY_POSITION_MAX`. Whether the book
+ * takes it (numbers in a numbered book, the order in one without) is for
+ * the database to say: the form names an entry or a book by id only.
+ */
+function readEntryPlacement(formData: FormData): PartRead<EntryPlacement> {
+    const placement = readString(formData, "placement");
+    switch (ENTRY_PLACEMENTS.find((kind) => kind === placement)) {
+        case "number": {
+            const number = readOptionalPositiveInteger(formData, "number", { max: ENTRY_NUMBER_MAX });
+            if (!number.ok || number.value === null) {
+                return {
+                    ok: false,
+                    message: `Type the song's number, a whole number from 1 to ${formatCount(ENTRY_NUMBER_MAX)}.`,
+                };
+            }
+            return { ok: true, value: { kind: "number", number: number.value } };
+        }
+        case "location": {
+            const locationLabel = cleanText(readString(formData, "location"));
+            if (locationLabel === "") {
+                return { ok: false, message: "Type where the book has the song, such as front cover." };
+            }
+            if (locationLabel.length > LOCATION_MAX_LENGTH) {
+                return {
+                    ok: false,
+                    message: `A location has at most ${LOCATION_MAX_LENGTH} characters.`,
+                };
+            }
+            return { ok: true, value: { kind: "location", locationLabel } };
+        }
+        case "end":
+            return { ok: true, value: { kind: "end" } };
+        case "position": {
+            const position = readOptionalPositiveInteger(formData, "position", {
+                max: ENTRY_POSITION_MAX,
+            });
+            if (!position.ok || position.value === null) {
+                return {
+                    ok: false,
+                    message: `Type the song's position in the book, a whole number from 1 to ${formatCount(ENTRY_POSITION_MAX)}.`,
+                };
+            }
+            return { ok: true, value: { kind: "position", position: position.value } };
+        }
+        case undefined:
+            return { ok: false, message: "Choose where the book has the song." };
+    }
+}
+
+/** A variant note, cleaned: null when blank. */
+function readVariantNote(formData: FormData): PartRead<string | null> {
+    return readOptionalLine(formData, "variantNote", VARIANT_NOTE_MAX_LENGTH, "A variant note");
+}
+
+/** Read the song page's Add entry form: the song, the book, the placement and the variant note. */
+export function validateNewEntry(formData: FormData): FormCheck<NewEntryInput, EntryPart> {
+    return checkParts(
+        {
+            song: readCatalogId(formData, "songId", "That song is not in the catalog."),
+            book: readCatalogId(formData, "bookId", "Choose a book from the list."),
+            placement: readEntryPlacement(formData),
+            variantNote: readVariantNote(formData),
+        },
+        ({ song, book, placement, variantNote }) => ({
+            songId: song,
+            bookId: book,
+            placement,
+            variantNote,
+        })
+    );
+}
+
+/** Read an entry's Edit form: the entry, its placement and its variant note. */
+export function validateEntryEdit(formData: FormData): FormCheck<EntryEditInput, EntryPart> {
+    return checkParts(
+        {
+            entry: readCatalogId(formData, "entryId", "That entry is not in the catalog."),
+            placement: readEntryPlacement(formData),
+            variantNote: readVariantNote(formData),
+        },
+        ({ entry, placement, variantNote }) => ({ entryId: entry, placement, variantNote })
+    );
+}
+
+/** Read an entry's Delete form: the entry. */
+export function validateEntryDelete(formData: FormData): FormCheck<{ entryId: number }, "entry"> {
+    return checkParts(
+        { entry: readCatalogId(formData, "entryId", "That entry is not in the catalog.") },
+        ({ entry }) => ({ entryId: entry })
+    );
+}
+
+/** Which way Move up and Move down take an entry, or a book. */
+export const MOVE_DIRECTIONS = ["up", "down"] as const;
+
+export type MoveDirection = (typeof MOVE_DIRECTIONS)[number];
+
+/** A direction a form posted, or the message for one it did not. */
+function readDirection(formData: FormData): PartRead<MoveDirection> {
+    const direction = readString(formData, "direction");
+    const known = MOVE_DIRECTIONS.find((value) => value === direction);
+    return known === undefined
+        ? { ok: false, message: "Choose Move up or Move down." }
+        : { ok: true, value: known };
+}
+
+/** Read an entry's Move up or Move down form (an unnumbered book's): the entry and the direction. */
+export function validateEntryMove(
+    formData: FormData
+): FormCheck<{ entryId: number; direction: MoveDirection }, "entry" | "direction"> {
+    return checkParts(
+        {
+            entry: readCatalogId(formData, "entryId", "That entry is not in the catalog."),
+            direction: readDirection(formData),
+        },
+        ({ entry, direction }) => ({ entryId: entry, direction })
     );
 }

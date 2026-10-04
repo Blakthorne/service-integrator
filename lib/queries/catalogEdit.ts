@@ -3,10 +3,22 @@ import type { HymnOption, TuneOption } from "@/lib/catalog/pickers";
 import {
     EMPTY_NEW_SONG,
     draftFromPcoTitle,
+    type EntryEditInput,
+    type MoveDirection,
+    type NewEntryInput,
     type NewSongDraft,
 } from "@/lib/catalog/validation";
 import { getDb } from "@/lib/db";
 import { listBooks, listCatalogSongs, listTunes } from "@/lib/db/catalog";
+import {
+    addEntry,
+    deleteEntry,
+    editEntry,
+    moveEntry,
+    type EntryDeleteResult,
+    type EntryEditResult,
+    type EntryMoveResult,
+} from "@/lib/db/catalogEdit";
 import {
     createCatalogSong,
     type CreateSongResult,
@@ -24,15 +36,29 @@ export type {
     ExistingRow,
     NewCatalogSong,
 } from "@/lib/db/catalogWrites";
+export type {
+    CatalogRowRef,
+    EditProblem,
+    EditResult,
+    EntryDeleteResult,
+    EntryEditResult,
+    EntryMoveResult,
+    EntryProblem,
+    EntryProblemReason,
+} from "@/lib/db/catalogEdit";
 
 /**
  * Editing the catalog from its forms: what the new-song form shows and the
- * song it creates, and the song page's Unlink. Reads are synchronous, like
- * the database, except where Planning Center may have to be asked (a song
- * the mirror lacks). A change the catalog's rules refuse comes back as a
- * value with a message fit to show; anything unexpected (a database that
- * cannot be opened, Planning Center failing) throws. Each function takes
- * IDs its caller has already parsed (convention 19).
+ * song it creates, the song page's Unlink, and the edits of a song's
+ * entries, its hymn and tune and their other names, merges of hymns and of
+ * tunes, and books. Reads and the local edits are synchronous, like the
+ * database; only what may ask Planning Center (a song the mirror lacks) is
+ * async. A change the catalog's rules refuse comes back as a value with a
+ * message fit to show, naming the part of the form it is about and the row
+ * it clashes with; anything unexpected (a database that cannot be opened,
+ * Planning Center failing) throws. Each function takes IDs its caller has
+ * already parsed (convention 19), and input its form's reader in
+ * lib/catalog/validation.ts has checked.
  */
 
 /** A book as the new-song form offers it. */
@@ -172,4 +198,32 @@ export function getMirroredPcoSong(pcoSongId: string): MirroredPcoSong | null {
  */
 export function unlinkCatalogSong(songId: number, pcoSongId: string): UnlinkResult {
     return unlinkSong(getDb(), songId, { pcoSongId, blockAutoLink: true });
+}
+
+// ---------------------------------------------------------------------------
+// Entries (the song page's Entries card, and a book's page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Add an entry of a song to a book: at a number or location in a numbered
+ * book, or in the order of one without (at its end, or at a position). See
+ * `addEntry` for what it refuses.
+ */
+export function addCatalogEntry(input: NewEntryInput): EntryEditResult {
+    return addEntry(getDb(), input);
+}
+
+/** Change an entry's number, location or place in the order, and its variant note (`editEntry`). */
+export function editCatalogEntry(input: EntryEditInput): EntryEditResult {
+    return editEntry(getDb(), input);
+}
+
+/** Delete an entry; in a book without numbers, the entries after it move up (`deleteEntry`). */
+export function deleteCatalogEntry(entryId: number): EntryDeleteResult {
+    return deleteEntry(getDb(), entryId);
+}
+
+/** Move an entry of a book without numbers one place up or down (`moveEntry`). */
+export function moveCatalogEntry(entryId: number, direction: MoveDirection): EntryMoveResult {
+    return moveEntry(getDb(), entryId, direction);
 }

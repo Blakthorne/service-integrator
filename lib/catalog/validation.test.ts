@@ -3,9 +3,14 @@ import { buildCatalogIndex, type IndexableSong } from "@/lib/reconcile";
 import {
     EMPTY_NEW_SONG,
     MARK_NOTE_MAX_LENGTH,
+    VARIANT_NOTE_MAX_LENGTH,
     cleanText,
     draftFromPcoTitle,
     previewEntryLabel,
+    validateEntryDelete,
+    validateEntryEdit,
+    validateEntryMove,
+    validateNewEntry,
     validateNewSong,
     validateSongMark,
     type NewSongBook,
@@ -429,5 +434,113 @@ describe("validateSongMark", () => {
         expect(
             validateSongMark(fields({ songId: "1", mark: "to-learn", note: "x".repeat(MARK_NOTE_MAX_LENGTH) }))
         ).toMatchObject({ ok: true });
+    });
+});
+
+describe("validateNewEntry", () => {
+    test("reads a number in a book, with a variant note", () => {
+        expect(
+            validateNewEntry(
+                fields({ songId: "5", bookId: "1", placement: "number", number: " 396 ", variantNote: " Descant " })
+            )
+        ).toEqual({
+            ok: true,
+            input: { songId: 5, bookId: 1, placement: { kind: "number", number: 396 }, variantNote: "Descant" },
+        });
+    });
+
+    test("reads a location, the end and a position, and a blank variant note as none", () => {
+        const base = { songId: "5", bookId: "1", variantNote: "  " };
+        expect(validateNewEntry(fields({ ...base, placement: "location", location: " front  cover " }))).toEqual({
+            ok: true,
+            input: {
+                songId: 5,
+                bookId: 1,
+                placement: { kind: "location", locationLabel: "front cover" },
+                variantNote: null,
+            },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "end", number: "abc" }))).toMatchObject({
+            ok: true,
+            input: { placement: { kind: "end" } },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "position", position: "3" }))).toMatchObject({
+            ok: true,
+            input: { placement: { kind: "position", position: 3 } },
+        });
+    });
+
+    test("refuses what the placement needs when it is missing or not a whole number", () => {
+        const base = { songId: "5", bookId: "1" };
+        expect(validateNewEntry(fields({ ...base, placement: "number", number: "" }))).toEqual({
+            ok: false,
+            fieldErrors: { placement: { message: "Type the song's number, a whole number from 1 to 99,999." } },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "number", number: "1.5" }))).toMatchObject({
+            ok: false,
+            fieldErrors: { placement: expect.anything() },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "location", location: " " }))).toEqual({
+            ok: false,
+            fieldErrors: { placement: { message: "Type where the book has the song, such as front cover." } },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "position", position: "0" }))).toEqual({
+            ok: false,
+            fieldErrors: {
+                placement: { message: "Type the song's position in the book, a whole number from 1 to 99,999." },
+            },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "sideways" }))).toEqual({
+            ok: false,
+            fieldErrors: { placement: { message: "Choose where the book has the song." } },
+        });
+    });
+
+    test("refuses ids that do not parse and a variant note that is too long, all at once", () => {
+        expect(
+            validateNewEntry(
+                fields({
+                    songId: "x",
+                    bookId: "",
+                    placement: "end",
+                    variantNote: "x".repeat(VARIANT_NOTE_MAX_LENGTH + 1),
+                })
+            )
+        ).toEqual({
+            ok: false,
+            fieldErrors: {
+                song: { message: "That song is not in the catalog." },
+                book: { message: "Choose a book from the list." },
+                variantNote: { message: "A variant note has at most 100 characters." },
+            },
+        });
+    });
+});
+
+describe("validateEntryEdit, validateEntryDelete and validateEntryMove", () => {
+    test("read the entry and what changes", () => {
+        expect(
+            validateEntryEdit(fields({ entryId: "7", placement: "number", number: "12", variantNote: "" }))
+        ).toEqual({
+            ok: true,
+            input: { entryId: 7, placement: { kind: "number", number: 12 }, variantNote: null },
+        });
+        expect(validateEntryDelete(fields({ entryId: "7" }))).toEqual({ ok: true, input: { entryId: 7 } });
+        expect(validateEntryMove(fields({ entryId: "7", direction: "down" }))).toEqual({
+            ok: true,
+            input: { entryId: 7, direction: "down" },
+        });
+    });
+
+    test("refuse an entry id that does not parse, and a direction that is not one", () => {
+        expect(validateEntryEdit(fields({ entryId: "-1", placement: "end" }))).toEqual({
+            ok: false,
+            fieldErrors: { entry: { message: "That entry is not in the catalog." } },
+        });
+        expect(validateEntryDelete(fields({}))).toMatchObject({ ok: false, fieldErrors: { entry: expect.anything() } });
+        expect(validateEntryMove(fields({ entryId: "7", direction: "sideways" }))).toEqual({
+            ok: false,
+            fieldErrors: { direction: { message: "Choose Move up or Move down." } },
+        });
     });
 });
