@@ -2,14 +2,17 @@ import "server-only";
 import type { DatabaseSync } from "node:sqlite";
 import { withTransaction } from "@/lib/db";
 import { listCatalogSongs } from "@/lib/db/catalog";
+import { deriveSongCredits } from "@/lib/db/credits";
 import { applyAutoLinks } from "@/lib/db/links";
 import {
     listPcoSongs,
     markMissingPcoSongsRemoved,
     upsertPcoSongs,
 } from "@/lib/db/pcoSongs";
+import { listStoredSettings } from "@/lib/db/settings";
 import { fetchSongLibrary } from "@/lib/pco";
 import { buildCatalogIndex, chooseAutoLinks } from "@/lib/reconcile";
+import { resolveSettings } from "@/lib/settings";
 
 /** What a sync of the Planning Center songs did, as its `sync_runs` row records it. */
 export type PcoSongsSyncCounts = {
@@ -30,14 +33,16 @@ export type PcoSongsSyncCounts = {
  * work of the `pco-songs` job (lib/jobs.ts), hourly, at boot and on demand.
  *
  * It first reads the whole library, paced (about 4 requests), and only then
- * writes, in one transaction at `now()`: every song is upserted, the songs
- * the listing lacks are marked removed and those that came back unmarked,
- * and the auto-links `chooseAutoLinks` allows are made. A song mirrored
- * since the listing began (a link made from a page while it was read) is not
- * marked removed: Planning Center may have created it after the listing
- * passed it. A failed or partial read throws before anything is written, and
- * so does a listing with no songs at all while the mirror has some, which is
- * taken for a failure rather than a library emptied at once.
+ * writes, in one transaction at `now()`: every song is upserted and its
+ * credits derived afresh from its author (`pco_song_credits`, read with the
+ * stored `creditRoles` setting, or the default roles when it does not
+ * parse), the songs the listing lacks are marked removed and those that
+ * came back unmarked, and the auto-links `chooseAutoLinks` allows are made.
+ * A song mirrored since the listing began (a link made from a page while it
+ * was read) is not marked removed: Planning Center may have created it after
+ * the listing passed it. A failed or partial read throws before anything is
+ * written, and so does a listing with no songs at all while the mirror has
+ * some, which is taken for a failure rather than a library emptied at once.
  */
 export async function syncPcoSongs(
     db: DatabaseSync,
@@ -53,6 +58,7 @@ export async function syncPcoSongs(
             );
         }
         const { added, updated } = upsertPcoSongs(db, songs, at);
+        deriveSongCredits(db, songs, resolveSettings(listStoredSettings(db)).settings.creditRoles);
         const removed = markMissingPcoSongsRemoved(
             db,
             songs.map(({ id }) => id),

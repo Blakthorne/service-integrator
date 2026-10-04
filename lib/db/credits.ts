@@ -1,6 +1,7 @@
 import "server-only";
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
-import type { Credit, CreditParseStatus, SongCredits } from "@/lib/domain";
+import { parseCredits, songCreditsOf } from "@/lib/credits";
+import type { Credit, CreditParseStatus, PcoLibrarySong, SongCredits } from "@/lib/domain";
 import { withTransaction } from "./transaction";
 
 /**
@@ -78,6 +79,23 @@ export function replaceSongCredits(
         rows.forEach(([role, name], position) => {
             insert.run(pcoSongId, role, name, position, status);
         });
+    });
+}
+
+/**
+ * Read each song's author as credits with `roles` (the `creditRoles`
+ * setting; see `parseCredits`) and store what it reads as, replacing what
+ * the song had, all in one transaction. The songs must be in the mirror.
+ */
+export function deriveSongCredits(
+    db: DatabaseSync,
+    songs: readonly Pick<PcoLibrarySong, "id" | "author">[],
+    roles: readonly string[]
+): void {
+    withTransaction(db, () => {
+        for (const { id, author } of songs) {
+            replaceSongCredits(db, id, songCreditsOf(parseCredits(author, roles)));
+        }
     });
 }
 

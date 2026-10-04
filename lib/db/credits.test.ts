@@ -1,7 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { DEFAULT_SETTINGS } from "@/lib/settings";
 import {
     CREDIT_PARSE_STATUSES,
+    deriveSongCredits,
     findSongCredits,
     isCreditParseStatus,
     replaceSongCredits,
@@ -117,6 +119,62 @@ describe("replaceSongCredits", () => {
     test("refuses a song the mirror lacks", () => {
         expect(() => replaceSongCredits(db, "2002", OUR_HELP)).toThrow(/FOREIGN KEY constraint failed/);
         expect(rows("2002")).toEqual([]);
+    });
+});
+
+describe("deriveSongCredits", () => {
+    test("stores what each song's author reads as, with the roles given", () => {
+        seedPcoSong(db, { id: "1003" });
+        seedPcoSong(db, { id: "1004" });
+        deriveSongCredits(
+            db,
+            [
+                { id: "1001", author: "Words: Isaac Watts; Music: William Croft" },
+                { id: "1002", author: "John Newton" },
+                { id: "1003", author: "Composer: Lowell Mason" },
+                { id: "1004", author: null },
+            ],
+            DEFAULT_SETTINGS.creditRoles
+        );
+        expect(findSongCredits(db, "1001")).toEqual({
+            status: "ok",
+            credits: [
+                { role: "Words", names: ["Isaac Watts"] },
+                { role: "Music", names: ["William Croft"] },
+            ],
+        });
+        expect(findSongCredits(db, "1002")).toEqual({
+            status: "legacy",
+            credits: [
+                { role: "Words", names: ["John Newton"] },
+                { role: "Music", names: ["John Newton"] },
+            ],
+        });
+        expect(findSongCredits(db, "1003")).toEqual({ status: "unparsed", credits: [] });
+        expect(findSongCredits(db, "1004")).toEqual({ status: "legacy", credits: [] });
+    });
+
+    test("replaces what a song had, and follows the roles it is given", () => {
+        replaceSongCredits(db, "1001", OUR_HELP);
+        deriveSongCredits(db, [{ id: "1001", author: "Text: Isaac Watts" }], ["Text", "Tune"]);
+        expect(findSongCredits(db, "1001")).toEqual({
+            status: "ok",
+            credits: [{ role: "Text", names: ["Isaac Watts"] }],
+        });
+    });
+
+    test("writes nothing when a song is not in the mirror", () => {
+        expect(() =>
+            deriveSongCredits(
+                db,
+                [
+                    { id: "1001", author: "John Newton" },
+                    { id: "2002", author: "John Newton" },
+                ],
+                DEFAULT_SETTINGS.creditRoles
+            )
+        ).toThrow(/FOREIGN KEY constraint failed/);
+        expect(findSongCredits(db, "1001")).toBeNull();
     });
 });
 
