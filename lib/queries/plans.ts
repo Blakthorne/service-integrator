@@ -1,8 +1,8 @@
 import "server-only";
-import type { DatabaseSync } from "node:sqlite";
 import { cache } from "react";
 import { getDb } from "@/lib/db";
 import { findCatalogMatches, listCatalogSongs } from "@/lib/db/catalog";
+import { errorMessage } from "@/lib/db/errors";
 import { findPcoSongs } from "@/lib/db/pcoSongs";
 import type {
     CatalogMatch,
@@ -70,6 +70,13 @@ export interface PlanDetail extends PlanData {
      * (ignored on Reconcile) has no entry.
      */
     suggestions: Record<string, LinkSuggestion[]>;
+    /**
+     * Why the catalog could not be read (the database cannot be opened, or a
+     * query failed), or null when it was read. `catalog` and `suggestions`
+     * are then empty: the plan's pages work without them, and the Schedule
+     * tab says that numbers cannot be shown.
+     */
+    catalogError: string | null;
 }
 
 /**
@@ -90,12 +97,13 @@ const getPlanData = cache(
 
 /**
  * The catalog links of a plan's song items (see `PlanDetail`): the linked
- * songs' catalog songs, and suggestions for the others. At most seven
- * queries, however many items: two for the links, one for the mirror's
- * ignored marks, and four for the catalog when a song needs suggestions.
+ * songs' catalog songs, and suggestions for the others. It opens the
+ * database only when a song item has a Planning Center song, and then asks
+ * at most seven queries, however many items: two for the links, one for the
+ * mirror's ignored marks, and four for the catalog when a song needs
+ * suggestions. Throws when the database cannot be read.
  */
 function planCatalogLinks(
-    db: DatabaseSync,
     items: readonly PlanItemWithSong[]
 ): Pick<PlanDetail, "catalog" | "suggestions"> {
     /** Each Planning Center song the items schedule, with its title as Planning Center gives it, if it does. */
@@ -109,6 +117,10 @@ function planCatalogLinks(
         }
     }
     const pcoSongIds = [...songTitles.keys()];
+    if (pcoSongIds.length === 0) {
+        return { catalog: {}, suggestions: {} };
+    }
+    const db = getDb();
     const matches = findCatalogMatches(db, pcoSongIds);
     const unlinked = pcoSongIds.filter((id) => !matches.has(id));
     const suggestions: Record<string, LinkSuggestion[]> = {};
@@ -128,10 +140,32 @@ function planCatalogLinks(
 }
 
 /**
+ * `planCatalogLinks`, or no links and the reason when the catalog cannot be
+ * read. Never throws: a failure is logged, and the plan's pages go on
+ * without the catalog.
+ */
+function readPlanCatalogLinks(
+    serviceTypeId: string,
+    planId: string,
+    items: readonly PlanItemWithSong[]
+): Pick<PlanDetail, "catalog" | "suggestions" | "catalogError"> {
+    try {
+        return { ...planCatalogLinks(items), catalogError: null };
+    } catch (error) {
+        console.error(
+            `Failed to read the catalog links of plan ${serviceTypeId}/${planId}:`,
+            error
+        );
+        return { catalog: {}, suggestions: {}, catalogError: errorMessage(error) };
+    }
+}
+
+/**
  * Load a plan, its service type and its items in parallel, and find their
  * songs' catalog links and suggestions in the database. PCO errors pass
- * through (wrap the call in orNotFound to turn a missing plan into a 404),
- * and so does a database that cannot be opened.
+ * through (wrap the call in orNotFound to turn a missing plan into a 404).
+ * A database that cannot be read does not: the plan comes without its
+ * catalog links, with `catalogError` saying why.
  */
 export const getPlanDetail = cache(
     async (serviceTypeId: string, planId: string): Promise<PlanDetail> => {
@@ -140,7 +174,7 @@ export const getPlanDetail = cache(
             plan,
             serviceType,
             items,
-            ...planCatalogLinks(getDb(), items),
+            ...readPlanCatalogLinks(serviceTypeId, planId, items),
         };
     }
 );

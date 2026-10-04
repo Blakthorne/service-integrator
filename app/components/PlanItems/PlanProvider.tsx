@@ -35,6 +35,11 @@ export interface PlanContextValue {
      */
     catalog: Record<string, CatalogMatch>;
     /**
+     * Why the catalog could not be read, or null. `catalog` is then empty,
+     * and the plan's pages work without it.
+     */
+    catalogError: string | null;
+    /**
      * `items` with the Schedule tab's selections merged in: a song with
      * numbers starts on Numbers, every other item on Leave blank (see
      * `mergeScheduleSelections`).
@@ -66,7 +71,7 @@ interface PlanProviderProps {
  * the provider by plan, so another plan starts with no selections.
  */
 export default function PlanProvider({ detail, children }: PlanProviderProps) {
-    const { plan, serviceType, items, catalog } = detail;
+    const { plan, serviceType, items, catalog, catalogError } = detail;
     const [selections, dispatch] = useReducer(scheduleSelectionsReducer, {});
 
     // The defaults follow the catalog links, so a song linked from the tab
@@ -92,6 +97,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             serviceType,
             items,
             catalog,
+            catalogError,
             scheduleItems,
             chooseOption,
             setCustomText,
@@ -101,6 +107,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             serviceType,
             items,
             catalog,
+            catalogError,
             scheduleItems,
             chooseOption,
             setCustomText,

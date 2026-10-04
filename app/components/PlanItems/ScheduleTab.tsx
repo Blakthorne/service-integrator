@@ -15,6 +15,7 @@ export default function ScheduleTab() {
         plan,
         serviceType,
         catalog,
+        catalogError,
         scheduleItems,
         chooseOption,
         setCustomText,
@@ -24,6 +25,7 @@ export default function ScheduleTab() {
         <ServiceSchedule
             items={scheduleItems}
             catalog={catalog}
+            catalogError={catalogError}
             serviceTypeName={serviceType.name}
             planDate={planDateFromSortDate(plan.sortDate)}
             onChooseOption={chooseOption}

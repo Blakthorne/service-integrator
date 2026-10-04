@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import CopyButton from "../ui/CopyButton";
 import { createDebouncedSave } from "@/lib/debouncedSave";
+import { catalogUnavailableMessage } from "@/lib/scheduleCards";
 import {
     hasNumbers,
     type ChooseOption,
@@ -189,6 +190,8 @@ export interface ServiceScheduleProps {
      * by Planning Center song id.
      */
     catalog: Record<string, CatalogMatch>;
+    /** Why the catalog could not be read, or null; the tab then says numbers can't be shown. */
+    catalogError: string | null;
     serviceTypeName: string;
     /** The plan's calendar date as `YYYY-MM-DD`, or null when it is unknown. */
     planDate: string | null;
@@ -207,6 +210,7 @@ export interface ServiceScheduleProps {
 export default function ServiceSchedule({
     items,
     catalog,
+    catalogError,
     serviceTypeName,
     planDate,
     onChooseOption,
@@ -231,6 +235,11 @@ export default function ServiceSchedule({
                     </div>
                 </div>
             </div>
+            {catalogError !== null && (
+                <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                    {catalogUnavailableMessage(catalogError)}
+                </p>
+            )}
             <div className="space-y-4">
                 {items
                     .filter((item) => item.itemType === "song")
@@ -249,7 +258,7 @@ export default function ServiceSchedule({
                                             {item.title}
                                         </h3>
                                     </div>
-                                    {!hasNumbers(item, catalog) && (
+                                    {catalogError === null && !hasNumbers(item, catalog) && (
                                         <p className="text-sm text-gray-600 dark:text-gray-400">
                                             {match
                                                 ? "Linked song is in no book"

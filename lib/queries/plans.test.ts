@@ -172,10 +172,11 @@ describe("getPlanDetail", () => {
         stubFetchRoutes(planDetailRoutes());
         const { getPlanDetail } = await loadQueries();
 
-        const { catalog, suggestions } = await getPlanDetail(MORNING, PLAN);
+        const { catalog, suggestions, catalogError } = await getPlanDetail(MORNING, PLAN);
 
         expect(catalog).toEqual({});
         expect(suggestions).toEqual({ "20": [], "30": [], "40": [] });
+        expect(catalogError).toBeNull();
     });
 
     test("lets a missing plan's PcoError through, for orNotFound to handle", async () => {
@@ -367,14 +368,65 @@ describe("getPlanDetail's catalog links", () => {
         expect(prepare).not.toHaveBeenCalled();
     });
 
-    test("lets a database that cannot be opened fail the plan", async () => {
+    // It used to fail the whole plan page, the Copyright tab included.
+    test("keeps the plan when the database cannot be opened: no links, and why", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const cause = new Error("Could not open the database at /srv/data/x: denied");
         getDb.mockImplementation(() => {
-            throw new Error("Could not open the database at /srv/data/x: denied");
+            throw cause;
         });
         stubFetchRoutes(planDetailRoutes());
         const { getPlanDetail } = await loadQueries();
 
-        await expect(getPlanDetail(MORNING, PLAN)).rejects.toThrow("Could not open the database");
+        const detail = await getPlanDetail(MORNING, PLAN);
+
+        expect(detail.plan).toMatchObject({ id: PLAN });
+        expect(detail.items.map((item) => item.id)).toEqual(["1", "2", "3", "4"]);
+        expect(detail.catalog).toEqual({});
+        expect(detail.suggestions).toEqual({});
+        expect(detail.catalogError).toBe("Could not open the database at /srv/data/x: denied");
+        expect(consoleError).toHaveBeenCalledWith(
+            `Failed to read the catalog links of plan ${MORNING}/${PLAN}:`,
+            cause
+        );
+    });
+
+    test("keeps the plan the same way when a query fails", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const closed = openTestDb();
+        closed.close();
+        getDb.mockReturnValue(closed);
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { catalog, suggestions, catalogError } = await getPlanDetail(MORNING, PLAN);
+
+        expect(catalog).toEqual({});
+        expect(suggestions).toEqual({});
+        expect(catalogError).toMatch(/not open/i);
+    });
+
+    test("does not open the database for a plan whose items schedule no Planning Center song", async () => {
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        stubFetchRoutes(
+            routesWith(
+                [
+                    itemResource("1", { title: "Welcome", item_type: "header" }),
+                    itemResource("2", { title: "A song with no song", sequence: 2 }),
+                ],
+                []
+            )
+        );
+        const { getPlanDetail } = await loadQueries();
+
+        const { catalog, suggestions, catalogError } = await getPlanDetail(MORNING, PLAN);
+
+        expect(getDb).not.toHaveBeenCalled();
+        expect(catalog).toEqual({});
+        expect(suggestions).toEqual({});
+        expect(catalogError).toBeNull();
     });
 });
 
