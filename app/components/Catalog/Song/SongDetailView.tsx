@@ -1,5 +1,6 @@
+import type { EntryEditorBook } from "@/lib/catalog/entryEditor";
 import { songOptionLabel } from "@/lib/catalog/pickers";
-import type { Book, CatalogSongDetail, MirroredPcoSong, PcoTag, PcoTagGroup } from "@/lib/domain";
+import type { CatalogSongDetail, MirroredPcoSong, PcoTag, PcoTagGroup } from "@/lib/domain";
 import type { CreditSettings } from "@/lib/settings";
 import CreditsCard from "./CreditsCard";
 import EntriesCard from "./EntriesCard";
@@ -11,8 +12,8 @@ import TuneCard from "./TuneCard";
 
 interface SongDetailViewProps {
     song: CatalogSongDetail;
-    /** The catalog's books, for the Books card. */
-    books: readonly Pick<Book, "id" | "name" | "numbered">[];
+    /** Every book, in use or not, in book order, for the Books card and its editor. */
+    books: readonly EntryEditorBook[];
     /**
      * The linked Planning Center song as the mirror has it; null when the
      * song is not linked or the mirror lacks it.
@@ -37,9 +38,9 @@ interface SongDetailViewProps {
  * then whether it is marked to learn, then its link to Planning Center
  * (with Add to a plan, or Create in Planning Center), and, for a song
  * linked to one the app's copy of the library has, its credits and its
- * tags. Server components, except the To learn, Planning Center, Credits
- * and Tags cards, which edit. The last two are keyed by the Planning
- * Center song, so a new link starts them afresh.
+ * tags. Server components, except the Books, To learn, Planning Center,
+ * Credits and Tags cards, which edit. The last two are keyed by the
+ * Planning Center song, so a new link starts them afresh.
  */
 export default function SongDetailView({
     song,
@@ -53,7 +54,7 @@ export default function SongDetailView({
     const linkedSong = song.pcoSongId !== null && pcoSong !== null ? pcoSong : null;
     return (
         <div className="space-y-6">
-            <EntriesCard entries={song.entries} books={books} />
+            <EntriesCard songId={song.id} entries={song.entries} books={books} />
             <div className="grid gap-6 md:grid-cols-2">
                 <HymnCard hymn={song.hymn} otherTunes={song.otherTunes} />
                 <TuneCard tune={song.tune} otherHymns={song.otherHymns} />

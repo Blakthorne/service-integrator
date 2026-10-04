@@ -38,12 +38,25 @@ export async function generateMetadata({
  * has no `loading.tsx`: a link to it keeps the previous page on screen until
  * it is ready, and a prefetch of it costs no Planning Center request. What
  * reads Planning Center (the upcoming plans) or writes to it is a server
- * action, called from a click.
+ * action, called from a click; so are the edits of the song's entries,
+ * hymn and mark (`editActions.ts`). The books go to the Books card with
+ * their entry counts, an unnumbered book's last position.
  */
 export default async function CatalogSongPage({ params }: CatalogSongPageProps) {
     const songId = parseCatalogId((await params).songId) ?? notFound();
     const song = getCatalogSong(songId) ?? notFound();
-    const books = getCatalogBooks();
+    const books = getCatalogBooks().map(
+        ({ id, code, name, shortName, numbered, labelFormat, active, entryCount }) => ({
+            id,
+            code,
+            name,
+            shortName,
+            numbered,
+            labelFormat,
+            active,
+            entryCount,
+        })
+    );
     const pcoSong = song.pcoSongId === null ? null : getMirroredPcoSong(song.pcoSongId);
     const { creditRoles, creditPhrases } = getSettings().settings;
     const linked = song.pcoSongId !== null && pcoSong !== null;
