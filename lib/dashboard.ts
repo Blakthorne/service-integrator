@@ -161,6 +161,11 @@ function unavailableNotesSummary(
                 tone: "warning",
                 text: `Hymnal notes can't be synced: ${status.categories.length} item note categories are named "${status.categoryName}".`,
             };
+        case "settings":
+            return {
+                tone: "muted",
+                text: "Hymnal notes can't be compared while the settings can't be read.",
+            };
         case "catalog":
             return {
                 tone: "muted",

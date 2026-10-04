@@ -14,6 +14,7 @@ import {
     matchHymnNoteCategory,
     missingCategoryMessage,
     planHymnNoteStatus,
+    settingsUnavailableMessage,
     songItemNoteIds,
     type HymnNoteAction,
     type HymnNoteChange,
@@ -108,7 +109,8 @@ function catalogOf(
 /**
  * What a sync of plan `planId`'s hymnal notes would do: the category it
  * writes to, with each song item's diff, or why it cannot (the category is
- * missing, or the categories or the database could not be read). Reads
+ * missing or ambiguous, or the settings, the categories or the database
+ * could not be read). Reads
  * the service type, the plan's items and the service type's categories from
  * Planning Center in parallel (three requests, deduped within a request),
  * then the catalog and which of the items' notes the app wrote (at most
@@ -124,7 +126,7 @@ export async function previewHymnNotes(
         getPlanItems(serviceTypeId, planId),
         readItemNoteCategories(serviceTypeId),
     ]);
-    const { settings } = getSettings();
+    const { settings, error: settingsError } = getSettings();
     let catalog: Record<string, CatalogMatch> = {};
     let ownedNoteIds: ReadonlySet<string> = new Set();
     let catalogError: string | null = null;
@@ -146,6 +148,7 @@ export async function previewHymnNotes(
         catalogError,
         categories,
         settings,
+        settingsError,
         ownedNoteIds,
     });
 }
@@ -394,9 +397,10 @@ function countSync(items: readonly HymnNoteSyncItem[]): HymnNoteSyncCounts {
  * An item whose change fails stops there, and the sync goes on to the next
  * item.
  *
- * A missing category, or categories that could not be read, refuse the
- * sync: nothing is written or logged. A plan, service type or database
- * that cannot be read throws before anything is written.
+ * A missing category, several of the name, or settings or categories that
+ * could not be read, refuse the sync ("no-category" or "unavailable"):
+ * nothing is written or logged. A plan, service type or catalog that cannot
+ * be read throws before anything is written.
  */
 export async function syncHymnNotes(
     serviceTypeId: string,
@@ -409,7 +413,12 @@ export async function syncHymnNotes(
         fetchPlanItems(st, plan),
         readItemNoteCategories(st),
     ]);
-    const { settings } = getSettings();
+    const { settings, error: settingsError } = getSettings();
+    if (settingsError !== null) {
+        // The defaults would name another category, or drop the tune the
+        // church chose from every note: write nothing.
+        return { ok: false, kind: "unavailable", message: settingsUnavailableMessage(settingsError) };
+    }
     const db = getDb();
     const status = planHymnNoteStatus({
         serviceTypeName: serviceType.name,
@@ -418,6 +427,7 @@ export async function syncHymnNotes(
         catalogError: null,
         categories,
         settings,
+        settingsError,
         ownedNoteIds: findCreatedItemNoteIds(db, songItemNoteIds(items)),
     });
     if (status.kind !== "ready") {

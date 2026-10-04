@@ -536,6 +536,7 @@ describe("planHymnNoteStatus", () => {
         catalogError: null,
         categories: { ok: true, categories: [{ id: "501", name: "Band" }, hymnal] },
         settings: DEFAULT_SETTINGS,
+        settingsError: null,
         ownedNoteIds: new Set(),
     };
 
@@ -620,6 +621,26 @@ describe("planHymnNoteStatus", () => {
         expect(missingCategoryMessage("Hymn Numbers", "Sunday Evening")).toBe(
             'Create an item note category named "Hymn Numbers" in Planning Center for Sunday Evening.'
         );
+    });
+
+    test("unavailable, before anything else, when the settings cannot be read", () => {
+        // The defaults would look for "Hymnal" and leave the tune out, which
+        // may not be what the church chose.
+        const message =
+            "The settings could not be read: Could not open the database. Hymnal notes can't be compared without them, since the category and what a note says are settings.";
+        expect(planHymnNoteStatus({ ...input, settingsError: "Could not open the database" })).toEqual({
+            kind: "unavailable",
+            reason: "settings",
+            message,
+        });
+        expect(
+            planHymnNoteStatus({
+                ...input,
+                settingsError: "Could not open the database.",
+                categories: { ok: true, categories: [] },
+                catalogError: "Could not open the database.",
+            })
+        ).toEqual({ kind: "unavailable", reason: "settings", message });
     });
 
     test("unavailable when the categories cannot be read", () => {

@@ -307,6 +307,7 @@ export async function getDashboard(now: Date = new Date()): Promise<Dashboard> {
             catalogError: links.catalogError,
             categories: read.categories,
             settings,
+            settingsError,
             ownedNoteIds,
         });
         return {

@@ -132,7 +132,7 @@ describe("planNotesSummary", () => {
     });
 
     test("notes that cannot be compared say why, briefly", () => {
-        const unavailable = (reason: "catalog" | "categories"): HymnNoteStatus => ({
+        const unavailable = (reason: "settings" | "catalog" | "categories"): HymnNoteStatus => ({
             kind: "unavailable",
             reason,
             message: "A long message with the error in it.",
@@ -146,6 +146,10 @@ describe("planNotesSummary", () => {
         ).toEqual({
             tone: "muted",
             text: "Hymnal notes can't be compared: Planning Center's item note categories couldn't be read.",
+        });
+        expect(planNotesSummary({ hymnNotes: unavailable("settings"), notesToSync: 0, songs: [] })).toEqual({
+            tone: "muted",
+            text: "Hymnal notes can't be compared while the settings can't be read.",
         });
     });
 

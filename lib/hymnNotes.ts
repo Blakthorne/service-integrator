@@ -405,9 +405,10 @@ export function hymnNoteState(diff: Pick<HymnNoteDiff, "action">): HymnNoteState
  * - "no-category": the service type has no category of that name, so
  *   nothing can be written until someone creates it in Planning Center;
  * - "unavailable": the notes cannot be compared, and nothing is written:
- *   the categories or the catalog could not be read, or several categories
- *   have the name ("ambiguous-category"), so the notes have no one place to
- *   go until all but one are renamed or deleted in Planning Center.
+ *   the settings, the categories or the catalog could not be read, or
+ *   several categories have the name ("ambiguous-category"), so the notes
+ *   have no one place to go until all but one are renamed or deleted in
+ *   Planning Center.
  */
 export type HymnNoteStatus =
     | { kind: "ready"; category: ItemNoteCategory; items: HymnNoteDiff[] }
@@ -415,7 +416,7 @@ export type HymnNoteStatus =
     | {
           kind: "unavailable";
           /** What could not be read. */
-          reason: "categories" | "catalog";
+          reason: "settings" | "categories" | "catalog";
           /** Why, fit to show. */
           message: string;
       }
@@ -450,6 +451,12 @@ export interface PlanHymnNoteInput {
     categories: ItemNoteCategoriesRead;
     settings: HymnNoteSettings & Pick<AppSettings, "hymnNoteCategoryName">;
     /**
+     * Why the settings could not be read, or null (`getSettings`). Then
+     * `settings` are the defaults, which may not name the category or the
+     * note's form the church chose, so the notes are not compared.
+     */
+    settingsError: string | null;
+    /**
      * The notes on the items that the app wrote itself (see `diffHymnNotes`),
      * the only ones it deletes; when the write log cannot say, none.
      */
@@ -475,8 +482,17 @@ export function missingCategoryMessage(categoryName: string, serviceTypeName: st
 }
 
 /**
- * A plan's hymnal notes (see `HymnNoteStatus`). Categories that could not
- * be read make it "unavailable"; then a missing category, or several of
+ * What the app says when the settings could not be read, so the hymnal
+ * notes are neither compared nor written: the defaults it would use instead
+ * may name another category, or leave out the tune the church chose.
+ */
+export function settingsUnavailableMessage(error: string): string {
+    return `The settings could not be read${sentence(error) || "."} Hymnal notes can't be compared without them, since the category and what a note says are settings.`;
+}
+
+/**
+ * A plan's hymnal notes (see `HymnNoteStatus`). Settings or categories that
+ * could not be read make it "unavailable"; then a missing category, or several of
  * the name, which are the fix to ask for whatever else is wrong, make it
  * "no-category" or "unavailable" ("ambiguous-category"); then a catalog
  * that could not be read makes it "unavailable", since what each note
@@ -491,8 +507,16 @@ export function planHymnNoteStatus({
     catalogError,
     categories,
     settings,
+    settingsError,
     ownedNoteIds,
 }: PlanHymnNoteInput): HymnNoteStatus {
+    if (settingsError !== null) {
+        return {
+            kind: "unavailable",
+            reason: "settings",
+            message: settingsUnavailableMessage(settingsError),
+        };
+    }
     const categoryName = settings.hymnNoteCategoryName;
     if (!categories.ok) {
         return {

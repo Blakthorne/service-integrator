@@ -162,6 +162,17 @@ function seedAppNotes(...noteIds: string[]): void {
     }
 }
 
+/** Make every query whose SQL contains `sql` throw `error`, as a broken table would. */
+function failQueries(sql: string, error: Error): void {
+    const prepare = db.prepare.bind(db);
+    vi.spyOn(db, "prepare").mockImplementation((text: string) => {
+        if (text.includes(sql)) {
+            throw error;
+        }
+        return prepare(text);
+    });
+}
+
 /** The id of the write log's latest row, or 0. */
 function lastWriteId(): number {
     return recentWrites(db, 1)[0]?.id ?? 0;
@@ -308,21 +319,30 @@ describe("previewHymnNotes", () => {
 
     test("says why when the catalog cannot be read", async () => {
         const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-        const cause = new Error("Could not open the database at /srv/data/x: denied");
-        getDb.mockImplementation(() => {
-            throw cause;
-        });
+        const cause = new Error("no such table: entries");
+        failQueries("FROM entries", cause);
         stubFetchRoutes(readRoutes());
         await expect(previewHymnNotes(ST, PLAN)).resolves.toEqual({
             kind: "unavailable",
             reason: "catalog",
-            message:
-                "The catalog is unavailable: Could not open the database at /srv/data/x: denied. Hymnal notes can't be compared.",
+            message: "The catalog is unavailable: no such table: entries. Hymnal notes can't be compared.",
         });
         expect(consoleError).toHaveBeenCalledWith(
             `Failed to read the catalog links of plan ${ST}/${PLAN}:`,
             cause
         );
+    });
+
+    test("says the settings could not be read rather than compare by the defaults", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        failQueries("FROM settings", new Error("database disk image is malformed"));
+        stubFetchRoutes(readRoutes());
+        await expect(previewHymnNotes(ST, PLAN)).resolves.toEqual({
+            kind: "unavailable",
+            reason: "settings",
+            message:
+                "The settings could not be read: database disk image is malformed. Hymnal notes can't be compared without them, since the category and what a note says are settings.",
+        });
     });
 
     test("lets a missing plan's PcoError through", async () => {
@@ -708,12 +728,38 @@ describe("syncHymnNotes", () => {
         expect(writesSent(fetchMock)).toEqual([]);
     });
 
-    test("throws before writing anything when the database cannot be opened", async () => {
+    test("refuses, writing nothing, when the settings cannot be read", async () => {
+        // With the tune setting saved, the defaults would rewrite every note
+        // without it; a custom category name would fall back to "Hymnal".
         vi.spyOn(console, "error").mockImplementation(() => {});
-        const cause = new Error("Could not open the database at /srv/data/x: denied");
-        getDb.mockImplementation(() => {
-            throw cause;
+        seedSetting(db, "hymnNoteIncludesTune", true);
+        seedAppNotes(...APP_NOTES);
+        failQueries("FROM settings", new Error("database disk image is malformed"));
+        const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
+
+        await expect(syncHymnNotes(ST, PLAN)).resolves.toEqual({
+            ok: false,
+            kind: "unavailable",
+            message:
+                "The settings could not be read: database disk image is malformed. Hymnal notes can't be compared without them, since the category and what a note says are settings.",
         });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("refuses the same way when the database cannot be opened at all", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
+
+        await expect(syncHymnNotes(ST, PLAN)).resolves.toMatchObject({ ok: false, kind: "unavailable" });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("throws before writing anything when the catalog cannot be read", async () => {
+        const cause = new Error("no such table: entries");
+        failQueries("FROM entries", cause);
         const fetchMock = stubFetchRoutes({ ...readRoutes(), ...writeRoutes() });
 
         await expect(syncHymnNotes(ST, PLAN)).rejects.toBe(cause);

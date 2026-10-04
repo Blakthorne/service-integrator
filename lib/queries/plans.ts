@@ -261,6 +261,7 @@ export const getPlanDetail = cache(
                 catalogError: links.catalogError,
                 categories,
                 settings,
+                settingsError,
                 ownedNoteIds: readAppWrittenNoteIds(items),
             }),
         };

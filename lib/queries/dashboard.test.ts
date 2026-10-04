@@ -434,7 +434,7 @@ describe("getDashboard's to-dos for the catalog and the song sync", () => {
 });
 
 describe("getDashboard without a database", () => {
-    test("shows the plans without links, numbers or notes, says why, and still asks for the category", async () => {
+    test("shows the plans without links, numbers or notes, and says why", async () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
         getDb.mockImplementation(() => {
             throw new Error("Could not open the database at /srv/data/x: denied");
@@ -453,11 +453,13 @@ describe("getDashboard without a database", () => {
             "unknown",
             "no-song",
         ]);
+        // The settings cannot be read either, so the category's name is not
+        // known: the notes are not compared, and no category is asked for.
         expect(morning.status === "plan" && morning.hymnNotes).toMatchObject({
             kind: "unavailable",
-            reason: "catalog",
+            reason: "settings",
         });
         expect(dashboard.lastSync).toBeNull();
-        expect(dashboard.todos.map(({ kind }) => kind)).toEqual(["missing-category"]);
+        expect(dashboard.todos).toEqual([]);
     });
 });

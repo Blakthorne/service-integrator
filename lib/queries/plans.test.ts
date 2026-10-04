@@ -714,7 +714,41 @@ describe("getPlanDetail's hymnal notes", () => {
         );
     });
 
+    /** Make every query whose SQL contains `sql` throw, as a broken table would. */
+    function failQueries(sql: string) {
+        const prepare = db.prepare.bind(db);
+        vi.spyOn(db, "prepare").mockImplementation((text: string) => {
+            if (text.includes(sql)) {
+                throw new Error(`broken: ${sql}`);
+            }
+            return prepare(text);
+        });
+    }
+
     test("cannot compare the notes when the catalog cannot be read", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        failQueries("FROM entries");
+        stubFetchRoutes(routesWithNotes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus } = await getPlanDetail(MORNING, PLAN);
+
+        expect(hymnNoteStatus).toMatchObject({ kind: "unavailable", reason: "catalog" });
+    });
+
+    test("does not compare the notes by the defaults when the settings cannot be read", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        failQueries("FROM settings");
+        stubFetchRoutes(routesWithNotes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus, settingsError } = await getPlanDetail(MORNING, PLAN);
+
+        expect(settingsError).toBe("broken: FROM settings");
+        expect(hymnNoteStatus).toMatchObject({ kind: "unavailable", reason: "settings" });
+    });
+
+    test("without a database at all, says the settings could not be read", async () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
         getDb.mockImplementation(() => {
             throw new Error("Could not open the database at /srv/data/x: denied");
@@ -724,7 +758,7 @@ describe("getPlanDetail's hymnal notes", () => {
 
         const { hymnNoteStatus } = await getPlanDetail(MORNING, PLAN);
 
-        expect(hymnNoteStatus).toMatchObject({ kind: "unavailable", reason: "catalog" });
+        expect(hymnNoteStatus).toMatchObject({ kind: "unavailable", reason: "settings" });
     });
 });
 
