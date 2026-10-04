@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import CopyrightCard from "@/app/components/Settings/CopyrightCard";
 import CreditsCard from "@/app/components/Settings/CreditsCard";
+import DataCard from "@/app/components/Settings/DataCard";
 import DatabaseCard from "@/app/components/Settings/DatabaseCard";
 import EmailCard from "@/app/components/Settings/EmailCard";
 import HymnalNotesCard from "@/app/components/Settings/HymnalNotesCard";
@@ -28,8 +29,9 @@ export const metadata: Metadata = { title: "Settings" };
  * the app has written to Planning Center, then the song sync and the
  * database.
  *
- * Everything reads the local database (and, for the Email card, the
- * server's environment), which is quick, and no query throws.
+ * The Data card, last, exports the catalog as a JSON file. Everything
+ * else reads the local database (and, for the Email card, the server's
+ * environment), which is quick, and no query throws.
  * Two cards also need Planning Center, for the service types and the item
  * note categories in each: the page starts that one read before it renders
  * (`getHymnNoteCategories`, which never rejects) and the cards that need it
@@ -62,7 +64,7 @@ export default function SettingsPage() {
         <div className="font-sans">
             <PageHeader
                 title="Settings"
-                description="The text the app writes, the email it sends, what it writes to Planning Center, the song sync and the database."
+                description="The text the app writes, the email it sends, what it writes to Planning Center, the song sync, the database and an export of the catalog."
             />
             <div className="space-y-6">
                 <SettingsIssuesCard issues={issues} error={error} />
@@ -84,6 +86,7 @@ export default function SettingsPage() {
                 <RecentWritesCard recent={recentWrites} />
                 <PcoSyncCard status={sync} />
                 <DatabaseCard status={status} />
+                <DataCard />
             </div>
         </div>
     );
