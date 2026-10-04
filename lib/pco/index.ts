@@ -26,5 +26,10 @@ export {
     getPlansForServiceType,
     type AllPlans,
 } from "./plans";
-export { getPlanItems, type PlanItems } from "./planItems";
+export {
+    fetchPlanItems,
+    getItemNoteCategories,
+    getPlanItems,
+    type PlanItems,
+} from "./planItems";
 export { fetchSongLibrary, getSong } from "./songs";

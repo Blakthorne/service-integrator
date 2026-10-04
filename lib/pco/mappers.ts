@@ -1,13 +1,16 @@
 import "server-only";
 import type {
+    ItemNote,
+    ItemNoteCategory,
     PcoLibrarySong,
     Plan,
     PlanItem,
-    PlanItemWithSong,
     ServiceType,
     Song,
 } from "../domain";
 import type {
+    PcoItemNoteCategoryResource,
+    PcoItemNoteResource,
     PcoItemResource,
     PcoPlanResource,
     PcoResourceIdentifier,
@@ -143,13 +146,13 @@ function isSongResource(
  * song with an identical (case-sensitive) title is used. Included resources
  * that are not songs are ignored. Items keep their order and are not modified.
  */
-export function joinItemsToSongs(
-    items: PlanItem[],
+export function joinItemsToSongs<T extends PlanItem>(
+    items: readonly T[],
     included: readonly PcoResourceIdentifier[]
-): PlanItemWithSong[] {
+): (T & { song: Song | null })[] {
     const songs = included.filter(isSongResource).map(toSong);
     const songsById = new Map(songs.map((song) => [song.id, song]));
-    const songFor = (item: PlanItem): Song | null => {
+    const songFor = (item: T): Song | null => {
         if (item.itemType !== "song") {
             return null;
         }
@@ -157,4 +160,58 @@ export function joinItemsToSongs(
         return linked ?? songs.find((song) => song.title === item.title) ?? null;
     };
     return items.map((item) => ({ ...item, song: songFor(item) }));
+}
+
+/**
+ * Map a raw item note to the domain shape: its category's id from its
+ * `item_note_category` relationship (null without one), and its category's
+ * name and content, a null or missing one becoming "".
+ */
+export function toItemNote(resource: PcoItemNoteResource): ItemNote {
+    const attributes = resource.attributes;
+    return {
+        id: resource.id,
+        categoryId: resource.relationships?.item_note_category?.data?.id ?? null,
+        categoryName: attributes.category_name ?? "",
+        content: attributes.content ?? "",
+    };
+}
+
+/** Map a raw item note category to the domain shape. */
+export function toItemNoteCategory(resource: PcoItemNoteCategoryResource): ItemNoteCategory {
+    return { id: resource.id, name: resource.attributes.name ?? "" };
+}
+
+function isItemNoteResource(
+    resource: PcoResourceIdentifier
+): resource is PcoItemNoteResource {
+    return resource.type === "ItemNote";
+}
+
+/**
+ * Each plan item's notes, by item id, from the resources included with the
+ * items (`include=item_notes`): the notes each item's `item_notes`
+ * relationship names, in its order. A note the relationship names but that
+ * was not included is left out, and so is an included note no item names.
+ * Included resources that are not item notes are ignored.
+ */
+export function itemNotesByItem(
+    items: readonly PcoItemResource[],
+    included: readonly PcoResourceIdentifier[]
+): Map<string, ItemNote[]> {
+    const notes = new Map(
+        included.filter(isItemNoteResource).map((resource) => [resource.id, toItemNote(resource)])
+    );
+    const byItem = new Map<string, ItemNote[]>();
+    for (const item of items) {
+        const named = item.relationships?.item_notes?.data ?? [];
+        byItem.set(
+            item.id,
+            named.flatMap(({ id }) => {
+                const note = notes.get(id);
+                return note ? [note] : [];
+            })
+        );
+    }
+    return byItem;
 }

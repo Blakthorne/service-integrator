@@ -45,7 +45,7 @@ const urls = {
         `${PCO_BASE}/service_types/${st}/plans?order=-sort_date&per_page=100`,
     plan: `${PCO_BASE}/service_types/${MORNING}/plans/${PLAN}`,
     serviceType: `${PCO_BASE}/service_types/${MORNING}`,
-    items: `${PCO_BASE}/service_types/${MORNING}/plans/${PLAN}/items?include=song&per_page=100`,
+    items: `${PCO_BASE}/service_types/${MORNING}/plans/${PLAN}/items?include=song,item_notes&per_page=100`,
 };
 
 const songLink = (id: string) => ({ song: { data: { type: "Song" as const, id } } });

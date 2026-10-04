@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { PcoError } from "./client";
 import { InvalidPcoIdError } from "./ids";
-import { getPlanItems } from "./planItems";
+import { fetchPlanItems, getItemNoteCategories, getPlanItems } from "./planItems";
 import {
+    PCO_AUTH,
     PCO_BASE,
     calledUrls,
+    itemNoteCategoryResource,
+    itemNoteResource,
     itemResource,
+    json,
     listPage,
+    noteLinks,
     songResource,
     stubFetchRoutes,
     stubPcoCredentials,
@@ -20,7 +26,7 @@ afterEach(() => {
 
 const ST = "1405391";
 const PLAN = "81234567";
-const itemsUrl = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items?include=song&per_page=100`;
+const itemsUrl = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items?include=song,item_notes&per_page=100`;
 
 const songLink = (id: string) => ({ song: { data: { type: "Song" as const, id } } });
 
@@ -82,7 +88,7 @@ describe("getPlanItems", () => {
         const page1 = descending(120, 21);
         const page2 = descending(20, 1);
 
-        const nextUrl = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items?include=song&offset=100&per_page=100`;
+        const nextUrl = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items?include=song,item_notes&offset=100&per_page=100`;
         const fetchMock = stubFetchRoutes({
             [itemsUrl]: listPage(page1.map(item), {
                 next: nextUrl,
@@ -120,6 +126,90 @@ describe("getPlanItems", () => {
         expect(items[0].song).toMatchObject({ id: "77", title: "Amazing Grace" });
     });
 
+    test("asks for the items' notes with their songs, and sends the credentials", async () => {
+        const fetchMock = stubFetchRoutes({ [itemsUrl]: listPage([]) });
+        await getPlanItems(ST, PLAN);
+        expect(calledUrls(fetchMock)).toEqual([itemsUrl]);
+        expect(new URL(itemsUrl).searchParams.get("include")).toBe("song,item_notes");
+        expect(fetchMock.mock.calls[0][1]).toMatchObject({
+            headers: { Authorization: PCO_AUTH },
+            cache: "no-store",
+        });
+    });
+
+    test("gives each item its notes, from the included ItemNotes its item_notes relationship names", async () => {
+        // The shapes the spike saw: an ItemNote has category_name, content
+        // and an item_note_category relationship.
+        stubFetchRoutes({
+            [itemsUrl]: listPage(
+                [
+                    itemResource("1", { title: "Amazing Grace", sequence: 1 }, {
+                        ...songLink("77"),
+                        ...noteLinks("9001", "9002"),
+                    }),
+                    itemResource("2", { title: "Welcome", item_type: "header", sequence: 2 }, noteLinks("9003")),
+                    itemResource("3", { title: "Holy, Holy, Holy", sequence: 3 }, songLink("88")),
+                ],
+                {
+                    included: [
+                        songResource("77"),
+                        itemNoteResource("9001", { category_name: "Hymnal", content: "R-396 / G-317" }, "501"),
+                        itemNoteResource("9002", { category_name: "Vocals", content: "Women on verse 2" }, "502"),
+                        itemNoteResource("9003", { category_name: "Audio/Visual", content: "Lights up" }, "503"),
+                        songResource("88"),
+                    ],
+                }
+            ),
+        });
+
+        const { items } = await getPlanItems(ST, PLAN);
+
+        expect(items.map((item) => [item.id, item.notes])).toEqual([
+            [
+                "1",
+                [
+                    { id: "9001", categoryId: "501", categoryName: "Hymnal", content: "R-396 / G-317" },
+                    { id: "9002", categoryId: "502", categoryName: "Vocals", content: "Women on verse 2" },
+                ],
+            ],
+            ["2", [{ id: "9003", categoryId: "503", categoryName: "Audio/Visual", content: "Lights up" }]],
+            ["3", []],
+        ]);
+        // The songs are joined as before.
+        expect(items.map((item) => item.song?.id ?? null)).toEqual(["77", null, "88"]);
+    });
+
+    test("finds notes included on another page, as it does songs", async () => {
+        const nextUrl = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items?include=song,item_notes&offset=100&per_page=100`;
+        stubFetchRoutes({
+            [itemsUrl]: listPage([itemResource("1", { sequence: 1 }, noteLinks("9001"))], {
+                next: nextUrl,
+                included: [itemNoteResource("9002", { content: "R-12" })],
+                total: 2,
+            }),
+            [nextUrl]: listPage([itemResource("2", { sequence: 2 }, noteLinks("9002"))], {
+                included: [itemNoteResource("9001", { content: "R-11" })],
+                total: 2,
+            }),
+        });
+
+        const { items } = await getPlanItems(ST, PLAN);
+
+        expect(items.map((item) => item.notes.map(({ content }) => content))).toEqual([["R-11"], ["R-12"]]);
+    });
+
+    test("fetchPlanItems reads the same items the same way", async () => {
+        const fetchMock = stubFetchRoutes({
+            [itemsUrl]: listPage([itemResource("1", {}, noteLinks("9001"))], {
+                included: [itemNoteResource("9001")],
+            }),
+        });
+        const fresh = await fetchPlanItems(ST, PLAN);
+        expect(fresh).toEqual(await getPlanItems(ST, PLAN));
+        expect(calledUrls(fetchMock)).toEqual([itemsUrl, itemsUrl]);
+        await expect(fetchPlanItems("x", PLAN)).rejects.toBeInstanceOf(InvalidPcoIdError);
+    });
+
     test("a song item with no included song has song: null", async () => {
         stubFetchRoutes({
             [itemsUrl]: listPage([itemResource("1", { title: "Not In Library" })]),
@@ -134,6 +224,67 @@ describe("getPlanItems", () => {
     ])("rejects an invalid %s ID before any fetch", async (_which, st, plan) => {
         const fetchMock = stubFetchRoutes({});
         await expect(getPlanItems(st, plan)).rejects.toBeInstanceOf(InvalidPcoIdError);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("getItemNoteCategories", () => {
+    const categoriesUrl = `${PCO_BASE}/service_types/${ST}/item_note_categories?per_page=100`;
+
+    test("requests the service type's categories, 100 per page, and maps them in order", async () => {
+        const fetchMock = stubFetchRoutes({
+            [categoriesUrl]: listPage([
+                itemNoteCategoryResource("501", { name: "Audio/Visual", sequence: 1 }),
+                itemNoteCategoryResource("502", { name: "Band", sequence: 2 }),
+                itemNoteCategoryResource("503", { name: "Hymnal", sequence: 3 }),
+            ]),
+        });
+
+        await expect(getItemNoteCategories(ST)).resolves.toEqual([
+            { id: "501", name: "Audio/Visual" },
+            { id: "502", name: "Band" },
+            { id: "503", name: "Hymnal" },
+        ]);
+        expect(calledUrls(fetchMock)).toEqual([categoriesUrl]);
+        expect(fetchMock.mock.calls[0][1]).toMatchObject({
+            headers: { Authorization: PCO_AUTH },
+            cache: "no-store",
+        });
+    });
+
+    test("leaves out a category Planning Center marks deleted", async () => {
+        stubFetchRoutes({
+            [categoriesUrl]: listPage([
+                itemNoteCategoryResource("501", { name: "Hymnal", deleted_at: "2026-09-01T00:00:00Z" }),
+                itemNoteCategoryResource("504", { name: "Hymnal" }),
+            ]),
+        });
+        await expect(getItemNoteCategories(ST)).resolves.toEqual([{ id: "504", name: "Hymnal" }]);
+    });
+
+    test("follows links.next", async () => {
+        const nextUrl = `${PCO_BASE}/service_types/${ST}/item_note_categories?offset=100&per_page=100`;
+        stubFetchRoutes({
+            [categoriesUrl]: listPage([itemNoteCategoryResource("501", { name: "Band" })], {
+                next: nextUrl,
+                total: 2,
+            }),
+            [nextUrl]: listPage([itemNoteCategoryResource("502", { name: "Hymnal" })], { total: 2 }),
+        });
+        await expect(getItemNoteCategories(ST)).resolves.toEqual([
+            { id: "501", name: "Band" },
+            { id: "502", name: "Hymnal" },
+        ]);
+    });
+
+    test("lets a missing service type's PcoError through", async () => {
+        stubFetchRoutes({ [categoriesUrl]: () => json({ errors: [] }, { status: 404 }) });
+        await expect(getItemNoteCategories(ST)).rejects.toBeInstanceOf(PcoError);
+    });
+
+    test("rejects an invalid service type ID before any fetch", async () => {
+        const fetchMock = stubFetchRoutes({});
+        await expect(getItemNoteCategories("../1")).rejects.toBeInstanceOf(InvalidPcoIdError);
         expect(fetchMock).not.toHaveBeenCalled();
     });
 });
