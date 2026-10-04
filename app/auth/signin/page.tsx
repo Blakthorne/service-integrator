@@ -1,8 +1,7 @@
 import { auth, signIn } from "@/auth";
 import { redirect } from "next/navigation";
 import type { Route } from "next";
-import { routes } from "@/lib/routes";
-import { safeCallbackUrl } from "@/lib/safeCallbackUrl";
+import { signInTarget } from "@/lib/safeCallbackUrl";
 
 export default async function SignIn({
     searchParams,
@@ -12,10 +11,7 @@ export default async function SignIn({
     const { callbackUrl } = await searchParams;
     // Where to go after signing in: the page the visitor asked for, if it is a
     // safe path on this site, otherwise the plans list.
-    const target: string =
-        safeCallbackUrl(
-            Array.isArray(callbackUrl) ? callbackUrl[0] : callbackUrl
-        ) ?? routes.plans();
+    const target = signInTarget(callbackUrl);
 
     const session = await auth();
 
