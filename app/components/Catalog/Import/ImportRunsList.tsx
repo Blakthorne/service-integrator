@@ -1,5 +1,4 @@
 import Link from "next/link";
-import EmptyState from "@/app/components/ui/EmptyState";
 import LocalTime from "@/app/components/ui/LocalTime";
 import type { ImportRunSummary } from "@/lib/domain";
 import { routes } from "@/lib/routes";
@@ -19,11 +18,17 @@ interface ImportRunsListProps {
  */
 export default function ImportRunsList({ runs }: ImportRunsListProps) {
     if (runs.length === 0) {
+        // Not `EmptyState`, whose heading is an h2: this one sits under the
+        // page's "Import runs" h2, so it is an h3.
         return (
-            <EmptyState
-                title="No import runs yet"
-                description="Preview the seed to create the first one."
-            />
+            <div className="text-center py-12">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+                    No import runs yet
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    Preview the seed to create the first one.
+                </p>
+            </div>
         );
     }
 
