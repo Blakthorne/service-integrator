@@ -300,7 +300,7 @@ Example: a team list for a service type.
 ## Testing
 
 - **No jsdom: keep logic in `lib/`.** `npm test` runs `vitest run` over `**/*.test.ts` in a `node` environment (`.claude/**` is excluded: agent worktrees hold full repo copies). There are no component tests and no E2E harness, so anything worth testing is a pure function in `lib/`, and components stay thin and are checked in the browser.
-- **Characterization tests.** Before moving or changing logic, pin what it does today, quirks included (an empty copyright gives "© ."). Move the logic with the tests green, then change behavior in its own commit, which flips exactly the assertions it changes. See `lib/copyright.test.ts`, `lib/serviceSchedule.test.ts` and `lib/hymnMatch.test.ts`.
+- **Characterization tests.** Before moving or changing logic, pin what it does today, quirks included (a copyright that already starts with © gets a second ©). Move the logic with the tests green, then change behavior in its own commit, which flips exactly the assertions it changes. See `lib/copyright.test.ts`, `lib/serviceSchedule.test.ts` and `lib/hymnMatch.test.ts`.
 - **The stubbed-fetch pattern** (`lib/pco/testing.ts`).
   - Call `stubPcoCredentials()` in `beforeEach`, and in `afterEach` call `vi.restoreAllMocks()`, `vi.unstubAllGlobals()` and `vi.unstubAllEnvs()`.
   - `stubFetchRoutes({ [url]: body })` replaces global `fetch` with a table of full URLs, and a URL missing from the table fails the test. Each call returns a **fresh** `Response` (`json(body)`), because a body can be read only once.

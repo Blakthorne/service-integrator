@@ -355,7 +355,7 @@ client components (interaction only) ── URL state via useUrlState (shallow h
 | Main auto-deploys | One PR, merged after the full browser check and production-build pass |
 
 **Intentionally not fixed (pinned by tests; follow-ups to raise with the user):**
-- "© ." for songs whose copyright is an empty string. What it should say instead is a product decision.
+- ~~"© ." for songs whose copyright is an empty string.~~ Resolved 2026-10-04: an empty or whitespace-only copyright now prints "Public Domain.", like a missing one.
 - The `output: 'standalone'` vs `next start` warning in deploy.
 
 ## Implementation notes (2026-10-03)
