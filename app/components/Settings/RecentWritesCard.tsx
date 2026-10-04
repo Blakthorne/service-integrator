@@ -36,7 +36,9 @@ function Outcome({ outcome }: { outcome: WriteOutcome }) {
  * `parsePcoId` accepts (they come from the database, but every id is checked
  * before it reaches a route builder, convention 19), else the log's own
  * words for it. Plan pages are data-heavy, so these links do not prefetch
- * (convention 13).
+ * (convention 13). The link sits in a line of text, where blue against the
+ * grey around it is under the 3:1 a link needs (1.4:1 in light mode, 1.0:1
+ * in dark) to be told apart by colour alone, so it is underlined.
  */
 function Place({ place, target }: Pick<WriteDescription, "place" | "target">) {
     if (place === null) {
@@ -50,7 +52,7 @@ function Place({ place, target }: Pick<WriteDescription, "place" | "target">) {
                 <Link
                     href={routes.plan(serviceTypeId, planId)}
                     prefetch={false}
-                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+                    className="text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                 >
                     Plan {planId}
                 </Link>
