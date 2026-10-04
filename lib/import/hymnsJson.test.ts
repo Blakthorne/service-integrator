@@ -470,6 +470,108 @@ describe("planHymnsJsonImport's rules", () => {
         expect(rows.entries.at(-1)).toMatchObject({ tuneKey: null, variantNote: "Descant - last verse" });
     });
 
+    describe("split pairs", () => {
+        /** The planned entries, as [label, tune key]. */
+        const entriesOf = ({ rows }: HymnsJsonImport) =>
+            rows.entries.map(({ bookCode, number, tuneKey }) => [
+                `${bookCode}-${number}`,
+                tuneKey,
+            ]);
+
+        test("merge a Great Hymns record with no tune into the hymn's one Rejoice tune", () => {
+            const plan = planHymnsJsonImport([
+                record("Give of Your Best to the Master", "PINKSTON", 416, -1),
+                record("Give of Your Best to the Master", "", -1, 369),
+            ]);
+            expect(plan.report.splitPairs).toEqual([
+                {
+                    title: "Give of Your Best to the Master",
+                    label: "G-369",
+                    outcome: "merged",
+                    tunes: ["PINKSTON"],
+                },
+            ]);
+            expect(entriesOf(plan)).toEqual([
+                ["R-416", "PINKSTON"],
+                ["G-369", "PINKSTON"],
+            ]);
+            expect(plan.rows.songs).toHaveLength(1);
+            expect(plan.report.songsWithoutTune).toEqual([]);
+        });
+
+        test("keep the record a tune-less song when the hymn has several Rejoice tunes", () => {
+            const plan = planHymnsJsonImport([
+                record("Thank You, Lord", "LYNCH", 561, -1),
+                record("Thank You, Lord", "THANK YOU, LORD", 266, -1),
+                record("Thank You, Lord", "", -1, 221),
+            ]);
+            expect(plan.report.splitPairs).toEqual([
+                {
+                    title: "Thank You, Lord",
+                    label: "G-221",
+                    outcome: "ambiguous",
+                    tunes: ["LYNCH", "THANK YOU, LORD"],
+                },
+            ]);
+            expect(entriesOf(plan)).toEqual([
+                ["R-561", "LYNCH"],
+                ["R-266", "THANK YOU, LORD"],
+                ["G-221", null],
+            ]);
+            expect(plan.report.songsWithoutTune).toEqual([
+                { title: "Thank You, Lord", labels: ["G-221"], reason: "ambiguous-split-pair" },
+            ]);
+        });
+
+        test("keep the record a tune-less song when the tune's song is already in Great Hymns", () => {
+            const plan = planHymnsJsonImport([
+                record("Hymn", "TUNE", 5, 50),
+                record("Hymn", "", -1, 100),
+            ]);
+            expect(plan.report.splitPairs).toEqual([
+                { title: "Hymn", label: "G-100", outcome: "conflict", tunes: ["TUNE"] },
+            ]);
+            expect(entriesOf(plan)).toEqual([
+                ["R-5", "TUNE"],
+                ["G-50", "TUNE"],
+                ["G-100", null],
+            ]);
+            expect(plan.report.songsWithoutTune).toEqual([
+                { title: "Hymn", labels: ["G-100"], reason: "split-pair-conflict" },
+            ]);
+            expect(plan.report.skippedEntries).toEqual([]);
+        });
+
+        test("see the conflict wherever the record with the tune is in the file", () => {
+            const plan = planHymnsJsonImport([
+                record("Hymn", "", -1, 100),
+                record("Hymn", "TUNE", 5, 50),
+            ]);
+            expect(plan.report.splitPairs.map(({ outcome }) => outcome)).toEqual([
+                "conflict",
+            ]);
+            expect(plan.report.skippedEntries).toEqual([]);
+        });
+
+        test("merge only the first of two Great Hymns records, keeping the second apart", () => {
+            const plan = planHymnsJsonImport([
+                record("Hymn", "TUNE", 5, -1),
+                record("Hymn", "", -1, 100),
+                record("Hymn", "", -1, 200),
+            ]);
+            expect(plan.report.splitPairs.map(({ label, outcome }) => [label, outcome])).toEqual([
+                ["G-100", "merged"],
+                ["G-200", "conflict"],
+            ]);
+            expect(entriesOf(plan)).toEqual([
+                ["R-5", "TUNE"],
+                ["G-100", "TUNE"],
+                ["G-200", null],
+            ]);
+            expect(plan.report.skippedEntries).toEqual([]);
+        });
+    });
+
     test("does not pair a Great Hymns record with a hymn that has no Rejoice tune", () => {
         const { report } = planHymnsJsonImport([
             record("Only in Great", "", -1, 12),

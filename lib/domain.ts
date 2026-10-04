@@ -326,10 +326,13 @@ export interface SeedSplitPair {
     label: string;
     /**
      * "merged": the hymn has one Rejoice tune, so the entry joined that song;
-     * "ambiguous": it has several, so the entry is a tune-less song of its own.
+     * "ambiguous": it has several, so the entry is a tune-less song of its own;
+     * "conflict": it has one, but that song already has an entry in Great
+     * Hymns, so the entry is a tune-less song of its own rather than a
+     * second one there.
      */
-    outcome: "merged" | "ambiguous";
-    /** The hymn's Rejoice tunes: the one it joined, or the candidates. */
+    outcome: "merged" | "ambiguous" | "conflict";
+    /** The hymn's Rejoice tunes: the one it joined (or would have), or the candidates. */
     tunes: string[];
 }
 
@@ -369,10 +372,15 @@ export interface SeedSongWithoutTune {
     labels: string[];
     /**
      * Why: the file gave none ("no-tune"), its split pair had several
-     * candidates ("ambiguous-split-pair"), or it is a variant whose hymn had
-     * no single tune ("variant-without-tune").
+     * candidates ("ambiguous-split-pair") or one whose song already has an
+     * entry in that book ("split-pair-conflict"), or it is a variant whose
+     * hymn had no single tune ("variant-without-tune").
      */
-    reason: "no-tune" | "ambiguous-split-pair" | "variant-without-tune";
+    reason:
+        | "no-tune"
+        | "ambiguous-split-pair"
+        | "split-pair-conflict"
+        | "variant-without-tune";
 }
 
 /** Two hymns with nearly the same title that the seed did not merge, for a human to judge. */

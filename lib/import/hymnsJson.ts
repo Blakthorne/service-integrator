@@ -39,7 +39,9 @@ import type {
  *   record's tune or, when it has none, the hymn's only other tune.
  * - A Great Hymns record with no tune, whose hymn has Rejoice records with
  *   tunes, is one half of a split pair: with one such tune it joins that
- *   song, and with several it stays a tune-less song, flagged.
+ *   song, and with several it stays a tune-less song, flagged. It also stays
+ *   one when that song already has an entry in Great Hymns, since a song has
+ *   one plain entry per book: nothing is dropped.
  */
 
 /** A book the seed creates, and the field of a record that holds its numbers. */
@@ -279,8 +281,29 @@ export function planHymnsJsonImport(records: readonly RawHymn[]): HymnsJsonImpor
     }
     const inBook = (record: SeedRecord, book: SeedBook) =>
         record.places.some((place) => place.book === book);
-    const splitPairs: { record: SeedRecord; candidates: string[] }[] = [];
+    const splitPairs: {
+        record: SeedRecord;
+        candidates: string[];
+        outcome: SeedSplitPair["outcome"];
+    }[] = [];
     const outcomes = new Map<SeedRecord, TuneOutcome>();
+    // The books each song has an entry without a variant note in, from the
+    // records with their own tune and then from each split pair merged, so a
+    // merge never gives a song a second such entry in a book.
+    const plainBooks = new Map<string, Set<string>>();
+    const addPlainBooks = (record: SeedRecord, tuneKey: string) => {
+        const key = songKeyOf(record.hymnKey, tuneKey);
+        const books = plainBooks.get(key) ?? new Set<string>();
+        plainBooks.set(key, books);
+        for (const place of record.places) {
+            books.add(place.book.code);
+        }
+    };
+    for (const record of read) {
+        if (record.tuneKey !== null && record.variantNote === null) {
+            addPlainBooks(record, record.tuneKey);
+        }
+    }
     for (const record of read) {
         const plainTunes = (only: (other: SeedRecord) => boolean) =>
             distinct(
@@ -301,16 +324,25 @@ export function planHymnsJsonImport(records: readonly RawHymn[]): HymnsJsonImpor
                     : { tuneKey: null, reason: "variant-without-tune" };
         } else if (inBook(record, GREAT) && !inBook(record, REJOICE)) {
             const tunes = plainTunes((other) => inBook(other, REJOICE));
-            if (tunes.length > 0) {
-                splitPairs.push({ record, candidates: tunes });
+            const taken = (tuneKey: string) =>
+                record.places.some((place) =>
+                    plainBooks
+                        .get(songKeyOf(record.hymnKey, tuneKey))
+                        ?.has(place.book.code)
+                );
+            if (tunes.length === 0) {
+                outcome = { tuneKey: null, reason: "no-tune" };
+            } else if (tunes.length > 1) {
+                splitPairs.push({ record, candidates: tunes, outcome: "ambiguous" });
+                outcome = { tuneKey: null, reason: "ambiguous-split-pair" };
+            } else if (taken(tunes[0])) {
+                splitPairs.push({ record, candidates: tunes, outcome: "conflict" });
+                outcome = { tuneKey: null, reason: "split-pair-conflict" };
+            } else {
+                splitPairs.push({ record, candidates: tunes, outcome: "merged" });
+                addPlainBooks(record, tunes[0]);
+                outcome = { tuneKey: tunes[0], from: "split-pair" };
             }
-            outcome =
-                tunes.length === 1
-                    ? { tuneKey: tunes[0], from: "split-pair" }
-                    : {
-                          tuneKey: null,
-                          reason: tunes.length > 1 ? "ambiguous-split-pair" : "no-tune",
-                      };
         } else {
             outcome = { tuneKey: null, reason: "no-tune" };
         }
@@ -443,10 +475,10 @@ export function planHymnsJsonImport(records: readonly RawHymn[]): HymnsJsonImpor
             entries: rows.entries.length,
         },
         entriesByBook: countByBook(rows.entries, (entry, book) => entry.bookCode === book.code),
-        splitPairs: splitPairs.map(({ record, candidates }): SeedSplitPair => ({
+        splitPairs: splitPairs.map(({ record, candidates, outcome }): SeedSplitPair => ({
             title: hymnTitle.get(record.hymnKey)!,
             label: labelOf(record.places.find((place) => place.book === GREAT)!),
-            outcome: candidates.length === 1 ? "merged" : "ambiguous",
+            outcome,
             tunes: candidates.map((key) => display(key)!),
         })),
         variants: read
