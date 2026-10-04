@@ -80,16 +80,18 @@ interface ItemSaves {
 }
 
 /**
- * A store seeded with `selections` (the plan's saved choices). With `save`
- * null nothing is saved (the saved choices could not be read, so the
- * database is taken to be unusable) and no save state is ever reported.
+ * A store seeded with `selections` (the plan's saved choices). Every change
+ * that alters what the database keeps is saved through `save`, whatever
+ * happened before: even when the saved choices could not be read, a save is
+ * tried, and says so when it fails, since the database may have recovered
+ * since (`getDb()` tries again after a failure).
  */
 export function createPlanSelectionsStore({
     selections: seed,
     save,
 }: {
     selections: ScheduleSelections;
-    save: SaveSelection | null;
+    save: SaveSelection;
 }): PlanSelectionsStore {
     let selections = seed;
     const items = new Map<string, ItemSaves>();
@@ -133,9 +135,6 @@ export function createPlanSelectionsStore({
     }
 
     function send(itemId: string, item: ItemSaves, selection: ScheduleSelection): void {
-        if (save === null) {
-            return;
-        }
         item.inFlight = true;
         let saving: Promise<SelectionSaveResult>;
         try {
@@ -179,7 +178,7 @@ export function createPlanSelectionsStore({
             const before = savedSelection(selections[action.itemId]);
             selections = scheduleSelectionsReducer(selections, action);
             const after = savedSelection(selections[action.itemId]);
-            if (save !== null && after !== null && !sameSavedSelection(before, after)) {
+            if (after !== null && !sameSavedSelection(before, after)) {
                 enqueue(action.itemId, after);
             }
             publish();

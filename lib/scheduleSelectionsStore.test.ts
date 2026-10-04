@@ -155,16 +155,16 @@ describe("createPlanSelectionsStore: what is saved", () => {
         expect(save).not.toHaveBeenCalled();
     });
 
-    test("with no way to save, changes still apply and no save is reported", () => {
-        const store = createPlanSelectionsStore({ selections: {}, save: null });
-        choose(store, "1", "custom");
-        type(store, "1", "x");
-        expect(store.getSnapshot()).toStrictEqual({
-            selections: { "1": { option: "custom", customText: "x" } },
-            saves: {},
+    test("each change is saved, whatever became of the saves before it", async () => {
+        const store = newStore();
+        choose(store, "1", "blank");
+        await calls[0].answer(LOCKED);
+        choose(store, "2", "blank");
+        expect(save).toHaveBeenLastCalledWith("2", { option: "blank" });
+        await calls[1].answer(OK);
+        expect(store.getSnapshot().saves).toStrictEqual({
+            "1": { status: "failed", message: LOCKED.message, attempt: 1, retrying: false },
         });
-        store.retry("1");
-        expect(store.getSnapshot().saves).toStrictEqual({});
     });
 });
 

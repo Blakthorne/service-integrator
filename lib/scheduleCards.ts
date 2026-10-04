@@ -137,11 +137,12 @@ export function catalogUnavailableMessage(error: string): string {
 
 /**
  * What the Schedule tab says when the plan's saved choices cannot be read
- * (see `PlanDetail.selectionsError`): every song shows its default, and
- * nothing chosen on the tab is saved, since the database is not answering.
+ * (see `PlanDetail.selectionsError`): every song shows its default. A choice
+ * made on the tab is still saved, since the database may answer by then,
+ * and its card says so when it is not.
  */
 export function selectionsUnavailableMessage(error: string): string {
-    return `${withReason("The saved choices couldn't be read", error)} Each song shows its default, and choices made here won't be saved.`;
+    return `${withReason("The saved choices couldn't be read", error)} Each song shows its default, and a choice made here says so if it can't be saved.`;
 }
 
 /**

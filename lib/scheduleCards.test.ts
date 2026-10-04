@@ -230,18 +230,18 @@ describe("catalogUnavailableMessage", () => {
 });
 
 describe("selectionsUnavailableMessage", () => {
-    test("says why the saved choices are missing, and that new ones won't be saved", () => {
+    test("says why the saved choices are missing, and that a choice says if it can't be saved", () => {
         expect(selectionsUnavailableMessage("no such table: schedule_selections")).toBe(
-            "The saved choices couldn't be read: no such table: schedule_selections. Each song shows its default, and choices made here won't be saved."
+            "The saved choices couldn't be read: no such table: schedule_selections. Each song shows its default, and a choice made here says so if it can't be saved."
         );
     });
 
     test("words the reason as catalogUnavailableMessage does", () => {
         expect(selectionsUnavailableMessage("The disk is full.")).toBe(
-            "The saved choices couldn't be read: The disk is full. Each song shows its default, and choices made here won't be saved."
+            "The saved choices couldn't be read: The disk is full. Each song shows its default, and a choice made here says so if it can't be saved."
         );
         expect(selectionsUnavailableMessage("  ")).toBe(
-            "The saved choices couldn't be read. Each song shows its default, and choices made here won't be saved."
+            "The saved choices couldn't be read. Each song shows its default, and a choice made here says so if it can't be saved."
         );
     });
 });

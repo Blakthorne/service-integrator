@@ -36,7 +36,7 @@ export interface ServiceScheduleProps {
     suggestions: Record<string, LinkSuggestion[]>;
     /** Why the catalog could not be read, or null; the tab then says numbers can't be shown. */
     catalogError: string | null;
-    /** Why the saved choices could not be read, or null; the tab then says choices won't be saved. */
+    /** Why the saved choices could not be read, or null; the tab then says each song shows its default. */
     selectionsError: string | null;
     /** Why the settings could not be read, or null; the tab then says the text uses the defaults. */
     settingsError: string | null;

@@ -60,7 +60,8 @@ export interface PlanContextValue {
     catalogError: string | null;
     /**
      * Why the saved choices could not be read, or null. Every song then
-     * starts on its default, and no choice is saved.
+     * starts on its default. Choices are still saved, each saying so when
+     * its save fails.
      */
     selectionsError: string | null;
     /**
@@ -115,8 +116,10 @@ function planKey({ serviceType, plan }: PlanDetail): string {
  * The choices' store for a provider that starts with `detail`: the one this
  * tab last showed with that very object, when Back brings the plan's pages
  * back as they were rendered; else a new one seeded with the saved choices,
- * which saves each change through `saveScheduleSelection`, unless the saved
- * choices could not be read.
+ * which saves each change through `saveScheduleSelection`. It tries every
+ * save, even when the saved choices could not be read: whether the database
+ * answers is known only when a save is tried, and it may have recovered
+ * since this `detail` was read. A save that fails says so on its card.
  */
 function storeFor(detail: PlanDetail): PlanSelectionsStore {
     const remembered =
@@ -128,11 +131,8 @@ function storeFor(detail: PlanDetail): PlanSelectionsStore {
     const planId = detail.plan.id;
     return createPlanSelectionsStore({
         selections: detail.selections,
-        save:
-            detail.selectionsError === null
-                ? (itemId, { option, customText }) =>
-                      saveScheduleSelection(serviceTypeId, planId, itemId, option, customText)
-                : null,
+        save: (itemId, { option, customText }) =>
+            saveScheduleSelection(serviceTypeId, planId, itemId, option, customText),
     });
 }
 
