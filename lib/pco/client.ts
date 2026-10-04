@@ -123,11 +123,22 @@ function isAbortError(error: unknown): boolean {
     return name === "TimeoutError" || name === "AbortError";
 }
 
-/** One guarded request, retrying a short 429 once. Resolves to the JSON body. */
-async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
-    const init: RequestInit = {
+/** Turns a 2xx response into what the request resolves to. */
+type ReadBody = (response: Response) => Promise<unknown>;
+
+/** A GET's body, which is always JSON. */
+const readJson: ReadBody = (response) => response.json();
+
+/**
+ * One guarded request, retrying a short 429 once. `init` carries what differs
+ * between calls (method, body, cache option); the auth headers, the redirect
+ * refusal and the timeout are added here, so no caller can leave them out.
+ * Resolves to `read` of the 2xx response.
+ */
+async function request(url: URL, init: RequestInit, read: ReadBody): Promise<unknown> {
+    const guarded: RequestInit = {
+        ...init,
         headers: pcoAuthHeaders(),
-        ...PCO_CACHE_POLICY[kind],
         // Following a redirect would re-send the token to an unguarded URL
         // (even same-origin, e.g. /people/v2), so a 3xx makes fetch reject.
         redirect: "error",
@@ -135,7 +146,7 @@ async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
     const path = url.pathname + url.search;
     // A fresh timeout for each attempt; it also bounds reading the body.
     const attempt = () =>
-        fetch(url.href, { ...init, signal: AbortSignal.timeout(PCO_TIMEOUT_MS) });
+        fetch(url.href, { ...guarded, signal: AbortSignal.timeout(PCO_TIMEOUT_MS) });
 
     try {
         let response = await attempt();
@@ -152,10 +163,10 @@ async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
                 throw new PcoError(response.status, path);
             }
         }
-        return await response.json();
+        return await read(response);
     } catch (error) {
         if (isAbortError(error)) {
-            // The path only: init holds the Authorization header.
+            // The path only: the request init holds the Authorization header.
             throw new Error(
                 `Planning Center did not respond within ${PCO_TIMEOUT_MS / 1000} s (${path})`,
                 { cause: error }
@@ -171,7 +182,7 @@ async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
  * leaves the Services API, and PcoError on a non-2xx response.
  */
 export async function pcoFetch<T>(path: string, kind: PcoResourceKind): Promise<T> {
-    return (await request(servicesUrl(path), kind)) as T;
+    return (await request(servicesUrl(path), PCO_CACHE_POLICY[kind], readJson)) as T;
 }
 
 /** What pcoFetchAll collects across every page of a list endpoint. */
@@ -194,6 +205,7 @@ export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResour
     kind: PcoResourceKind,
     { maxPages = DEFAULT_MAX_PAGES }: { maxPages?: number } = {}
 ): Promise<PcoPages<T, I>> {
+    const init = PCO_CACHE_POLICY[kind];
     const data: T[] = [];
     const included: I[] = [];
     const seen = new Set<string>();
@@ -206,7 +218,7 @@ export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResour
                 `Planning Center returned more than ${maxPages} pages for ${path}`
             );
         }
-        const page = (await request(url, kind)) as PcoListResponse<T, I>;
+        const page = (await request(url, init, readJson)) as PcoListResponse<T, I>;
         data.push(...page.data);
         for (const resource of page.included ?? []) {
             const key = `${resource.type}:${resource.id}`;
