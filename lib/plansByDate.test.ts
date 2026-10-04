@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
     PLAN_DATES_PER_PAGE,
+    describeMonthOption,
     groupPlansByDate,
+    jumpToMonth,
     localYmd,
     pageOfMonth,
     planMonths,
@@ -234,5 +236,68 @@ describe("pageOfMonth", () => {
         expect(pageOfMonth(many, "2026-07")).toBe(2);
         expect(pageOfMonth(PAST, "2026-06")).toBeNull();
         expect(pageOfMonth([], "2026-06")).toBeNull();
+    });
+});
+
+describe("describeMonthOption", () => {
+    test("words a month with how many dates it has, in the singular for one", () => {
+        // In the order the dates reach them: newest first.
+        const [april, march] = planMonths(["2026-04-12", "2026-04-05", "2026-03-29"]);
+
+        expect(describeMonthOption(april)).toBe("April 2026 (2 dates)");
+        expect(describeMonthOption(march)).toBe("March 2026 (1 date)");
+    });
+});
+
+describe("jumpToMonth", () => {
+    /** 60 dates, newest first, two to a month back from December 2025: three pages of 25, 25 and 10. */
+    const dates = Array.from({ length: 60 }, (_, index) =>
+        new Date(Date.UTC(2025, 11 - Math.floor(index / 2), index % 2 === 0 ? 21 : 7))
+            .toISOString()
+            .slice(0, 10)
+    );
+
+    test("goes to the page that holds the month's first date, and says which page of how many", () => {
+        const months = planMonths(dates);
+        // The 14th month in the list starts at the 27th date: the second page.
+        const target = months[13];
+
+        expect(jumpToMonth(dates, target.month)).toEqual({
+            ok: true,
+            page: 2,
+            message: `Showing ${target.label}: page 2 of 3.`,
+        });
+    });
+
+    test("the first month is page 1, which the list shows without a ?page=", () => {
+        const [first] = planMonths(dates);
+
+        expect(jumpToMonth(dates, first.month)).toMatchObject({ ok: true, page: 1 });
+    });
+
+    test("pages as many dates as it is told to", () => {
+        expect(jumpToMonth(["2026-10-04", "2026-09-27", "2026-08-30"], "2026-08", 1)).toEqual({
+            ok: true,
+            page: 3,
+            message: "Showing August 2026: page 3 of 3.",
+        });
+    });
+
+    test("a list that fits one page is page 1 of 1", () => {
+        expect(jumpToMonth(["2026-10-04"], "2026-10")).toEqual({
+            ok: true,
+            page: 1,
+            message: "Showing October 2026: page 1 of 1.",
+        });
+    });
+
+    test("no month chosen asks for one, and a month the list has not got says so", () => {
+        expect(jumpToMonth(dates, "")).toEqual({ ok: false, message: "Choose a month to jump to." });
+        expect(jumpToMonth(dates, "1999-01")).toEqual({ ok: false, message: "No plans are in that month." });
+        expect(jumpToMonth([], "2026-10")).toEqual({ ok: false, message: "No plans are in that month." });
+    });
+
+    test("never trusts the value: text that is not a month finds no page", () => {
+        expect(jumpToMonth(dates, "../../etc")).toEqual({ ok: false, message: "No plans are in that month." });
     });
 });

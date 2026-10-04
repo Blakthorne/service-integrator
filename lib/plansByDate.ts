@@ -139,3 +139,36 @@ export function pageOfMonth(
     const index = dates.findIndex((date) => monthOf(date) === month);
     return index === -1 ? null : Math.floor(index / perPage) + 1;
 }
+
+/** How "Jump to month" words a month in its list: "October 2026 (4 dates)". */
+export function describeMonthOption(month: PlanMonth): string {
+    return `${month.label} (${month.dates} ${month.dates === 1 ? "date" : "dates"})`;
+}
+
+/** What choosing a month in "Jump to month" does: the page to show, or why nothing happens. */
+export type MonthJump =
+    | { ok: true; page: number; message: string }
+    | { ok: false; message: string };
+
+/**
+ * What "Jump to month" does when `month` (`YYYY-MM`, "" for none chosen) is
+ * chosen from the months of `dates`, paged `perPage` to a page: the page
+ * that holds the month's first date, with the sentence a status region
+ * announces ("Showing October 2026: page 2 of 5."), or why it cannot (no
+ * month chosen, or a month the list no longer has).
+ */
+export function jumpToMonth(
+    dates: readonly string[],
+    month: string,
+    perPage: number = PLAN_DATES_PER_PAGE
+): MonthJump {
+    if (month === "") {
+        return { ok: false, message: "Choose a month to jump to." };
+    }
+    const page = pageOfMonth(dates, month, perPage);
+    if (page === null) {
+        return { ok: false, message: "No plans are in that month." };
+    }
+    const totalPages = Math.max(1, Math.ceil(dates.length / perPage));
+    return { ok: true, page, message: `Showing ${monthLabel(month)}: page ${page} of ${totalPages}.` };
+}
