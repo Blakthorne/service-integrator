@@ -3,7 +3,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { SettingsFormState } from "@/app/(app)/settings/actions";
 import { IDLE_FORM, formError, type FormValues } from "@/lib/forms";
-import { sameValues } from "@/lib/settingsForms";
+import { isSaved, valuesAfterSave } from "@/lib/settingsForms";
 
 /** What a form says when its action could not even be called: no session, or a failed request. */
 export const COULD_NOT_SAVE_MESSAGE =
@@ -39,9 +39,11 @@ export interface SettingsForm {
  * back. An action that cannot be called at all (no session, a failed
  * request) shows `COULD_NOT_SAVE_MESSAGE`.
  *
- * Once a save succeeds the fields take what it stored (a trimmed number).
- * The props are not followed: a revalidation, after a save or Sync now, must
- * never overwrite what is being typed.
+ * Once a save succeeds the fields are exactly the ones it posted, holding
+ * what it stored (a trimmed number: `valuesAfterSave`), and `saved` is true
+ * until one is edited (`isSaved`). The props are not followed: a
+ * revalidation, after a save or Sync now, must never overwrite what is being
+ * typed.
  */
 export function useSettingsForm(
     initial: FormValues,
@@ -59,9 +61,7 @@ export function useSettingsForm(
         try {
             const next = await save(formData);
             setState(next);
-            if (next.status === "success") {
-                setValues((current) => ({ ...current, ...next.values }));
-            }
+            setValues((current) => valuesAfterSave(current, next));
         } catch (error) {
             console.error("Saving the settings failed:", error);
             setState(formError(COULD_NOT_SAVE_MESSAGE));
@@ -80,7 +80,7 @@ export function useSettingsForm(
                 setValues((current) => ({ ...current, [name]: value }));
             }
         },
-        saved: state.status === "success" && sameValues(values, state.values),
+        saved: isSaved(values, state),
         onSubmit: (event) => {
             // The browser's own submit would load a page.
             event.preventDefault();

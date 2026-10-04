@@ -1,4 +1,4 @@
-import { readValues, type FieldErrors, type FormValues } from "./forms";
+import { readValues, type FieldErrors, type FormState, type FormValues } from "./forms";
 import {
     parseHeaderLabel,
     parseSetting,
@@ -190,4 +190,22 @@ export function readHymnalNotesForm(formData: FormData): SettingsFormRead {
 export function sameValues(a: FormValues, b: FormValues): boolean {
     const names = Object.keys(a);
     return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
+}
+
+/**
+ * What a form's fields hold once its action has answered with `state`: after
+ * a save, exactly the fields the save posted and what each now holds (a
+ * trimmed number), else what they held. The saved fields replace the held
+ * ones rather than add to them: a form's fields can change between renders
+ * (the Schedule text form lists the service types Planning Center gave it,
+ * and a later read may fail), and a field the form no longer has must not
+ * stay behind to make the form look unsaved.
+ */
+export function valuesAfterSave(current: FormValues, state: FormState): FormValues {
+    return state.status === "success" ? state.values : current;
+}
+
+/** True while a form that shows `values` shows exactly what `state` says was saved, so its "Saved." is still true. */
+export function isSaved(values: FormValues, state: FormState): boolean {
+    return state.status === "success" && sameValues(values, state.values);
 }

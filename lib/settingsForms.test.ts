@@ -1,15 +1,18 @@
 import { describe, expect, test } from "vitest";
 import { parsePcoId } from "@/lib/pco";
+import { IDLE_FORM, formError, formSuccess } from "./forms";
 import {
     CATEGORY_NAME_FIELD,
     CCLI_LICENSE_NUMBER_FIELD,
     INCLUDES_TUNE_FIELD,
     NUMBER_SEPARATOR_FIELD,
     headerLabelField,
+    isSaved,
     readCopyrightForm,
     readHymnalNotesForm,
     readScheduleTextForm,
     sameValues,
+    valuesAfterSave,
 } from "./settingsForms";
 import { HEADER_LABEL_MAX_LENGTH, NUMBER_SEPARATOR_MAX_LENGTH, SETTING_KEYS } from "./settings";
 
@@ -352,5 +355,58 @@ describe("sameValues", () => {
 
     test("tells a space from nothing", () => {
         expect(sameValues({ numberSeparator: " / " }, { numberSeparator: "/" })).toBe(false);
+    });
+});
+
+describe("valuesAfterSave", () => {
+    const HELD = { "headerLabel-1405391": "Sunday AM", numberSeparator: " | " };
+
+    test("is what the save stored, which is what each field now holds", () => {
+        const saved = formSuccess("Saved.", { ccliLicenseNumber: "7654321" });
+        expect(valuesAfterSave({ ccliLicenseNumber: "  7654321 " }, saved)).toEqual({
+            ccliLicenseNumber: "7654321",
+        });
+    });
+
+    test("drops a field the form no longer has, so it cannot make the form look unsaved", () => {
+        // Planning Center answered, then failed: the labels' fields are gone, the separator's is left.
+        expect(valuesAfterSave(HELD, formSuccess("Saved.", { numberSeparator: " | " }))).toEqual({
+            numberSeparator: " | ",
+        });
+    });
+
+    test("leaves what the fields held when the save was refused or has not happened", () => {
+        expect(valuesAfterSave(HELD, formError("Nothing was saved."))).toBe(HELD);
+        expect(valuesAfterSave(HELD, IDLE_FORM)).toBe(HELD);
+    });
+});
+
+describe("isSaved", () => {
+    test("is true while the form shows what the last save stored", () => {
+        const saved = formSuccess("Saved.", { numberSeparator: " | " });
+        expect(isSaved({ numberSeparator: " | " }, saved)).toBe(true);
+    });
+
+    test("is false once a field is edited, and true again when it is put back", () => {
+        const saved = formSuccess("Saved.", { numberSeparator: " | " });
+        expect(isSaved({ numberSeparator: " |" }, saved)).toBe(false);
+        expect(isSaved({ numberSeparator: " | " }, saved)).toBe(true);
+    });
+
+    test("is false when the form has a field the save did not post, as a service type that appeared since", () => {
+        const saved = formSuccess("Saved.", { numberSeparator: " | " });
+        expect(isSaved({ numberSeparator: " | ", "headerLabel-1486055": "" }, saved)).toBe(false);
+    });
+
+    test("is false before a save, and after a refusal", () => {
+        expect(isSaved({ numberSeparator: " | " }, IDLE_FORM)).toBe(false);
+        expect(isSaved({ numberSeparator: " | " }, formError("Nothing was saved."))).toBe(false);
+    });
+
+    test("is true after a save when the fields vanished before it, once the held values were replaced", () => {
+        const held = { "headerLabel-1405391": "Sunday AM", numberSeparator: " | " };
+        const saved = formSuccess("Saved.", { numberSeparator: " | " });
+        expect(isSaved(held, saved)).toBe(false);
+        expect(isSaved(valuesAfterSave(held, saved), saved)).toBe(true);
     });
 });
