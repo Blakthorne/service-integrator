@@ -505,3 +505,31 @@ export interface LinkSuggestion extends CatalogMatch {
      */
     pcoSongId: string | null;
 }
+
+/** A Planning Center song with no catalog song yet, with the catalog songs it may be. */
+export interface UnlinkedPcoSong {
+    pcoSong: MirroredPcoSong;
+    /** The best few suggestions, best first (see `suggestLinks` in lib/reconcile.ts). */
+    suggestions: LinkSuggestion[];
+}
+
+/** A link a sync made on its own, as Reconcile lists it for review, with Undo. */
+export interface AutoLinkedSong extends CatalogMatch {
+    pcoSongId: string;
+    /** The Planning Center song's title; null when the mirror lacks it. */
+    pcoTitle: string | null;
+    linkedAt: string;
+}
+
+/** A catalog song as a picker lists it: enough to find it, label it and link it. */
+export interface CatalogSongOption {
+    songId: number;
+    /** Its hymn's title. */
+    title: string;
+    /** Its tune's name; null when the tune is unknown. */
+    tuneName: string | null;
+    /** Its entries' labels, in book order. */
+    labels: string[];
+    /** The Planning Center song it is linked to, or null. */
+    pcoSongId: string | null;
+}
