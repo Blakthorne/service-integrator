@@ -1,4 +1,4 @@
-import type { Book } from "@/lib/domain";
+import type { Book, SongMarkKind } from "@/lib/domain";
 import {
     readId,
     readOptionalPositiveInteger,
@@ -10,17 +10,27 @@ import { readTuneHint, tunesNamedBy, type CatalogIndex } from "@/lib/reconcile";
 import { formatCount } from "./counts";
 import { parseCatalogId } from "./ids";
 import { formatEntryLabel } from "./labels";
+import { isSongMarkKind } from "./marks";
 
 /**
- * The new-song form (`/catalog/songs/new`): its fields, what it starts with
- * (prefilled from a Planning Center song's title), and the checks on what it
- * posts that need no database. Pure and safe on both sides; the checks that
- * need the catalog (a title or name already taken, a song or number that
- * exists) are in `lib/db/catalogWrites.ts`.
+ * The catalog's forms: their fields, and the checks on what they post that
+ * need no database. Pure and safe on both sides; the checks that need the
+ * catalog (a title or name already taken, a song or number that exists)
+ * are in `lib/db/catalogWrites.ts` (the new-song form) and
+ * `lib/db/catalogEdit.ts` (the rest).
  *
- * A song is one hymn to one tune. The form chooses the hymn (one in the
- * catalog, or a new title), the tune (one in the catalog, a new name, or
- * none) and, optionally, the song's first entry in a book.
+ * The new-song form (`/catalog/songs/new`) comes first, with what it starts
+ * with (prefilled from a Planning Center song's title). A song is one hymn
+ * to one tune. The form chooses the hymn (one in the catalog, or a new
+ * title), the tune (one in the catalog, a new name, or none) and,
+ * optionally, the song's first entry in a book.
+ *
+ * Then the forms that edit the catalog, each with its fields (`…_FIELDS`),
+ * the parts that show one error each, and a reader that returns the typed
+ * input or every part's problem at once (`FormCheck`): a song's marks,
+ * entries, hymns and tunes and their other names, merges, books and the
+ * book CSV upload. An id posted in a hidden field goes through its parser
+ * (convention 19); one that does not parse is an error on the part it names.
  */
 
 /** The fields the form posts, each as text. */
@@ -408,4 +418,99 @@ export function draftFromPcoTitle(pcoTitle: string, index: CatalogIndex): NewSon
         tuneSearch:
             values.tune === "existing" && values.tuneId === "" ? cleanText(hintName) : "",
     };
+}
+
+// ---------------------------------------------------------------------------
+// The forms that edit the catalog
+// ---------------------------------------------------------------------------
+
+/** What a form's reader made of it: the typed input, or every part's problem at once. */
+export type FormCheck<T, P extends string> =
+    | { ok: true; input: T }
+    | { ok: false; fieldErrors: FieldErrors<P> };
+
+/** One part's reading: its value, or the message for its error. */
+type PartRead<T> = { ok: true; value: T } | { ok: false; message: string };
+
+/**
+ * A form's check from its parts' readings: the input `build` makes of their
+ * values when every part read, else each failed part's message.
+ */
+function checkParts<P extends string, R extends Record<P, PartRead<unknown>>, T>(
+    parts: R,
+    build: (values: { [K in keyof R]: R[K] extends PartRead<infer V> ? V : never }) => T
+): FormCheck<T, P> {
+    const fieldErrors: FieldErrors<P> = {};
+    const values = {} as Record<string, unknown>;
+    for (const [part, read] of Object.entries(parts) as [P, PartRead<unknown>][]) {
+        if (read.ok) {
+            values[part] = read.value;
+        } else {
+            fieldErrors[part] = { message: read.message };
+        }
+    }
+    return Object.keys(fieldErrors).length > 0
+        ? { ok: false, fieldErrors }
+        : { ok: true, input: build(values as Parameters<typeof build>[0]) };
+}
+
+/** An id from a (usually hidden) field, or `message` when it does not parse. */
+function readCatalogId(formData: FormData, name: string, message: string): PartRead<number> {
+    const id = readId(formData, name, parseCatalogId);
+    return id === null ? { ok: false, message } : { ok: true, value: id };
+}
+
+/**
+ * Optional one-line text: cleaned with `cleanText`, null when blank, and
+ * refused past `max` characters with a message about `what`.
+ */
+function readOptionalLine(
+    formData: FormData,
+    name: string,
+    max: number,
+    what: string
+): PartRead<string | null> {
+    const text = cleanText(readString(formData, name));
+    if (text.length > max) {
+        return { ok: false, message: `${what} has at most ${formatCount(max)} characters.` };
+    }
+    return { ok: true, value: text === "" ? null : text };
+}
+
+// Marks ----------------------------------------------------------------------
+
+/** The longest note on a mark. */
+export const MARK_NOTE_MAX_LENGTH = 200;
+
+/** The fields the song page's Mark and Unmark post: the song and the mark (hidden), and Mark's note. */
+export const SONG_MARK_FIELDS = ["songId", "mark", "note"] as const;
+
+/** The parts of the mark forms, each of which shows at most one error. */
+export type SongMarkPart = "song" | "mark" | "note";
+
+/** A mark to put on a song, or take off it (Unmark ignores the note). */
+export interface SongMarkInput {
+    songId: number;
+    mark: SongMarkKind;
+    /** Null when left blank. */
+    note: string | null;
+}
+
+/**
+ * Read the song page's Mark or Unmark form: the song's id, the mark (one
+ * this build knows: "to-learn") and an optional note of at most
+ * `MARK_NOTE_MAX_LENGTH` characters, cleaned with `cleanText`.
+ */
+export function validateSongMark(formData: FormData): FormCheck<SongMarkInput, SongMarkPart> {
+    const mark = readString(formData, "mark");
+    return checkParts(
+        {
+            song: readCatalogId(formData, "songId", "That song is not in the catalog."),
+            mark: isSongMarkKind(mark)
+                ? { ok: true, value: mark }
+                : { ok: false, message: "That is not a mark the catalog knows." },
+            note: readOptionalLine(formData, "note", MARK_NOTE_MAX_LENGTH, "A note"),
+        },
+        ({ song, mark, note }) => ({ songId: song, mark, note })
+    );
 }

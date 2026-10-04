@@ -20,6 +20,7 @@ import {
     seedHymn,
     seedPcoSong,
     seedSong,
+    seedSongMark,
     seedTune,
 } from "./testing";
 
@@ -236,6 +237,7 @@ describe("listCatalogSongs", () => {
             pcoSongId: "1001",
             linkedBy: "import",
             lastScheduledAt: null,
+            marks: [],
             entries: [
                 {
                     id: entries.amazingGraceRejoice,
@@ -341,6 +343,19 @@ describe("listCatalogSongs", () => {
         });
     });
 
+    test("gives each song its marks, leaving out a mark this build does not know", () => {
+        const { songs } = seedCatalog();
+        seedSongMark(db, songs.doxology, { note: "For Advent" });
+        seedSongMark(db, songs.rejoice, { mark: "newer-mark" });
+        seedSongMark(db, songs.allPeople);
+        seedSongMark(db, songs.allPeople, { mark: "newer-mark" });
+        const rows = new Map(listCatalogSongs(db).map((row) => [row.id, row.marks]));
+        expect(rows.get(songs.doxology)).toEqual(["to-learn"]);
+        expect(rows.get(songs.allPeople)).toEqual(["to-learn"]);
+        expect(rows.get(songs.rejoice)).toEqual([]);
+        expect(rows.get(songs.amazingGrace)).toEqual([]);
+    });
+
     test("runs four queries, however many songs there are", () => {
         seedCatalog();
         expect(countQueries(() => listCatalogSongs(db))).toBe(4);
@@ -381,8 +396,27 @@ describe("findCatalogSong", () => {
             },
             otherTunes: [],
             otherHymns: [],
+            marks: [],
         });
         expect(labels(detail!)).toEqual(["R-108", "R-109", "G-247", "Chorus Book"]);
+    });
+
+    test("gives the song's marks with their notes, and its relatives' marks", () => {
+        const { songs } = catalog;
+        seedSongMark(db, songs.thankYouOwnTune, {
+            note: "For Thanksgiving",
+            createdAt: "2026-10-01T09:00:00.000Z",
+        });
+        seedSongMark(db, songs.thankYouOwnTune, { mark: "newer-mark" });
+        seedSongMark(db, songs.thankYouLynch);
+        const detail = findCatalogSong(db, songs.thankYouOwnTune);
+        expect(detail?.marks).toEqual([
+            { mark: "to-learn", note: "For Thanksgiving", createdAt: "2026-10-01T09:00:00.000Z" },
+        ]);
+        expect(detail?.otherTunes.map(({ id, marks }) => [id, marks])).toEqual([
+            [songs.thankYouLynch, ["to-learn"]],
+            [songs.thankYouNoTune, []],
+        ]);
     });
 
     test("gives the hymn's other tunes by tune name, the unknown one last", () => {

@@ -204,6 +204,21 @@ export interface CatalogSong {
     notes: string | null;
 }
 
+/**
+ * A mark a person puts on a catalog song: "to-learn" shelves a song to
+ * introduce. A song has each mark at most once (see lib/catalog/marks.ts).
+ */
+export type SongMarkKind = "to-learn";
+
+/** One of a song's marks, with its note. */
+export interface SongMark {
+    mark: SongMarkKind;
+    /** What the mark is for, such as "For Advent"; null for none. */
+    note: string | null;
+    /** When the song was marked. */
+    createdAt: string;
+}
+
 /** Where a song appears in a book. */
 export interface Entry {
     id: number;
@@ -253,6 +268,8 @@ export interface CatalogSongSummary {
     lastScheduledAt: string | null;
     /** Its entries in book order, then by number or position. */
     entries: LabelledEntry[];
+    /** Its marks ("to-learn"), in the order `SONG_MARKS` lists them; empty when it has none. */
+    marks: SongMarkKind[];
 }
 
 /** A song with what its page shows: its hymn, its tune, its entries and its relatives. */
@@ -266,6 +283,8 @@ export interface CatalogSongDetail extends CatalogSong {
     otherTunes: CatalogSongSummary[];
     /** The tune's other songs: the other hymns sung to it, by title. Empty when the tune is unknown. */
     otherHymns: CatalogSongSummary[];
+    /** Its marks with their notes, in the order `SONG_MARKS` lists them. */
+    marks: SongMark[];
 }
 
 /** A row of the tunes list. */

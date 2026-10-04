@@ -30,6 +30,7 @@ describe("the old Unused Hymns page", () => {
             book: null,
             linked: "all",
             used: "never",
+            mark: "all",
             sort: "title",
             page: 1,
         });

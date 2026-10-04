@@ -13,6 +13,7 @@ import {
     seedScheduleSelection,
     seedSetting,
     seedSong,
+    seedSongMark,
     seedTune,
     seedWriteLog,
 } from "./testing";
@@ -421,6 +422,20 @@ describe("seedPcoTagGroup, seedPcoTag and seedPcoSongTag", () => {
         seedPcoSongTag(db, songId, tagId);
         expect(db.prepare("SELECT * FROM pco_song_tags").all().map((row) => ({ ...row }))).toEqual([
             { pco_song_id: songId, tag_id: "42" },
+        ]);
+    });
+});
+
+describe("seedSongMark", () => {
+    test("marks a song to learn, with no note, by default", () => {
+        const song = seedSong(db);
+        seedSongMark(db, song);
+        seedSongMark(db, song, { mark: "newer-mark", note: "Later", createdAt: "2026-10-05T08:00:00.000Z" });
+        expect(
+            db.prepare("SELECT * FROM song_marks WHERE song_id = ? ORDER BY mark").all(song)
+        ).toEqual([
+            { song_id: song, mark: "newer-mark", note: "Later", created_at: "2026-10-05T08:00:00.000Z" },
+            { song_id: song, mark: "to-learn", note: null, created_at: "2026-10-04T12:00:00.000Z" },
         ]);
     });
 });

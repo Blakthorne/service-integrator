@@ -35,6 +35,7 @@ function song(
         pcoSongId: null,
         linkedBy: null,
         lastScheduledAt: null,
+        marks: [],
         entries: entries.map(
             ([bookCode, label], index): LabelledEntry => ({
                 id: id * 100 + index,

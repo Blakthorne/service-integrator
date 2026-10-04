@@ -2,10 +2,12 @@ import { describe, expect, test } from "vitest";
 import { buildCatalogIndex, type IndexableSong } from "@/lib/reconcile";
 import {
     EMPTY_NEW_SONG,
+    MARK_NOTE_MAX_LENGTH,
     cleanText,
     draftFromPcoTitle,
     previewEntryLabel,
     validateNewSong,
+    validateSongMark,
     type NewSongBook,
     type NewSongValues,
 } from "./validation";
@@ -377,5 +379,55 @@ describe("draftFromPcoTitle", () => {
             tune: "new",
             tuneName: "PRITCHARD",
         });
+    });
+});
+
+/** A form as posted: each field's text. */
+function fields(values: Record<string, string>): FormData {
+    const formData = new FormData();
+    for (const [name, value] of Object.entries(values)) {
+        formData.set(name, value);
+    }
+    return formData;
+}
+
+describe("validateSongMark", () => {
+    test("reads the song, the mark and the note, cleaned", () => {
+        expect(
+            validateSongMark(fields({ songId: "12", mark: "to-learn", note: "  For   Advent " }))
+        ).toEqual({ ok: true, input: { songId: 12, mark: "to-learn", note: "For Advent" } });
+    });
+
+    test("reads a blank or missing note as none", () => {
+        expect(validateSongMark(fields({ songId: "12", mark: "to-learn", note: "  " }))).toEqual({
+            ok: true,
+            input: { songId: 12, mark: "to-learn", note: null },
+        });
+        expect(validateSongMark(fields({ songId: "12", mark: "to-learn" }))).toMatchObject({
+            ok: true,
+            input: { note: null },
+        });
+    });
+
+    test("refuses a song id, mark or note that is not one, each on its part", () => {
+        expect(
+            validateSongMark(
+                fields({ songId: "012", mark: "favourite", note: "x".repeat(MARK_NOTE_MAX_LENGTH + 1) })
+            )
+        ).toEqual({
+            ok: false,
+            fieldErrors: {
+                song: { message: "That song is not in the catalog." },
+                mark: { message: "That is not a mark the catalog knows." },
+                note: { message: "A note has at most 200 characters." },
+            },
+        });
+        expect(validateSongMark(fields({ mark: "to-learn" }))).toMatchObject({
+            ok: false,
+            fieldErrors: { song: expect.anything() },
+        });
+        expect(
+            validateSongMark(fields({ songId: "1", mark: "to-learn", note: "x".repeat(MARK_NOTE_MAX_LENGTH) }))
+        ).toMatchObject({ ok: true });
     });
 });

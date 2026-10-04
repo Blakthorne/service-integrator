@@ -220,6 +220,35 @@ export function seedEntry(db: DatabaseSync, fields: SeedEntryFields): number {
 }
 
 /**
+ * The fields of a song's mark; `seedSongMark` fills in the rest. The mark is
+ * plain text, so a test can store what a newer build might.
+ */
+export interface SeedSongMarkFields {
+    mark?: string;
+    note?: string | null;
+    createdAt?: string;
+}
+
+/**
+ * Mark catalog song `songId`: by default "to-learn", with no note, at
+ * 2026-10-04 12:00 UTC.
+ */
+export function seedSongMark(
+    db: DatabaseSync,
+    songId: number,
+    fields: SeedSongMarkFields = {}
+): void {
+    db.prepare(
+        "INSERT INTO song_marks (song_id, mark, note, created_at) VALUES (?, ?, ?, ?)"
+    ).run(
+        songId,
+        fields.mark ?? "to-learn",
+        fields.note ?? null,
+        fields.createdAt ?? "2026-10-04T12:00:00.000Z"
+    );
+}
+
+/**
  * The fields of an import run; `seedImportRun` fills in the rest. The kind and
  * status are plain text, so a test can store what a newer build might.
  */

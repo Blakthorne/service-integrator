@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
 import type { CatalogSongSummary, LabelledEntry } from "@/lib/domain";
 import {
+    CATALOG_MARKS,
     CATALOG_PAGE_SIZE,
     arrangeCatalogSongs,
     catalogTagIdsBySong,
+    countMarked,
     filterCatalogSongs,
     foldForSearch,
     isUsed,
@@ -64,6 +66,7 @@ function row(
                 label: labelOf(spec),
             })
         ),
+        marks: [],
         ...extra,
     };
 }
@@ -154,23 +157,25 @@ describe("parseCatalogSongsQuery", () => {
         book: null,
         linked: "all",
         used: "all",
+        mark: "all",
         sort: "title",
         page: 1,
     };
 
-    test("falls back to no search, every book, linked or not, used or not, by title, page 1", () => {
+    test("falls back to no search, every book, linked or not, used or not, marked or not, by title, page 1", () => {
         expect(parse("")).toEqual(DEFAULTS);
-        expect(parse("q=&book=&linked=&used=&sort=&page=")).toEqual(DEFAULTS);
+        expect(parse("q=&book=&linked=&used=&mark=&sort=&page=")).toEqual(DEFAULTS);
     });
 
     test("reads the search, trimmed, the book, the filters, the sort and the page", () => {
         expect(
-            parse("q=+amazing+grace+&book=G&linked=yes&used=never&sort=number&page=3")
+            parse("q=+amazing+grace+&book=G&linked=yes&used=never&mark=to-learn&sort=number&page=3")
         ).toEqual({
             q: "amazing grace",
             book: "G",
             linked: "yes",
             used: "never",
+            mark: "to-learn",
             sort: "number",
             page: 3,
         });
@@ -190,7 +195,7 @@ describe("parseCatalogSongsQuery", () => {
     });
 
     test("ignores a book, filter, sort or page it does not know", () => {
-        expect(parse("book=Q&linked=maybe&used=always&sort=tune&page=0")).toEqual(DEFAULTS);
+        expect(parse("book=Q&linked=maybe&used=always&mark=later&sort=tune&page=0")).toEqual(DEFAULTS);
         expect(parse("sort=Number&page=-2").sort).toBe("title");
     });
 
@@ -199,6 +204,14 @@ describe("parseCatalogSongsQuery", () => {
         expect(parse("linked=true").linked).toBe("all");
         expect(parse("used=Never").used).toBe("all");
         expect(parse("used=unused").used).toBe("all");
+    });
+
+    test("reads each mark, spelled exactly, so a bad value falls back", () => {
+        expect(CATALOG_MARKS).toEqual(["all", "to-learn"]);
+        expect(parse("mark=all").mark).toBe("all");
+        expect(parse("mark=to-learn").mark).toBe("to-learn");
+        expect(parse("mark=To-Learn").mark).toBe("all");
+        expect(parse("mark=to+learn").mark).toBe("all");
     });
 });
 
@@ -345,6 +358,58 @@ describe("the link and usage filters", () => {
     });
 });
 
+describe("the mark filter", () => {
+    const toLearn = row("To Learn", "TUNE A", [["R", 1]], { marks: ["to-learn"] });
+    const linkedToLearn = row("Linked, To Learn", "TUNE B", [["G", 2]], {
+        pcoSongId: "1002",
+        linkedBy: "manual",
+        marks: ["to-learn"],
+    });
+    const unmarked = row("Unmarked", "TUNE C", [["R", 3]]);
+    const LIST = [toLearn, linkedToLearn, unmarked];
+
+    function filter(fields: Partial<CatalogSongsQuery>): CatalogSongSummary[] {
+        return filterCatalogSongs(LIST, { q: "", book: null, linked: "all", used: "all", ...fields });
+    }
+
+    test("keeps every song for all marks, or with the mark left out", () => {
+        expect(filter({ mark: "all" })).toEqual(LIST);
+        expect(filter({})).toEqual(LIST);
+    });
+
+    test("keeps the songs with the mark", () => {
+        expect(filter({ mark: "to-learn" })).toEqual([toLearn, linkedToLearn]);
+    });
+
+    test("combines with the other filters and the search", () => {
+        expect(filter({ mark: "to-learn", linked: "yes" })).toEqual([linkedToLearn]);
+        expect(filter({ mark: "to-learn", book: "R" })).toEqual([toLearn]);
+        expect(filter({ mark: "to-learn", q: "linked" })).toEqual([linkedToLearn]);
+        expect(filter({ mark: "to-learn", q: "unmarked" })).toEqual([]);
+    });
+
+    test("applies before the list sorts and pages it, and to the export", () => {
+        const query = { q: "", book: null, linked: "all", used: "all", sort: "title", page: 1 } as const;
+        expect(arrangeCatalogSongs(LIST, { ...query, mark: "to-learn" }, BOOK_CODES)).toEqual([
+            linkedToLearn,
+            toLearn,
+        ]);
+        expect(selectCatalogSongs(LIST, { ...query, mark: "to-learn" }, BOOK_CODES, 1)).toEqual({
+            rows: [linkedToLearn],
+            page: 1,
+            totalPages: 2,
+            total: 2,
+        });
+        expect(arrangeCatalogSongs(LIST, query, BOOK_CODES)).toHaveLength(3);
+    });
+
+    test("counts the songs with a mark", () => {
+        expect(countMarked(LIST, "to-learn")).toBe(2);
+        expect(countMarked([unmarked], "to-learn")).toBe(0);
+        expect(countMarked([], "to-learn")).toBe(0);
+    });
+});
+
 describe("sortCatalogSongs", () => {
     test("sorts by title without regard to case, accents and punctuation, then by tune", () => {
         expect(titles(sortCatalogSongs(ROWS, "title", null, BOOK_CODES))).toEqual([
@@ -456,6 +521,7 @@ describe("arrangeCatalogSongs", () => {
         book: null,
         linked: "all",
         used: "all",
+        mark: "all",
         sort: "title",
         ...fields,
     });
@@ -512,6 +578,7 @@ describe("selectCatalogSongs", () => {
         book: null,
         linked: "all",
         used: "all",
+        mark: "all",
         sort: "title",
         page: 1,
         ...fields,
@@ -611,6 +678,7 @@ describe("the tag filter", () => {
             book: null,
             linked: "yes",
             used: "all",
+            mark: "all",
             sort: "title",
             page: 1,
         });
@@ -659,6 +727,7 @@ describe("the tag filter", () => {
             book: null,
             linked: "all",
             used: "all",
+            mark: "all",
             sort: "title",
             page: 1,
         };
