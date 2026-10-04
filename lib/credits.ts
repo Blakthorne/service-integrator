@@ -236,6 +236,99 @@ export function parseCredits(
     return credits ? { status: "ok", credits } : { status: "unparsed", raw };
 }
 
+/** The longest name a credit takes. */
+export const CREDIT_NAME_MAX_LENGTH = 100;
+
+/** The characters a name may not hold: they separate the convention's parts. */
+const NAME_SEPARATORS = /[:;,]/;
+
+/** True when `text` has a control character, such as a line break or a tab. */
+function hasControlCharacter(text: string): boolean {
+    for (const character of text) {
+        const code = character.codePointAt(0) ?? 0;
+        if (code < 0x20 || (code >= 0x7f && code < 0xa0)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** "Words, Music, Arr. or Trans.": the roles, to name them in a message. */
+function listRoles(roles: readonly string[]): string {
+    return roles.length <= 1
+        ? roles.join("")
+        : `${roles.slice(0, -1).join(", ")} or ${roles[roles.length - 1]}`;
+}
+
+/** What `checkCredits` made of credits typed in the app. */
+export type CreditsCheck =
+    /** Ready to write: one per role with names, in the order of the roles. */
+    | { ok: true; credits: Credit[] }
+    /** Why they cannot be written, fit to show. */
+    | { ok: false; message: string };
+
+/**
+ * Credits typed in the app (the credit editor, the new-song form), made
+ * ready to write with `renderCredits`: each name trimmed, a blank one left
+ * out, and a role given twice merged; each role spelled as `roles` spells
+ * it (matched without regard to case), in the order of `roles`, each name
+ * once per role, and a role left with no names dropped. No names at all is
+ * not refused: they write an empty author.
+ *
+ * Refused, with a message fit to show, when a role is not one of `roles`,
+ * or a name has a colon, semicolon or comma in it (they separate the
+ * convention's parts, so it would not read back as one name), a line
+ * break, or more than `CREDIT_NAME_MAX_LENGTH` characters. What it gives
+ * back reads back the same through `renderCredits` and `parseCredits`.
+ */
+export function checkCredits(credits: readonly Credit[], roles: readonly string[]): CreditsCheck {
+    const namesByRole = new Map<string, string[]>();
+    for (const credit of credits) {
+        const role = findRole(credit.role, roles);
+        if (role === null) {
+            return {
+                ok: false,
+                message: sentence(
+                    `${JSON.stringify(credit.role.trim())} is not a credit role: use ${listRoles(roles)}`
+                ),
+            };
+        }
+        const held = namesByRole.get(role) ?? [];
+        for (const typed of credit.names) {
+            const name = typed.trim();
+            if (name === "") {
+                continue;
+            }
+            if (NAME_SEPARATORS.test(name)) {
+                return {
+                    ok: false,
+                    message: `${JSON.stringify(name)} has a colon, semicolon or comma in it, which separate the credits in Planning Center: give each name on its own.`,
+                };
+            }
+            if (hasControlCharacter(name)) {
+                return { ok: false, message: `${JSON.stringify(name)} must be on one line.` };
+            }
+            if (name.length > CREDIT_NAME_MAX_LENGTH) {
+                return {
+                    ok: false,
+                    message: `A name is at most ${CREDIT_NAME_MAX_LENGTH} characters.`,
+                };
+            }
+            if (!held.includes(name)) {
+                held.push(name);
+            }
+        }
+        namesByRole.set(role, held);
+    }
+    return {
+        ok: true,
+        credits: roles.flatMap((role) => {
+            const names = namesByRole.get(role) ?? [];
+            return names.length > 0 ? [{ role, names }] : [];
+        }),
+    };
+}
+
 /** What a parse stores as a song's derived credits: its status, and its credits (none when unparsed). */
 export function songCreditsOf(parsed: CreditsParse): SongCredits {
     return {

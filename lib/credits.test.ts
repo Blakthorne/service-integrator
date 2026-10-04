@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+    CREDIT_NAME_MAX_LENGTH,
+    checkCredits,
     creditLineOf,
     parseCredits,
     renderCreditLine,
@@ -581,5 +583,92 @@ describe("songCreditsOf", () => {
         });
         expect(songCreditsOf(parseCredits("", ROLES))).toEqual({ status: "legacy", credits: [] });
         expect(songCreditsOf(parseCredits("Composer: A", ROLES))).toEqual({ status: "unparsed", credits: [] });
+    });
+});
+
+describe("checkCredits", () => {
+    test("trims names, drops blank ones, spells roles as the settings do and puts them in their order", () => {
+        expect(
+            checkCredits(
+                [
+                    { role: " music ", names: [" Lowell Mason ", ""] },
+                    { role: "WORDS", names: ["Isaac Watts", "  "] },
+                    { role: "Arr.", names: [] },
+                ],
+                ROLES
+            )
+        ).toEqual({
+            ok: true,
+            credits: [
+                { role: "Words", names: ["Isaac Watts"] },
+                { role: "Music", names: ["Lowell Mason"] },
+            ],
+        });
+    });
+
+    test("merges a role given twice, each name once", () => {
+        expect(
+            checkCredits(
+                [
+                    { role: "Words", names: ["A", "B"] },
+                    { role: "words", names: ["B", "C"] },
+                ],
+                ROLES
+            )
+        ).toEqual({ ok: true, credits: [{ role: "Words", names: ["A", "B", "C"] }] });
+    });
+
+    test("takes no names at all, which write an empty author", () => {
+        expect(checkCredits([], ROLES)).toEqual({ ok: true, credits: [] });
+        expect(checkCredits([{ role: "Words", names: [" "] }], ROLES)).toEqual({ ok: true, credits: [] });
+    });
+
+    test("refuses a role that is not one of the settings'", () => {
+        expect(checkCredits([{ role: "Composer", names: ["A"] }], ROLES)).toEqual({
+            ok: false,
+            message: '"Composer" is not a credit role: use Words, Music, Arr. or Trans.',
+        });
+        expect(checkCredits([{ role: "Words & Music", names: ["A"] }], ROLES)).toMatchObject({ ok: false });
+        expect(checkCredits([{ role: "Composer", names: ["A"] }], ["Text", "Tune"])).toEqual({
+            ok: false,
+            message: '"Composer" is not a credit role: use Text or Tune.',
+        });
+    });
+
+    test("refuses a name the convention could not read back as one name", () => {
+        expect(checkCredits([{ role: "Words", names: ["Newton, John"] }], ROLES)).toEqual({
+            ok: false,
+            message:
+                '"Newton, John" has a colon, semicolon or comma in it, which separate the credits in Planning Center: give each name on its own.',
+        });
+        for (const name of ["A: B", "A; B", "A\nB", "x".repeat(CREDIT_NAME_MAX_LENGTH + 1)]) {
+            expect([name, checkCredits([{ role: "Words", names: [name] }], ROLES).ok]).toEqual([name, false]);
+        }
+        expect(checkCredits([{ role: "Words", names: ["x".repeat(CREDIT_NAME_MAX_LENGTH)] }], ROLES).ok).toBe(true);
+        expect(checkCredits([{ role: "Words", names: ["Simon & Garfunkel", "Rodgers and Hammerstein"] }], ROLES)).toEqual({
+            ok: true,
+            credits: [{ role: "Words", names: ["Simon & Garfunkel", "Rodgers and Hammerstein"] }],
+        });
+    });
+
+    test("what it gives reads back the same through renderCredits and parseCredits", () => {
+        const typed: Credit[][] = [
+            [
+                { role: "Words", names: ["Isaac Watts"] },
+                { role: "Music", names: ["William Croft"] },
+            ],
+            [
+                { role: "Music", names: ["John Newton"] },
+                { role: "Words", names: ["John Newton"] },
+                { role: "Trans.", names: ["A & B", "C and D"] },
+            ],
+            [{ role: "Arr.", names: ["X"] }],
+        ];
+        for (const credits of typed) {
+            const checked = checkCredits(credits, ROLES);
+            expect(checked.ok).toBe(true);
+            const ready = checked.ok ? checked.credits : [];
+            expect(parseCredits(renderCredits(ready), ROLES)).toEqual({ status: "ok", credits: ready });
+        }
     });
 });
