@@ -9,11 +9,14 @@ import {
 import {
     SETTINGS_CARD_TITLES,
     SETTING_DESCRIPTIONS,
+    categoryLookupIntro,
     describeCategoryLookup,
     describeSettingIssue,
     headerLabelHint,
     headerLabelRows,
+    PCO_WAIT_MS,
     missingCategoryHelp,
+    pcoTimedOutReason,
     previewCopyrightFooter,
     previewHymnNote,
     previewNumbers,
@@ -219,5 +222,26 @@ describe("missingCategoryHelp", () => {
         expect(help).toContain("Planning Center's web app");
         expect(help).toContain("Services › Plans › item notes");
         expect(help).toContain("marked Missing");
+    });
+});
+
+describe("categoryLookupIntro", () => {
+    test("names the category being looked for", () => {
+        expect(categoryLookupIntro("Hymnal")).toBe(
+            'Looking for an item note category named "Hymnal" in each service type.'
+        );
+    });
+});
+
+describe("pcoTimedOutReason", () => {
+    test("says how many seconds the page waited", () => {
+        expect(pcoTimedOutReason(5000)).toBe("Planning Center did not answer within 5 seconds.");
+        expect(pcoTimedOutReason(PCO_WAIT_MS)).toBe(
+            `Planning Center did not answer within ${PCO_WAIT_MS / 1000} seconds.`
+        );
+    });
+
+    test("waits less than one of Planning Center's own timeouts, which the client sets at 15 s", () => {
+        expect(PCO_WAIT_MS).toBeLessThan(15_000);
     });
 });

@@ -146,6 +146,18 @@ function describeFailure(result: unknown): { message: string; status: number | n
     return { message, status };
 }
 
+/**
+ * A failed write's reason as one line: Planning Center's reasons or the
+ * error, then the status it answered with in brackets, unless the reason
+ * already says it (an error's own text does: "responded with status: 500").
+ */
+export function describeFailureLine(outcome: Extract<WriteOutcome, { ok: false }>): string {
+    const { message, status } = outcome;
+    return status === null || message.includes(String(status))
+        ? message
+        : `${message} (Planning Center answered ${status})`;
+}
+
 /** A row of the write log, in words. */
 export function describeWrite(row: WriteLogRow): WriteDescription {
     const itemNote = row.kind === "item-note" ? describeItemNote(row.payload) : null;

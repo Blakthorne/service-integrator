@@ -166,16 +166,34 @@ export function headerLabelHint(defaultLabel: string | null): string {
         : `Left blank, the header is "${defaultLabel}".`;
 }
 
-/** What the Schedule text card says when Planning Center could not give it the service types. */
+/**
+ * How long the Settings page waits for Planning Center before it says so and
+ * goes on without it. A page response that is still open holds up leaving
+ * the page (the router's navigation waits for it), so a Planning Center
+ * that hangs must not hold the page open for the 15 s of each of its
+ * timeouts.
+ */
+export const PCO_WAIT_MS = 5000;
+
+/** Why the Settings page stopped waiting for Planning Center: it is shown as the reason, beside what could not be read. */
+export function pcoTimedOutReason(ms: number): string {
+    return `Planning Center did not answer within ${Math.round(ms / 1000)} seconds.`;
+}
+
+/**
+ * What the Schedule text card says when Planning Center could not give it
+ * the service types. "Could not read", not "could not be reached": Planning
+ * Center may have answered with an error.
+ */
 export const SERVICE_TYPES_UNAVAILABLE_TEXT =
-    "Planning Center could not be reached, so the service types are not listed and their header labels cannot be edited now. The labels already saved are kept when you save.";
+    "Could not read the service types from Planning Center, so they are not listed and their header labels cannot be edited now. The labels already saved are kept when you save.";
 
 /** What the Schedule text card says when Planning Center has no service types. */
 export const NO_SERVICE_TYPES_TEXT = "Planning Center has no service types.";
 
-/** What the Hymnal notes card says when Planning Center could not be reached at all. */
+/** What the Hymnal notes card says when Planning Center could not give it the service types or their categories. */
 export const CATEGORIES_UNAVAILABLE_TEXT =
-    "Planning Center could not be reached, so its item note categories were not checked. Reload the page to try again.";
+    "Could not read the item note categories from Planning Center, so it is not known whether each service type has one. Reload the page to try again.";
 
 /** How a service type's item note category stands: what `describeCategoryLookup` reads. */
 export type CategoryLookupText =
@@ -220,6 +238,11 @@ export function describeCategoryLookup(lookup: CategoryLookupText): CategoryStat
                 detail: `Its item note categories could not be read: ${withFullStop(lookup.error)}`,
             };
     }
+}
+
+/** The sentence over the list of service types: which category is being looked for. */
+export function categoryLookupIntro(categoryName: string): string {
+    return `Looking for an item note category named "${categoryName}" in each service type.`;
 }
 
 /**

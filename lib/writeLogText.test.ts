@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { WriteLogEntry } from "./db/writeLog";
 import type { ItemNoteWritePayload, ItemNoteWriteResult } from "./queries/hymnNotes";
-import { NO_REASON_RECORDED, describeWrite, type WriteLogRow } from "./writeLogText";
+import {
+    NO_REASON_RECORDED,
+    describeFailureLine,
+    describeWrite,
+    type WriteLogRow,
+} from "./writeLogText";
 
 const IDS = { serviceTypeId: "1405391", planId: "81234567", itemId: "555001" };
 const PLACE = { ...IDS };
@@ -198,5 +203,25 @@ describe("describeWrite: rows it cannot read", () => {
     test("says the kind as it is for one this build does not know", () => {
         const unknown = { kind: "calendar" } as unknown as Pick<WriteLogRow, "kind">;
         expect(describeWrite(row(unknown)).what).toBe("calendar write");
+    });
+});
+
+describe("describeFailureLine", () => {
+    test("adds the status Planning Center answered with to its reasons", () => {
+        expect(
+            describeFailureLine({ ok: false, message: "category: must exist", status: 422 })
+        ).toBe("category: must exist (Planning Center answered 422)");
+    });
+
+    test("does not repeat a status the reason already says", () => {
+        const message =
+            "Planning Center API responded with status: 500 (/service_types/1/plans/2/items/3/item_notes)";
+        expect(describeFailureLine({ ok: false, message, status: 500 })).toBe(message);
+    });
+
+    test("is the reason alone when the log has no status", () => {
+        expect(describeFailureLine({ ok: false, message: "The request timed out", status: null })).toBe(
+            "The request timed out"
+        );
     });
 });
