@@ -2,8 +2,10 @@ import { describe, expect, test } from "vitest";
 import type { CatalogSongSummary, LabelledEntry } from "@/lib/domain";
 import {
     CATALOG_PAGE_SIZE,
+    arrangeCatalogSongs,
     filterCatalogSongs,
     foldForSearch,
+    isUsed,
     pageCatalogSongs,
     parseCatalogSongsQuery,
     selectCatalogSongs,
@@ -118,7 +120,7 @@ const titles = (rows: CatalogSongSummary[]) =>
     rows.map(({ title, tuneName }) => (tuneName ? `${title} (${tuneName})` : title));
 
 function search(q: string, book: string | null = null): CatalogSongSummary[] {
-    return filterCatalogSongs(ROWS, { q, book });
+    return filterCatalogSongs(ROWS, { q, book, linked: "all", used: "all" });
 }
 
 describe("foldForSearch", () => {
@@ -144,23 +146,39 @@ describe("parseCatalogSongsQuery", () => {
     const parse = (query: string) =>
         parseCatalogSongsQuery(new URLSearchParams(query), BOOK_CODES);
 
-    test("falls back to no search, every book, by title, page 1", () => {
-        expect(parse("")).toEqual({ q: "", book: null, sort: "title", page: 1 });
-        expect(parse("q=&book=&sort=&page=")).toEqual({
-            q: "",
-            book: null,
-            sort: "title",
-            page: 1,
-        });
+    const DEFAULTS: CatalogSongsQuery = {
+        q: "",
+        book: null,
+        linked: "all",
+        used: "all",
+        sort: "title",
+        page: 1,
+    };
+
+    test("falls back to no search, every book, linked or not, used or not, by title, page 1", () => {
+        expect(parse("")).toEqual(DEFAULTS);
+        expect(parse("q=&book=&linked=&used=&sort=&page=")).toEqual(DEFAULTS);
     });
 
-    test("reads the search, trimmed, the book, the sort and the page", () => {
-        expect(parse("q=+amazing+grace+&book=G&sort=number&page=3")).toEqual({
+    test("reads the search, trimmed, the book, the filters, the sort and the page", () => {
+        expect(
+            parse("q=+amazing+grace+&book=G&linked=yes&used=never&sort=number&page=3")
+        ).toEqual({
             q: "amazing grace",
             book: "G",
+            linked: "yes",
+            used: "never",
             sort: "number",
             page: 3,
         });
+    });
+
+    test("reads each value of the link and usage filters", () => {
+        expect(parse("linked=all").linked).toBe("all");
+        expect(parse("linked=yes").linked).toBe("yes");
+        expect(parse("linked=no").linked).toBe("no");
+        expect(parse("used=all").used).toBe("all");
+        expect(parse("used=never").used).toBe("never");
     });
 
     test("matches the book without regard to case, giving the catalog's spelling", () => {
@@ -168,14 +186,16 @@ describe("parseCatalogSongsQuery", () => {
         expect(parse("book=Cb").book).toBe("CB");
     });
 
-    test("ignores a book, sort or page it does not know", () => {
-        expect(parse("book=Q&sort=tune&page=0")).toEqual({
-            q: "",
-            book: null,
-            sort: "title",
-            page: 1,
-        });
+    test("ignores a book, filter, sort or page it does not know", () => {
+        expect(parse("book=Q&linked=maybe&used=always&sort=tune&page=0")).toEqual(DEFAULTS);
         expect(parse("sort=Number&page=-2").sort).toBe("title");
+    });
+
+    test("spells the link and usage filters exactly, so a bad value falls back", () => {
+        expect(parse("linked=YES").linked).toBe("all");
+        expect(parse("linked=true").linked).toBe("all");
+        expect(parse("used=Never").used).toBe("all");
+        expect(parse("used=unused").used).toBe("all");
     });
 });
 
@@ -259,6 +279,69 @@ describe("filterCatalogSongs", () => {
     });
 });
 
+describe("isUsed", () => {
+    test("is true for a song whose Planning Center song has a last scheduled date", () => {
+        expect(isUsed({ lastScheduledAt: "2026-09-27T08:00:00Z" })).toBe(true);
+    });
+
+    test("is false for a song with no date: not linked, or linked and never scheduled", () => {
+        expect(isUsed({ lastScheduledAt: null })).toBe(false);
+    });
+});
+
+describe("the link and usage filters", () => {
+    const notLinked = row("Not Linked", "TUNE A", [["R", 1]]);
+    const neverScheduled = row("Linked, Never Scheduled", "TUNE B", [["R", 2]], {
+        pcoSongId: "1002",
+        linkedBy: "manual",
+    });
+    const scheduled = row("Linked and Scheduled", "TUNE C", [["G", 3]], {
+        pcoSongId: "1003",
+        linkedBy: "auto",
+        lastScheduledAt: "2026-09-27T08:00:00Z",
+    });
+    const LIST = [notLinked, neverScheduled, scheduled];
+
+    function filter(fields: Partial<CatalogSongsQuery>): CatalogSongSummary[] {
+        return filterCatalogSongs(LIST, {
+            q: "",
+            book: null,
+            linked: "all",
+            used: "all",
+            ...fields,
+        });
+    }
+
+    test("keeps every song for any link and any usage", () => {
+        expect(filter({})).toEqual(LIST);
+    });
+
+    test("keeps the songs linked to a Planning Center song for linked yes", () => {
+        expect(filter({ linked: "yes" })).toEqual([neverScheduled, scheduled]);
+    });
+
+    test("keeps the songs that are not linked for linked no", () => {
+        expect(filter({ linked: "no" })).toEqual([notLinked]);
+    });
+
+    test("keeps the songs not linked and the linked ones never scheduled for used never", () => {
+        expect(filter({ used: "never" })).toEqual([notLinked, neverScheduled]);
+    });
+
+    test("combines the two: used never of the linked songs, or of the songs not linked", () => {
+        expect(filter({ linked: "yes", used: "never" })).toEqual([neverScheduled]);
+        expect(filter({ linked: "no", used: "never" })).toEqual([notLinked]);
+    });
+
+    test("combines with the search and the book", () => {
+        expect(filter({ q: "scheduled", used: "never" })).toEqual([neverScheduled]);
+        expect(filter({ q: "linked", linked: "no" })).toEqual([notLinked]);
+        expect(filter({ book: "R", used: "never" })).toEqual([notLinked, neverScheduled]);
+        expect(filter({ book: "G", used: "never" })).toEqual([]);
+        expect(filter({ book: "G", linked: "yes" })).toEqual([scheduled]);
+    });
+});
+
 describe("sortCatalogSongs", () => {
     test("sorts by title without regard to case, accents and punctuation, then by tune", () => {
         expect(titles(sortCatalogSongs(ROWS, "title", null, BOOK_CODES))).toEqual([
@@ -284,7 +367,7 @@ describe("sortCatalogSongs", () => {
     });
 
     test("sorts by number in the book, the front cover first", () => {
-        const great = filterCatalogSongs(ROWS, { q: "", book: "G" });
+        const great = filterCatalogSongs(ROWS, { q: "", book: "G", linked: "all", used: "all" });
         expect(
             sortCatalogSongs(great, "number", "G", BOOK_CODES).map(
                 (song) => song.entries.find(({ bookCode }) => bookCode === "G")?.label
@@ -362,10 +445,70 @@ describe("pageCatalogSongs", () => {
     });
 });
 
+describe("arrangeCatalogSongs", () => {
+    const query = (
+        fields: Partial<Omit<CatalogSongsQuery, "page">> = {}
+    ): Omit<CatalogSongsQuery, "page"> => ({
+        q: "",
+        book: null,
+        linked: "all",
+        used: "all",
+        sort: "title",
+        ...fields,
+    });
+
+    test("filters and then sorts, as the list does", () => {
+        const fields = query({ q: "thank you", sort: "number", book: "R" });
+        expect(arrangeCatalogSongs(ROWS, fields, BOOK_CODES)).toEqual([
+            thankYouOwnTune,
+            thankYouLynch,
+        ]);
+        expect(arrangeCatalogSongs(ROWS, query({ q: "thank you" }), BOOK_CODES)).toEqual([
+            thankYouLynch,
+            thankYouOwnTune,
+            thankYouNoTune,
+        ]);
+    });
+
+    test("applies the link and usage filters", () => {
+        const never = row("Never Scheduled", "TUNE", [["R", 7]], { pcoSongId: "9001" });
+        const used = row("Scheduled", "TUNE", [["R", 8]], {
+            pcoSongId: "9002",
+            lastScheduledAt: "2026-09-27T08:00:00Z",
+        });
+        const rows = [used, never, thankYouLynch];
+        expect(arrangeCatalogSongs(rows, query({ used: "never" }), BOOK_CODES)).toEqual([
+            never,
+            thankYouLynch,
+        ]);
+        expect(
+            arrangeCatalogSongs(rows, query({ linked: "yes", used: "never" }), BOOK_CODES)
+        ).toEqual([never]);
+        expect(arrangeCatalogSongs(rows, query({ linked: "no" }), BOOK_CODES)).toEqual([
+            thankYouLynch,
+        ]);
+    });
+
+    test("keeps every row the filters leave, however many pages they make", () => {
+        const many = Array.from({ length: 120 }, (_, index) =>
+            row(`Hymn ${String(index).padStart(3, "0")}`, null, [])
+        );
+        expect(arrangeCatalogSongs(many, query(), BOOK_CODES)).toEqual(many);
+    });
+
+    test("does not change the array it is given", () => {
+        const rows = [doxology, amazingGrace];
+        arrangeCatalogSongs(rows, query(), BOOK_CODES);
+        expect(rows).toEqual([doxology, amazingGrace]);
+    });
+});
+
 describe("selectCatalogSongs", () => {
     const query = (fields: Partial<CatalogSongsQuery>): CatalogSongsQuery => ({
         q: "",
         book: null,
+        linked: "all",
+        used: "all",
         sort: "title",
         page: 1,
         ...fields,
@@ -392,6 +535,26 @@ describe("selectCatalogSongs", () => {
                 1
             ).rows
         ).toEqual([thankYouLynch]);
+    });
+
+    test("applies the link and usage filters before it pages", () => {
+        const first = row("A Hymn", null, [], { pcoSongId: "9101" });
+        const second = row("B Hymn", null, [], { pcoSongId: "9102" });
+        const third = row("C Hymn", null, [], {
+            pcoSongId: "9103",
+            lastScheduledAt: "2026-09-27T08:00:00Z",
+        });
+        const rows = [third, second, first, thankYouLynch];
+        const never = query({ linked: "yes", used: "never" });
+        expect(selectCatalogSongs(rows, never, BOOK_CODES, 1)).toEqual({
+            rows: [first],
+            page: 1,
+            totalPages: 2,
+            total: 2,
+        });
+        expect(selectCatalogSongs(rows, { ...never, page: 2 }, BOOK_CODES, 1).rows).toEqual([
+            second,
+        ]);
     });
 
     test("gives every row on one page by default", () => {

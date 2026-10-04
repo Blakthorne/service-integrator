@@ -1,7 +1,7 @@
 "use client";
 
 import Segmented, { type SegmentedOption } from "@/app/components/ui/Segmented";
-import type { CatalogSort } from "@/lib/catalog/filter";
+import type { CatalogLinked, CatalogSort, CatalogUsed } from "@/lib/catalog/filter";
 import type { Book } from "@/lib/domain";
 import SearchBox from "../SearchBox";
 
@@ -16,32 +16,58 @@ const SORT_OPTIONS: readonly SegmentedOption<CatalogSort>[] = [
     { value: "number", label: "Number", title: "By number in the chosen book" },
 ];
 
+const LINKED_OPTIONS: readonly SegmentedOption<CatalogLinked>[] = [
+    { value: "all", label: "All" },
+    { value: "yes", label: "Linked", title: "Songs linked to a Planning Center song" },
+    { value: "no", label: "Not linked", title: "Songs with no Planning Center song yet" },
+];
+
+const USED_OPTIONS: readonly SegmentedOption<CatalogUsed>[] = [
+    { value: "all", label: "All" },
+    {
+        value: "never",
+        label: "Never scheduled",
+        title: "Not linked to a Planning Center song, or linked to one that was never scheduled",
+    },
+];
+
 interface CatalogSongsControlsProps {
     /** The search as the URL has it. */
     query: string;
     /** The chosen book's code, or `ALL_BOOKS`. */
     book: string;
+    linked: CatalogLinked;
+    used: CatalogUsed;
     sort: CatalogSort;
     books: readonly CatalogBookOption[];
     /** The count line, such as "12 of 921 songs". */
     summary: string;
     onQueryChange: (query: string) => void;
     onBookChange: (book: string) => void;
+    onLinkedChange: (linked: CatalogLinked) => void;
+    onUsedChange: (used: CatalogUsed) => void;
     onSortChange: (sort: CatalogSort) => void;
 }
 
 const GROUP_LABEL =
     "block text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400";
 
-/** The songs list's search, book filter and sort order, and the count of what they leave. */
+/**
+ * The songs list's search, book, Planning Center link and usage filters and
+ * sort order, and the count of what they leave.
+ */
 export default function CatalogSongsControls({
     query,
     book,
+    linked,
+    used,
     sort,
     books,
     summary,
     onQueryChange,
     onBookChange,
+    onLinkedChange,
+    onUsedChange,
     onSortChange,
 }: CatalogSongsControlsProps) {
     const bookOptions: SegmentedOption<string>[] = [
@@ -77,6 +103,24 @@ export default function CatalogSongsControls({
                         />
                     </div>
                 )}
+                <div className="max-w-full space-y-1">
+                    <span className={GROUP_LABEL}>Planning Center</span>
+                    <Segmented
+                        value={linked}
+                        options={LINKED_OPTIONS}
+                        onChange={onLinkedChange}
+                        ariaLabel="Filter by Planning Center link"
+                    />
+                </div>
+                <div className="max-w-full space-y-1">
+                    <span className={GROUP_LABEL}>Usage</span>
+                    <Segmented
+                        value={used}
+                        options={USED_OPTIONS}
+                        onChange={onUsedChange}
+                        ariaLabel="Filter by usage"
+                    />
+                </div>
                 <div className="max-w-full space-y-1">
                     <span className={GROUP_LABEL}>Sort</span>
                     <Segmented

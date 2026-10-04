@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatLastScheduled } from "@/lib/catalog/lastScheduled";
 import type { CatalogSongSummary } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import EntryLabels from "../EntryLabels";
@@ -12,6 +13,11 @@ interface SongsTableProps {
     caption: string;
     /** Whether to show each song's tune: the songs list does, a tune's page does not. */
     showTune: boolean;
+    /**
+     * Whether to show each song's Planning Center link and when it was last
+     * scheduled: the songs list does. Off by default.
+     */
+    showLink?: boolean;
     /** What the table says when there are no rows. */
     emptyMessage: string;
 }
@@ -40,10 +46,53 @@ function TuneName({ song }: { song: CatalogSongSummary }) {
 }
 
 /**
- * Songs as table rows: the title, the tune (unless `showTune` is off) and
- * the entry labels with their variant notes. A row's title is a real link to
- * the song, stretched over the row; the tune is its own link above it. On
- * phones the tune moves under the title instead of taking a column.
+ * A song's link to Planning Center: a "PCO" badge, with "auto" beside it when
+ * the sync made the link, and under it the date the song was last scheduled
+ * (or that it never was). A song that is not linked shows a dash.
+ */
+function PcoLink({ song }: { song: CatalogSongSummary }) {
+    if (song.pcoSongId === null) {
+        return (
+            <>
+                <span aria-hidden="true" className="text-gray-400 dark:text-gray-500">
+                    —
+                </span>
+                <span className="sr-only">Not linked to Planning Center</span>
+            </>
+        );
+    }
+    const scheduled = formatLastScheduled(song.lastScheduledAt);
+    return (
+        <>
+            <span className="inline-flex items-center gap-1.5">
+                <span
+                    title="Linked to a Planning Center song"
+                    className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
+                >
+                    PCO
+                </span>
+                {song.linkedBy === "auto" && (
+                    <span
+                        title="Linked automatically, by a sync"
+                        className="text-xs text-gray-500 dark:text-gray-400"
+                    >
+                        auto
+                    </span>
+                )}
+            </span>
+            <span className="block mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                {scheduled === null ? "Never scheduled" : `Last scheduled ${scheduled}`}
+            </span>
+        </>
+    );
+}
+
+/**
+ * Songs as table rows: the title, the tune (unless `showTune` is off), the
+ * entry labels with their variant notes and, with `showLink`, the Planning
+ * Center link. A row's title is a real link to the song, stretched over the
+ * row; the tune is its own link above it. On phones the tune and the link
+ * move under the title instead of taking columns.
  *
  * Links keep the default prefetch: song and tune pages read only the local
  * database, so prefetching the rows on screen costs no Planning Center
@@ -53,6 +102,7 @@ export default function SongsTable({
     rows,
     caption,
     showTune,
+    showLink = false,
     emptyMessage,
 }: SongsTableProps) {
     return (
@@ -71,13 +121,18 @@ export default function SongsTable({
                     <th scope="col" className={HEADER_CELL}>
                         Numbers
                     </th>
+                    {showLink && (
+                        <th scope="col" className={`${HEADER_CELL} hidden sm:table-cell`}>
+                            Planning Center
+                        </th>
+                    )}
                 </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {rows.length === 0 ? (
                     <tr>
                         <td
-                            colSpan={showTune ? 3 : 2}
+                            colSpan={2 + (showTune ? 1 : 0) + (showLink ? 1 : 0)}
                             className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
                         >
                             {emptyMessage}
@@ -105,6 +160,11 @@ export default function SongsTable({
                                         <TuneName song={song} />
                                     </span>
                                 )}
+                                {showLink && (
+                                    <span className="block sm:hidden mt-1">
+                                        <PcoLink song={song} />
+                                    </span>
+                                )}
                             </td>
                             {showTune && (
                                 <td className="hidden sm:table-cell px-6 py-3 text-sm align-top">
@@ -114,6 +174,11 @@ export default function SongsTable({
                             <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300 align-top">
                                 <EntryLabels entries={song.entries} />
                             </td>
+                            {showLink && (
+                                <td className="hidden sm:table-cell px-6 py-3 text-sm align-top">
+                                    <PcoLink song={song} />
+                                </td>
+                            )}
                         </tr>
                     ))
                 )}
