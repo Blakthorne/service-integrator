@@ -24,7 +24,11 @@ interface ChoiceFromListProps<T> {
     searchLabel: string;
     /** What the chosen option is, for the Change button's name: "hymn", "tune". */
     noun: string;
-    /** The id of the part's error, when it has one. */
+    /**
+     * The id of the part's error, when it has one. It describes the search
+     * field, or the Change button once an option is chosen (an error such as
+     * "the catalog already has this song" is about the option chosen).
+     */
     errorId?: string;
 }
 
@@ -86,6 +90,7 @@ export default function ChoiceFromList<T>({
                     type="button"
                     onClick={() => choose(null)}
                     aria-label={`Change the ${noun}: ${nameOf(chosen)}`}
+                    aria-describedby={errorId}
                     className="shrink-0 rounded-md px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 >
                     Change

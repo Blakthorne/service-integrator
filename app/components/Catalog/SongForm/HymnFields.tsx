@@ -62,6 +62,7 @@ export default function HymnFields({
                     options={MODE_OPTIONS}
                     onChange={(next) => onChange({ hymn: next })}
                     ariaLabel="Hymn"
+                    describedBy={errorId}
                 />
             </div>
             {mode === "existing" ? (

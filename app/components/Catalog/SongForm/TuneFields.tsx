@@ -67,6 +67,7 @@ export default function TuneFields({
                     options={MODE_OPTIONS}
                     onChange={(next) => onChange({ tune: next })}
                     ariaLabel="Tune"
+                    describedBy={errorId}
                 />
             </div>
             {mode === "existing" && (

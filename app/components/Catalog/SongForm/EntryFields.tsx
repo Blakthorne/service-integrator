@@ -60,6 +60,7 @@ export default function EntryFields({ books, values, onChange, error }: EntryFie
                     options={bookOptions}
                     onChange={(bookId) => onChange({ bookId })}
                     ariaLabel="Book"
+                    describedBy={errorId}
                 />
             </div>
             {book?.numbered && (
@@ -71,6 +72,7 @@ export default function EntryFields({ books, values, onChange, error }: EntryFie
                             options={PLACEMENT_OPTIONS}
                             onChange={(next) => onChange({ placement: next })}
                             ariaLabel={`Where ${book.name} has the song`}
+                            describedBy={errorId}
                         />
                     </div>
                     {placement === "number" ? (
