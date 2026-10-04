@@ -7,7 +7,8 @@ export type ScheduleOption = ScheduleSelection["option"];
 /**
  * The Schedule tab's choices, keyed by plan item ID: an option, custom text
  * typed before any option was chosen, or both. An item without an option
- * shows its default (see `defaultOption`).
+ * shows its default (see `defaultOption`). The choices saved for a plan
+ * (`PlanDetail.selections`) are one of these, so they seed it as they are.
  */
 export type ScheduleSelections = Readonly<
     Record<string, Partial<ScheduleSelection>>
@@ -61,6 +62,36 @@ export function scheduleSelectionsReducer(
                 [action.itemId]: { ...current, customText: action.text },
             };
     }
+}
+
+/**
+ * What the database keeps of an item's selection (`schedule_selections`):
+ * its option, with the custom text when the option is Custom. Null when no
+ * option has been chosen: text typed in the custom box while the default
+ * shows prints nothing, so it is not saved until Custom is chosen, which
+ * saves it then. Text typed while another option is chosen is left out for
+ * the same reason.
+ */
+export function savedSelection(
+    selection: Partial<ScheduleSelection> | undefined
+): ScheduleSelection | null {
+    if (selection?.option === undefined) {
+        return null;
+    }
+    return selection.option === "custom"
+        ? { option: "custom", customText: selection.customText ?? "" }
+        : { option: selection.option };
+}
+
+/** Whether two saved selections (see `savedSelection`) are the same: one option, and the same custom text. */
+export function sameSavedSelection(
+    a: ScheduleSelection | null,
+    b: ScheduleSelection | null
+): boolean {
+    if (a === null || b === null) {
+        return a === b;
+    }
+    return a.option === b.option && (a.customText ?? "") === (b.customText ?? "");
 }
 
 /**

@@ -4,6 +4,8 @@ import {
     defaultOption,
     hasNumbers,
     mergeScheduleSelections,
+    sameSavedSelection,
+    savedSelection,
     scheduleSelectionsReducer,
     type ScheduleOption,
     type ScheduleSelections,
@@ -130,6 +132,66 @@ describe("scheduleSelectionsReducer: purity", () => {
         const before = reduceAll([choose("2", "numbers")]);
         const after = scheduleSelectionsReducer(before, choose("1", "custom"));
         expect(after["2"]).toBe(before["2"]);
+    });
+});
+
+describe("savedSelection", () => {
+    test("is the option, with the custom text only for Custom", () => {
+        expect(savedSelection({ option: "numbers" })).toStrictEqual({ option: "numbers" });
+        expect(savedSelection({ option: "blank", customText: "typed" })).toStrictEqual({
+            option: "blank",
+        });
+        expect(savedSelection({ option: "custom", customText: "  x " })).toStrictEqual({
+            option: "custom",
+            customText: "  x ",
+        });
+        expect(savedSelection({ option: "custom" })).toStrictEqual({
+            option: "custom",
+            customText: "",
+        });
+    });
+
+    test("is null until an option is chosen: text typed before that is not saved", () => {
+        expect(savedSelection(undefined)).toBeNull();
+        expect(savedSelection({})).toBeNull();
+        expect(savedSelection({ customText: "x" })).toBeNull();
+    });
+
+    test("follows the reducer: choosing Custom saves the text typed before", () => {
+        const typed = reduceAll([text("1", "x")]);
+        expect(savedSelection(typed["1"])).toBeNull();
+        expect(savedSelection(scheduleSelectionsReducer(typed, choose("1", "custom"))["1"])).toStrictEqual({
+            option: "custom",
+            customText: "x",
+        });
+    });
+});
+
+describe("sameSavedSelection", () => {
+    test("compares the option and the custom text", () => {
+        expect(sameSavedSelection({ option: "numbers" }, { option: "numbers" })).toBe(true);
+        expect(sameSavedSelection({ option: "numbers" }, { option: "blank" })).toBe(false);
+        expect(
+            sameSavedSelection(
+                { option: "custom", customText: "a" },
+                { option: "custom", customText: "a" }
+            )
+        ).toBe(true);
+        expect(
+            sameSavedSelection(
+                { option: "custom", customText: "a" },
+                { option: "custom", customText: "a " }
+            )
+        ).toBe(false);
+        expect(sameSavedSelection({ option: "custom" }, { option: "custom", customText: "" })).toBe(
+            true
+        );
+    });
+
+    test("null is the same only as null", () => {
+        expect(sameSavedSelection(null, null)).toBe(true);
+        expect(sameSavedSelection(null, { option: "blank" })).toBe(false);
+        expect(sameSavedSelection({ option: "blank" }, null)).toBe(false);
     });
 });
 
