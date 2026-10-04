@@ -1,23 +1,34 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // vi.hoisted is required: vi.mock is hoisted above const declarations.
-const { auth, revalidatePath, linkCatalogSong, saveSelection } = vi.hoisted(() => ({
-    auth: vi.fn(),
-    revalidatePath: vi.fn(),
-    linkCatalogSong: vi.fn(),
-    saveSelection: vi.fn(),
-}));
+const { auth, revalidatePath, linkCatalogSong, saveSelection, previewHymnNotes, syncHymnNotes } =
+    vi.hoisted(() => ({
+        auth: vi.fn(),
+        revalidatePath: vi.fn(),
+        linkCatalogSong: vi.fn(),
+        saveSelection: vi.fn(),
+        previewHymnNotes: vi.fn(),
+        syncHymnNotes: vi.fn(),
+    }));
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ linkCatalogSong }));
+vi.mock("@/lib/queries/hymnNotes", () => ({ previewHymnNotes, syncHymnNotes }));
 // The real module's messages, with only the write mocked.
 vi.mock("@/lib/queries/selections", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/queries/selections")>()),
     saveScheduleSelection: saveSelection,
 }));
 
+import type { HymnNoteStatus } from "@/lib/hymnNotes";
+import type { HymnNotesSyncResult } from "@/lib/queries/hymnNotes";
 import { SELECTION_NOT_SAVED_MESSAGE } from "@/lib/queries/selections";
-import { linkPcoSong, saveScheduleSelection } from "./actions";
+import {
+    linkPcoSong,
+    previewHymnNotesAction,
+    saveScheduleSelection,
+    syncHymnNotesAction,
+} from "./actions";
 
 const SESSION = {
     user: { email: "someone@example.com" },
@@ -39,7 +50,14 @@ const SONG_LINKED = {
 };
 
 beforeEach(() => {
-    for (const mock of [auth, revalidatePath, linkCatalogSong, saveSelection]) {
+    for (const mock of [
+        auth,
+        revalidatePath,
+        linkCatalogSong,
+        saveSelection,
+        previewHymnNotes,
+        syncHymnNotes,
+    ]) {
         mock.mockReset();
     }
     auth.mockResolvedValue(SESSION);
@@ -231,5 +249,170 @@ describe("saveScheduleSelection", () => {
             `Failed to save the Schedule tab's choice for plan ${ST}/${PLAN} item ${ITEM}:`,
             cause
         );
+    });
+});
+
+/** A plan's hymnal notes when its category was found: one song to create a note for. */
+const READY: HymnNoteStatus = {
+    kind: "ready",
+    category: { id: "501", name: "Hymnal" },
+    items: [
+        {
+            itemId: ITEM,
+            title: "Abide with Me",
+            sequence: 2,
+            content: "R-517 / G-64",
+            current: null,
+            action: "create",
+            changes: [{ kind: "create", content: "R-517 / G-64" }],
+            keep: [],
+        },
+    ],
+};
+
+const NO_CATEGORY: HymnNoteStatus = {
+    kind: "no-category",
+    categoryName: "Hymnal",
+    message: 'Create an item note category named "Hymnal" in Planning Center for Sunday Morning.',
+};
+
+/** What a sync that created that note returns. */
+const SYNCED: HymnNotesSyncResult = {
+    ok: true,
+    category: { id: "501", name: "Hymnal" },
+    items: [
+        {
+            itemId: ITEM,
+            title: "Abide with Me",
+            sequence: 2,
+            action: "create",
+            outcome: "done",
+            made: [{ kind: "create", content: "R-517 / G-64" }],
+            keep: [],
+            error: null,
+        },
+    ],
+    counts: { created: 1, updated: 0, deleted: 0, unchanged: 0, kept: 0, failed: 0 },
+};
+
+/** Ids that are not Planning Center ids. */
+const NOT_IDS = ["", "abc", "0", "01", " 1", "../1", "1/2", 42, null, undefined, ["1"]];
+
+describe("previewHymnNotesAction", () => {
+    function preview(overrides: Partial<Record<"serviceTypeId" | "planId", unknown>> = {}) {
+        const ids = { serviceTypeId: ST, planId: PLAN, ...overrides };
+        return previewHymnNotesAction(ids.serviceTypeId as string, ids.planId as string);
+    }
+
+    test("throws without a session, before it reads anything", async () => {
+        auth.mockResolvedValue(null);
+
+        await expect(preview()).rejects.toThrow("Not signed in");
+        expect(previewHymnNotes).not.toHaveBeenCalled();
+    });
+
+    test("returns what a sync would do, and changes no page", async () => {
+        previewHymnNotes.mockResolvedValue(READY);
+
+        await expect(preview()).resolves.toEqual({ ok: true, status: READY });
+        expect(auth).toHaveBeenCalledTimes(1);
+        expect(previewHymnNotes).toHaveBeenCalledWith(ST, PLAN);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("returns why the notes cannot be synced, such as a missing category", async () => {
+        previewHymnNotes.mockResolvedValue(NO_CATEGORY);
+
+        await expect(preview()).resolves.toEqual({ ok: true, status: NO_CATEGORY });
+    });
+
+    test.each([
+        ["service type", "serviceTypeId"],
+        ["plan", "planId"],
+    ] as const)("refuses a %s id that is not one, without reading anything", async (_name, field) => {
+        for (const value of NOT_IDS) {
+            await expect(preview({ [field]: value })).resolves.toEqual({
+                ok: false,
+                message: expect.stringContaining("Reload"),
+            });
+        }
+        expect(previewHymnNotes).not.toHaveBeenCalled();
+    });
+
+    test("returns a message, and logs the cause, when Planning Center cannot be read", async () => {
+        const cause = new Error("Planning Center API responded with status: 500");
+        previewHymnNotes.mockRejectedValue(cause);
+
+        await expect(preview()).resolves.toEqual({
+            ok: false,
+            message: expect.stringContaining("could not be compared"),
+        });
+        expect(console.error).toHaveBeenCalledWith(
+            `Failed to preview the hymnal notes of plan ${ST}/${PLAN}:`,
+            cause
+        );
+    });
+});
+
+describe("syncHymnNotesAction", () => {
+    function sync(overrides: Partial<Record<"serviceTypeId" | "planId", unknown>> = {}) {
+        const ids = { serviceTypeId: ST, planId: PLAN, ...overrides };
+        return syncHymnNotesAction(ids.serviceTypeId as string, ids.planId as string);
+    }
+
+    test("throws without a session, before it writes anything", async () => {
+        auth.mockResolvedValue(null);
+
+        await expect(sync()).rejects.toThrow("Not signed in");
+        expect(syncHymnNotes).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("syncs the notes, returns what became of each, and revalidates the plan's pages", async () => {
+        syncHymnNotes.mockResolvedValue(SYNCED);
+
+        await expect(sync()).resolves.toEqual(SYNCED);
+        expect(auth).toHaveBeenCalledTimes(1);
+        expect(syncHymnNotes).toHaveBeenCalledWith(ST, PLAN);
+        expect(revalidatePath.mock.calls).toEqual([[`/plans/${ST}/${PLAN}`, "layout"]]);
+    });
+
+    test("returns a refusal as it is, and changes no page: nothing was written", async () => {
+        const refusal = { ok: false, kind: "no-category", message: NO_CATEGORY.message };
+        syncHymnNotes.mockResolvedValue(refusal);
+
+        await expect(sync()).resolves.toEqual(refusal);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ["service type", "serviceTypeId"],
+        ["plan", "planId"],
+    ] as const)("refuses a %s id that is not one, without syncing", async (_name, field) => {
+        for (const value of NOT_IDS) {
+            await expect(sync({ [field]: value })).resolves.toEqual({
+                ok: false,
+                kind: "failed",
+                message: expect.stringContaining("Reload"),
+            });
+        }
+        expect(syncHymnNotes).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("returns a message, and logs the cause, when the sync fails before writing", async () => {
+        const cause = new Error("Could not open the database");
+        syncHymnNotes.mockRejectedValue(cause);
+
+        await expect(sync()).resolves.toEqual({
+            ok: false,
+            kind: "failed",
+            message: expect.stringContaining("no note was written"),
+        });
+        expect(console.error).toHaveBeenCalledWith(
+            `Failed to sync the hymnal notes of plan ${ST}/${PLAN}:`,
+            cause
+        );
+        expect(revalidatePath).not.toHaveBeenCalled();
     });
 });

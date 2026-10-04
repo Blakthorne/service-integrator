@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { parseCatalogId } from "@/lib/catalog/ids";
 import type { ScheduleSelection } from "@/lib/domain";
+import type { HymnNoteStatus } from "@/lib/hymnNotes";
 import { parsePcoId } from "@/lib/pco";
+import {
+    previewHymnNotes,
+    syncHymnNotes,
+    type HymnNotesSyncResult,
+} from "@/lib/queries/hymnNotes";
 import { linkCatalogSong, type LinkResult } from "@/lib/queries/reconcile";
 import {
     SELECTION_NOT_SAVED_MESSAGE,
@@ -126,4 +132,109 @@ export async function saveScheduleSelection(
         );
         return { ok: false, message: SELECTION_FAILURE_MESSAGE };
     }
+}
+
+/**
+ * What the hymnal notes' preview tells the dialog: each song item's diff
+ * against the category, or why the notes cannot be compared (see
+ * `HymnNoteStatus`); or, when Planning Center or the database could not be
+ * read, why there is nothing to show.
+ */
+export type PreviewHymnNotesState =
+    | { ok: true; status: HymnNoteStatus }
+    | { ok: false; message: string };
+
+/**
+ * What a sync of the hymnal notes tells the dialog: what became of each
+ * song item's note, or why nothing was written (see `HymnNotesSyncResult`);
+ * or, when Planning Center or the database could not be read before any
+ * write, why it stopped there ("failed").
+ */
+export type SyncHymnNotesState =
+    | HymnNotesSyncResult
+    | { ok: false; kind: "failed"; message: string };
+
+/** Shown when the dialog sends ids that are not ids: a stale or tampered page. */
+const NOT_A_PLAN_MESSAGE =
+    "This page asked about a plan that cannot be found. Reload it and try again.";
+
+/** Shown when the preview could not read what it needs; the log has the details. */
+const PREVIEW_FAILURE_MESSAGE =
+    "Planning Center or the database could not be read, so the notes could not be compared. Try again; the server log has the details.";
+
+/** Shown when the sync stopped before writing anything; the log has the details. */
+const SYNC_FAILURE_MESSAGE =
+    "Planning Center or the database could not be read, so no note was written. Try again; the server log has the details.";
+
+/**
+ * What a sync of plan `planId`'s hymnal notes would do: each song item's
+ * note against its service type's category (`previewHymnNotes`, which reads
+ * the plan's items, the categories and the catalog afresh), or why it
+ * cannot sync: the category is missing, or the categories or the catalog
+ * could not be read. It writes nothing.
+ *
+ * It reads Planning Center, so the dialog calls it from a click, with its
+ * pending state in `useState` (convention 15). It checks the session first
+ * and throws without one, then parses both ids; a failure to read is
+ * logged and comes back as a message.
+ */
+export async function previewHymnNotesAction(
+    serviceTypeId: string,
+    planId: string
+): Promise<PreviewHymnNotesState> {
+    const session = await auth();
+    if (!session) {
+        throw new Error("Not signed in");
+    }
+    const st = parsePcoId(serviceTypeId);
+    const plan = parsePcoId(planId);
+    if (st === null || plan === null) {
+        return { ok: false, message: NOT_A_PLAN_MESSAGE };
+    }
+    try {
+        return { ok: true, status: await previewHymnNotes(st, plan) };
+    } catch (error) {
+        console.error(`Failed to preview the hymnal notes of plan ${st}/${plan}:`, error);
+        return { ok: false, message: PREVIEW_FAILURE_MESSAGE };
+    }
+}
+
+/**
+ * Bring plan `planId`'s hymnal notes in step with its songs' catalog links
+ * (`syncHymnNotes`: it reads the plan again first, writes each change to
+ * Planning Center and logs it), and say what became of each song item's
+ * note. A missing category, or categories that could not be read, refuse
+ * the sync with their message, and nothing is written.
+ *
+ * Once a sync has run, the plan's pages are revalidated, so the song cards'
+ * note statuses show what Planning Center has now. It waits on Planning
+ * Center, so the dialog calls it from a click, with its pending state in
+ * `useState` (convention 15). It checks the session first and throws
+ * without one, then parses both ids; a failure before any write is logged
+ * and comes back as a message ("failed").
+ */
+export async function syncHymnNotesAction(
+    serviceTypeId: string,
+    planId: string
+): Promise<SyncHymnNotesState> {
+    const session = await auth();
+    if (!session) {
+        throw new Error("Not signed in");
+    }
+    const st = parsePcoId(serviceTypeId);
+    const plan = parsePcoId(planId);
+    if (st === null || plan === null) {
+        return { ok: false, kind: "failed", message: NOT_A_PLAN_MESSAGE };
+    }
+    let result: HymnNotesSyncResult;
+    try {
+        result = await syncHymnNotes(st, plan);
+    } catch (error) {
+        console.error(`Failed to sync the hymnal notes of plan ${st}/${plan}:`, error);
+        return { ok: false, kind: "failed", message: SYNC_FAILURE_MESSAGE };
+    }
+    if (result.ok) {
+        revalidatePath(routes.plan(st, plan), "layout");
+    }
+    return result;
 }
