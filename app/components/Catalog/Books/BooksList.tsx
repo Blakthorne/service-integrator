@@ -2,7 +2,7 @@ import Link from "next/link";
 import EmptyState from "@/app/components/ui/EmptyState";
 import type { BookSummary } from "@/lib/domain";
 import { routes } from "@/lib/routes";
-import { formatEntryCount } from "./bookText";
+import { formatEntryCount } from "@/lib/catalog/bookText";
 
 interface BooksListProps {
     /** Every book, in book order. */

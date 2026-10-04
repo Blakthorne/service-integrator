@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import BookEntriesTable from "@/app/components/Catalog/Books/BookEntriesTable";
-import { formatEntryCount } from "@/app/components/Catalog/Books/bookText";
+import { formatEntryCount } from "@/lib/catalog/bookText";
 import GoToNumber from "@/app/components/Catalog/Books/GoToNumber";
 import PageHeader from "@/app/components/ui/PageHeader";
 import { parseBookCode } from "@/lib/catalog/ids";

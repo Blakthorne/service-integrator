@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { entryRowId } from "./bookText";
+import { entryRowId } from "@/lib/catalog/bookText";
 
 interface GoToNumberProps {
     /** The book's code, for the message when it has no such number. */

@@ -7,7 +7,7 @@ import ImportStatusBadge from "@/app/components/Catalog/Import/ImportStatusBadge
 import {
     describePlanned,
     importRunLabel,
-} from "@/app/components/Catalog/Import/importText";
+} from "@/lib/catalog/importText";
 import SeedReport from "@/app/components/Catalog/Import/SeedReport";
 import LocalTime from "@/app/components/ui/LocalTime";
 import PageHeader from "@/app/components/ui/PageHeader";

@@ -1,7 +1,7 @@
 /**
- * Small pure helpers shared by the books pages. Not a client module, so both
- * the server components that render rows and the client component that jumps
- * to one can import them.
+ * Small pure helpers shared by the books pages, safe on both sides: the
+ * server components that render rows and the client component that jumps to
+ * one import the same ones.
  */
 
 /**

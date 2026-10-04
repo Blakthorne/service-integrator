@@ -16,7 +16,7 @@ import {
     NO_TUNE_REASONS,
     SKIP_REASONS,
     SPLIT_PAIR_LABELS,
-} from "./importText";
+} from "@/lib/catalog/importText";
 
 interface SeedReportProps {
     report: SeedImportReport;

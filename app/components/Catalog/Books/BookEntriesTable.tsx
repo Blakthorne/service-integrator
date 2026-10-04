@@ -2,7 +2,7 @@ import Link from "next/link";
 import EmptyState from "@/app/components/ui/EmptyState";
 import type { BookDetail, BookEntry } from "@/lib/domain";
 import { routes } from "@/lib/routes";
-import { entryRowId } from "./bookText";
+import { entryRowId } from "@/lib/catalog/bookText";
 
 interface BookEntriesTableProps {
     /** The book with its entries, already in browse order. */

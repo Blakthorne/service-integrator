@@ -1,5 +1,5 @@
 import type { ImportRunStatus } from "@/lib/domain";
-import { STATUS_LABELS } from "./importText";
+import { STATUS_LABELS } from "@/lib/catalog/importText";
 
 const STATUS_STYLES: Record<ImportRunStatus, string> = {
     preview: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
