@@ -104,8 +104,8 @@ export function buildCatalogIndex(songs: readonly IndexableSong[]): CatalogIndex
 }
 
 /**
- * A trailing parenthetical, from its first "(" to the end, as lib/unusedHymns.ts
- * stripped it: " (PRITCHARD)" in "Abba, Father (PRITCHARD)".
+ * A trailing parenthetical, from its first "(" to the end, with the space
+ * before it: " (PRITCHARD)" in "Abba, Father (PRITCHARD)".
  */
 const TRAILING_PARENTHETICAL = /\s*\(.*\)\s*$/;
 
