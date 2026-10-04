@@ -47,8 +47,10 @@ export default function SyncNowButton() {
                 type="button"
                 onClick={handleClick}
                 aria-disabled={pending}
-                className={`shrink-0 self-start px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors ${
-                    pending ? "opacity-60 cursor-not-allowed" : "hover:bg-blue-600 cursor-pointer"
+                // SubmitButton's primary colours: white text is 5.3:1 on
+                // blue-600, and the ring outside the button 3:1 on the page.
+                className={`shrink-0 self-start px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors ${
+                    pending ? "opacity-60 cursor-not-allowed" : "hover:bg-blue-700 cursor-pointer"
                 }`}
             >
                 {pending ? "Syncing…" : "Sync now"}
