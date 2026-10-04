@@ -2,20 +2,25 @@ import CopyButton from "./ui/CopyButton";
 import SongCopyright from "./SongCopyright";
 import { formatCopyrightText } from "@/lib/copyright";
 import type { PlanItemWithSong } from "@/lib/domain";
+import type { CopyrightSettings } from "@/lib/settings";
 
 interface SongDetailsProps {
     /** The plan item to show, with its song (null for items without one). */
     item: PlanItemWithSong;
+    /** The settings its copyright block follows: the CCLI license number. */
+    settings: CopyrightSettings;
 }
 
 /**
  * The details card of a plan item's page: the item's title and, when it has a
  * song, the song's author, CCLI number, copyright, administration, notes and
- * themes, then its copyright block with a copy button. The page header
+ * themes, then its copyright block with a copy button, naming the CCLI
+ * license number from `settings` as the Copyright tab does. The page header
  * (breadcrumbs, title, Planning Center link) is the page's job.
  */
 export default function SongDetails({
     item,
+    settings,
 }: SongDetailsProps): React.ReactElement {
     const song = item.song;
 
@@ -110,12 +115,15 @@ export default function SongDetails({
                         <div className="flex items-center gap-4">
                             <CopyButton
                                 label="Copy"
-                                text={formatCopyrightText({
-                                    title: song.title,
-                                    author: song.author,
-                                    admin: song.admin,
-                                    copyright: song.copyright,
-                                })}
+                                text={formatCopyrightText(
+                                    {
+                                        title: song.title,
+                                        author: song.author,
+                                        admin: song.admin,
+                                        copyright: song.copyright,
+                                    },
+                                    settings
+                                )}
                             />
                         </div>
                     </div>
@@ -124,6 +132,7 @@ export default function SongDetails({
                         author={song.author}
                         copyright={song.copyright}
                         admin={song.admin}
+                        settings={settings}
                     />
                 </div>
             )}

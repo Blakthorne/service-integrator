@@ -16,13 +16,14 @@ interface PlanItemDetailProps {
 
 /**
  * An item's page: breadcrumbs back to the plan, the item's title, a link to
- * its song in Planning Center, and the song's details. The item comes from
- * the plan already loaded by the `[planId]` layout. An ID that is not one of
+ * its song in Planning Center, and the song's details, its copyright block
+ * following the plan's settings (the CCLI license number). The item comes
+ * from the plan already loaded by the `[planId]` layout. An ID that is not one of
  * the plan's items gets an inline message (client code never calls
  * notFound()).
  */
 export default function PlanItemDetail({ itemId }: PlanItemDetailProps) {
-    const { plan, serviceType, items } = usePlan();
+    const { plan, serviceType, items, scheduleSettings } = usePlan();
     const item = items.find((candidate) => candidate.id === itemId);
     const label = planLabel(plan, serviceType);
     const planHref = routes.plan(serviceType.id, plan.id);
@@ -61,7 +62,7 @@ export default function PlanItemDetail({ itemId }: PlanItemDetailProps) {
                     )
                 }
             />
-            <SongDetails item={item} />
+            <SongDetails item={item} settings={scheduleSettings} />
         </>
     );
 }

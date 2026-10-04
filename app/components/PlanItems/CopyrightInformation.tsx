@@ -1,24 +1,15 @@
 "use client";
 
 import CopyButton from "../ui/CopyButton";
+import SongCopyright from "../SongCopyright";
 import {
     buildCopyrightCopyAllText,
-    formatCopyrightText,
     getItemCopyrightInfo,
 } from "@/lib/copyright";
 import type { PlanItemWithSong } from "@/lib/domain";
 import { settingsUnavailableMessage } from "@/lib/scheduleCards";
 import type { CopyrightSettings } from "@/lib/settings";
 import PlanNotice from "./PlanNotice";
-
-/** One song's copyright block, as Copy All copies it. */
-function CopyrightBlock({ text }: { text: string }) {
-    return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-            <p className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-line">{text}</p>
-        </div>
-    );
-}
 
 interface CopyrightInformationProps {
     items: PlanItemWithSong[];
@@ -63,10 +54,7 @@ export default function CopyrightInformation({
                         if (!songInfo) return null;
 
                         return (
-                            <CopyrightBlock
-                                key={item.id}
-                                text={formatCopyrightText(songInfo, settings)}
-                            />
+                            <SongCopyright key={item.id} {...songInfo} settings={settings} />
                         );
                     })}
             </div>
