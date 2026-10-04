@@ -8,7 +8,7 @@ import {
     type ScheduleSelections,
     type ScheduleSelectionsAction,
 } from "./scheduleSelections";
-import { buildScheduleCopyText, type ScheduleHymn } from "./serviceSchedule";
+import { buildScheduleCopyText, type ScheduleCatalog } from "./serviceSchedule";
 
 function planItem(
     id: string,
@@ -322,24 +322,27 @@ describe("the merged view matches what the Schedule tab did before", () => {
 });
 
 describe("copy text through the merged view", () => {
-    const BOTH = { rejoice_hymns_number: "12", great_hymns_number: "34" };
-    const RJ_ONLY = { rejoice_hymns_number: "56", great_hymns_number: "-1" };
-    const GR_ONLY = { rejoice_hymns_number: "-1", great_hymns_number: "78" };
-    const hymnData: ScheduleHymn[] = [
-        { song_title: "Multi", versions: [BOTH, RJ_ONLY, GR_ONLY] },
-        { song_title: "Single", versions: [BOTH] },
+    const BOTH = [
+        { bookCode: "R", number: 12, variantNote: null },
+        { bookCode: "G", number: 34, variantNote: null },
     ];
+    // Multi and Single schedule Planning Center songs 20 and 30, both linked
+    // to catalog songs at R-12 and G-34; No Hymn's song 40 is not linked.
+    const catalog: ScheduleCatalog = {
+        "20": { entries: BOTH },
+        "30": { entries: BOTH },
+    };
     const items = [
         planItem("1", "Welcome", "header", 1),
-        planItem("2", "Multi", "song", 2),
-        planItem("3", "Single", "song", 3),
-        planItem("4", "No Hymn", "song", 4),
+        { ...planItem("2", "Multi", "song", 2), songId: "20" },
+        { ...planItem("3", "Single", "song", 3), songId: "30" },
+        { ...planItem("4", "No Hymn", "song", 4), songId: "40" },
     ];
 
     function copyText(actions: ScheduleSelectionsAction[]): string {
         return buildScheduleCopyText({
             items: mergeScheduleSelections(items, reduceAll(actions)),
-            hymnData,
+            catalog,
             serviceTypeName: "Sunday Morning",
             planDate: "2025-06-15",
         });
@@ -356,15 +359,16 @@ describe("copy text through the merged view", () => {
         return line;
     }
 
-    test("with nothing chosen every hymn shows its first version", () => {
+    test("with nothing chosen every linked song shows its numbers", () => {
         expect(copyText([])).toBe(
             "Sunday AM 6/15/25\n\nMulti (R-12/G-34)\nSingle (R-12/G-34)\nNo Hymn"
         );
     });
 
-    test("picking another version shows its numbers", () => {
-        expect(lineFor("Multi", [choose("2", undefined, 1)])).toBe("Multi (R-56)");
-        expect(lineFor("Multi", [choose("2", undefined, 2)])).toBe("Multi (G-78)");
+    // The version picker is gone: a linked song has one set of numbers.
+    test("picking a version changes nothing", () => {
+        expect(lineFor("Multi", [choose("2", undefined, 1)])).toBe("Multi (R-12/G-34)");
+        expect(lineFor("Multi", [choose("2", undefined, 2)])).toBe("Multi (R-12/G-34)");
         expect(
             lineFor("Multi", [choose("2", undefined, 2), choose("2", undefined, 0)])
         ).toBe("Multi (R-12/G-34)");
@@ -384,19 +388,19 @@ describe("copy text through the merged view", () => {
         );
     });
 
-    test("going back to a version drops the custom text for good", () => {
-        const backToVersion = [
+    test("going back to the numbers drops the custom text for good", () => {
+        const backToNumbers = [
             choose("2", "Custom"),
             text("2", "x"),
             choose("2", undefined, 1),
         ];
-        expect(lineFor("Multi", backToVersion)).toBe("Multi (R-56)");
-        expect(lineFor("Multi", [...backToVersion, choose("2", "Custom")])).toBe(
+        expect(lineFor("Multi", backToNumbers)).toBe("Multi (R-12/G-34)");
+        expect(lineFor("Multi", [...backToNumbers, choose("2", "Custom")])).toBe(
             "Multi"
         );
     });
 
-    test("a song with no hymn: Custom adds its text, Leave blank drops it", () => {
+    test("a song that is not linked: Custom adds its text, Leave blank drops it", () => {
         const custom = [choose("4", "Custom"), text("4", "free")];
         expect(lineFor("No Hymn", custom)).toBe("No Hymn (free)");
         expect(lineFor("No Hymn", [...custom, choose("4", "Leave blank")])).toBe(
@@ -417,7 +421,7 @@ describe("copy text through the merged view", () => {
                 text("4", "free"),
             ])
         ).toBe(
-            "Sunday AM 6/15/25\n\nMulti (G-78)\nSingle (mine)\nNo Hymn (free)"
+            "Sunday AM 6/15/25\n\nMulti (R-12/G-34)\nSingle (mine)\nNo Hymn (free)"
         );
     });
 });

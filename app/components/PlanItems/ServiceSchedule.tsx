@@ -3,18 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import CopyButton from "../ui/CopyButton";
 import { createDebouncedSave } from "@/lib/debouncedSave";
-import { normalizeTitle } from "@/lib/normalizeTitle";
 import type { ChooseOption, SetCustomText } from "@/lib/scheduleSelections";
 import {
     buildScheduleCopyText,
-    formatHymnNumbers,
+    catalogMatchFor,
+    formatScheduleNumbers,
 } from "@/lib/serviceSchedule";
-import type {
-    HymnData,
-    HymnVersion,
-    PlanItem,
-    ScheduleSelection,
-} from "@/lib/domain";
+import type { CatalogMatch, PlanItem, ScheduleSelection } from "@/lib/domain";
 
 /** A plan item together with its Schedule-tab selections. */
 type ItemWithSelection = PlanItem & ScheduleSelection;
@@ -126,25 +121,17 @@ function CustomOption({
     );
 }
 
-function HymnNumbers({ hymnVersion }: { hymnVersion: HymnVersion }) {
-    return (
-        <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">
-            {hymnVersion.tune_name + " "}(
-            {formatHymnNumbers(hymnVersion)}
-            )
-        </span>
-    );
-}
-
-function HymnVersionOption({
+/**
+ * The song's numbers, the choice for a song linked to a catalog song: its
+ * tune and numbers, as "NETTLETON (R-553/G-17)".
+ */
+function NumbersOption({
     item,
-    hymnVersion,
-    versionIndex,
+    match,
     onChooseOption,
 }: {
     item: ItemWithSelection;
-    hymnVersion: HymnVersion;
-    versionIndex: number;
+    match: CatalogMatch;
     onChooseOption: ChooseOption;
 }) {
     return (
@@ -152,14 +139,15 @@ function HymnVersionOption({
             <input
                 type="radio"
                 name={`hymn-${item.id}`}
-                checked={
-                    !item.selectedOption &&
-                    item.selectedVersionIndex === versionIndex
-                }
-                onChange={() => onChooseOption(item.id, undefined, versionIndex)}
+                checked={!item.selectedOption}
+                onChange={() => onChooseOption(item.id, undefined, 0)}
                 className="text-blue-600 focus:ring-blue-500"
             />
-            <HymnNumbers hymnVersion={hymnVersion} />
+            <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">
+                {(match.tuneName ?? "") + " "}(
+                {formatScheduleNumbers(match.entries)}
+                )
+            </span>
         </label>
     );
 }
@@ -194,8 +182,11 @@ function LeaveBlankOption({
 export interface ServiceScheduleProps {
     /** The plan's items with their selections (see `mergeScheduleSelections`). */
     items: ItemWithSelection[];
-    /** Hymnbook matches for the song items' titles. */
-    hymnData: HymnData[];
+    /**
+     * The catalog song each song item's Planning Center song is linked to,
+     * by Planning Center song id.
+     */
+    catalog: Record<string, CatalogMatch>;
     serviceTypeName: string;
     /** The plan's calendar date as `YYYY-MM-DD`, or null when it is unknown. */
     planDate: string | null;
@@ -206,14 +197,14 @@ export interface ServiceScheduleProps {
 }
 
 /**
- * The Service Schedule tab: a card per song to pick its hymn version, leave
- * it blank or give custom text, and a "Copy All" button for the schedule
- * text. It holds no selections itself; they come in with `items` and changes
- * go out through the callbacks.
+ * The Service Schedule tab: a card per song to take its numbers from its
+ * catalog link, leave it blank or give custom text, and a "Copy All" button
+ * for the schedule text. It holds no selections itself; they come in with
+ * `items` and changes go out through the callbacks.
  */
 export default function ServiceSchedule({
     items,
-    hymnData,
+    catalog,
     serviceTypeName,
     planDate,
     onChooseOption,
@@ -230,7 +221,7 @@ export default function ServiceSchedule({
                         <CopyButton
                             text={buildScheduleCopyText({
                                 items,
-                                hymnData,
+                                catalog,
                                 serviceTypeName,
                                 planDate,
                             })}
@@ -243,9 +234,7 @@ export default function ServiceSchedule({
                     .filter((item) => item.itemType === "song")
                     .sort((a, b) => a.sequence - b.sequence)
                     .map((item) => {
-                        const hymn = hymnData.find(
-                            (h) => normalizeTitle(h.song_title) === normalizeTitle(item.title)
-                        );
+                        const match = catalogMatchFor(catalog, item.songId);
 
                         return (
                             <div
@@ -258,10 +247,10 @@ export default function ServiceSchedule({
                                             {item.title}
                                         </h3>
                                     </div>
-                                    {!hymn ? (
+                                    {!match ? (
                                         <div className="space-y-2">
                                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                Song not found in hymn books
+                                                Song not linked to the catalog
                                             </p>
                                             <div>
                                                 <LeaveBlankOption
@@ -281,50 +270,12 @@ export default function ServiceSchedule({
                                                 />
                                             </div>
                                         </div>
-                                    ) : hymn.versions.length > 1 ? (
-                                        <div className="space-y-2">
-                                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                Multiple versions found
-                                            </p>
-                                            <div>
-                                                {hymn.versions.map(
-                                                    (version, index) => (
-                                                        <HymnVersionOption
-                                                            key={
-                                                                item.id +
-                                                                version.tune_name
-                                                            }
-                                                            item={item}
-                                                            hymnVersion={
-                                                                version
-                                                            }
-                                                            versionIndex={index}
-                                                            onChooseOption={
-                                                                onChooseOption
-                                                            }
-                                                        />
-                                                    )
-                                                )}
-                                                <CustomOption
-                                                    item={item}
-                                                    onChooseOption={
-                                                        onChooseOption
-                                                    }
-                                                    onCustomTextChange={
-                                                        onCustomTextChange
-                                                    }
-                                                />
-                                            </div>
-                                        </div>
                                     ) : (
                                         <div className="space-y-2">
                                             <div>
-                                                <HymnVersionOption
+                                                <NumbersOption
                                                     item={item}
-                                                    hymnVersion={
-                                                        hymn.versions[0]
-                                                    }
-                                                    versionIndex={0}
+                                                    match={match}
                                                     onChooseOption={
                                                         onChooseOption
                                                     }

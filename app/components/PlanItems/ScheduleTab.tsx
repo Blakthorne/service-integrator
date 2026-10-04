@@ -6,7 +6,7 @@ import ServiceSchedule from "./ServiceSchedule";
 
 /**
  * The Service Schedule tab's connector: feeds ServiceSchedule the items with
- * their selections, the hymn matches and the plan's date from `usePlan()`,
+ * their selections, their catalog links and the plan's date from `usePlan()`,
  * and sends its changes back to the provider, which keeps them while the
  * user visits other tabs and items.
  */
@@ -14,7 +14,7 @@ export default function ScheduleTab() {
     const {
         plan,
         serviceType,
-        hymns,
+        catalog,
         scheduleItems,
         chooseOption,
         setCustomText,
@@ -23,7 +23,7 @@ export default function ScheduleTab() {
     return (
         <ServiceSchedule
             items={scheduleItems}
-            hymnData={hymns}
+            catalog={catalog}
             serviceTypeName={serviceType.name}
             planDate={planDateFromSortDate(plan.sortDate)}
             onChooseOption={chooseOption}

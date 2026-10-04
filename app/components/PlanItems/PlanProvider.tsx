@@ -8,6 +8,7 @@ import {
     useReducer,
 } from "react";
 import type {
+    CatalogMatch,
     HymnData,
     Plan,
     PlanItemWithSong,
@@ -31,6 +32,11 @@ export interface PlanContextValue {
     items: PlanItemWithSong[];
     /** Hymnbook matches for the song items' titles. */
     hymns: HymnData[];
+    /**
+     * The catalog song each song item's Planning Center song is linked to,
+     * by Planning Center song id.
+     */
+    catalog: Record<string, CatalogMatch>;
     /** `items` with the Schedule tab's selections merged in (songs default to version 0). */
     scheduleItems: (PlanItemWithSong & ScheduleSelection)[];
     /** Pick a song's hymn version, "Leave blank" or "Custom". Stable across renders. */
@@ -59,7 +65,7 @@ interface PlanProviderProps {
  * the provider by plan, so another plan starts with no selections.
  */
 export default function PlanProvider({ detail, children }: PlanProviderProps) {
-    const { plan, serviceType, items, hymns } = detail;
+    const { plan, serviceType, items, hymns, catalog } = detail;
     const [selections, dispatch] = useReducer(scheduleSelectionsReducer, {});
 
     const scheduleItems = useMemo(
@@ -84,6 +90,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             serviceType,
             items,
             hymns,
+            catalog,
             scheduleItems,
             chooseOption,
             setCustomText,
@@ -93,6 +100,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             serviceType,
             items,
             hymns,
+            catalog,
             scheduleItems,
             chooseOption,
             setCustomText,
