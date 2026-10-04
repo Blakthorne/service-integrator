@@ -394,6 +394,63 @@ Decisions the orchestrator made where the plan was silent or inconsistent. They 
 
 **Docs.** Two new recipes, "Add a PCO write" and "Add a setting"; the State exception; the write log; and the dashboard in the route map.
 
+### Phase 4 design (PCO song lifecycle and outputs)
+
+**Schema (`0005_credits_tags.ts`).**
+- `pco_song_credits` (`pco_song_id`, `role`, `name`, `position`, `parse_status`): derived from each mirrored song's `author` on every sync and every credit save. These rows are never edited directly.
+- `pco_tag_groups` (`id`, `name`, `tags_for`, `allow_multiple`), `pco_tags` (`id`, `group_id`, `name`) and `pco_song_tags` (`pco_song_id`, `tag_id`): a mirror of song tag groups only (`tags_for = "song"`).
+
+**Credits (`lib/credits.ts`, pure).**
+- Grammar: `credits := group (";" group)*`, `group := label ":" names`, `names := name ("," name)*`.
+  - Labels are the `creditRoles` setting (default `Words`, `Music`, `Arr.`, `Trans.`), matched case-insensitively.
+  - "Words & Music: X" (or "and") fills both roles.
+- `parseCredits(author, roles)` returns one of:
+  - `{ status: "ok", credits }`;
+  - `{ status: "legacy", credits }` when the string has no labels at all. Today's comma/" and " heuristic moves here **verbatim, quirks included**, so every existing song's copyright text stays byte-identical. The `copyright.test.ts` characterization tests move under it;
+  - `{ status: "unparsed", raw }` when it has labels that do not parse. The copyright text then falls back to the legacy rendering of the raw string, so nothing an author typed today changes output.
+- `renderCredits(credits)` writes the convention back: `Words: Isaac Watts; Music: Lowell Mason`.
+- `renderCreditLine(credits, phrases)` gives "Words by A and B. Music by C. Arr. by D.", and "Words and Music by X" when the same names hold both roles.
+- `formatCopyrightText` takes the parsed credits plus settings (`creditPhrases`, `ccliLicenseNumber`). The legacy path's output equals today's.
+- New settings: `creditRoles` and `creditPhrases`, with defaults that reproduce today's phrases.
+
+**PCO writes** (`lib/pco/writes.ts`; each takes validated ids and returns what changed; callers write a `write_log` row and update the mirror):
+- `createSong(attributes)`: never sends `ccli_number` on create (the spike: PCO then overwrites the credits).
+- `updateSong(songId, attributes)`: PATCH without `data.id`, which the spike showed works.
+- `getSongDefaultArrangement(songId)`: the first arrangement, for new items.
+- `createSongItem(st, plan, { songId, arrangementId, title })`: appended at the end, since no `sequence` was sent.
+- `assignSongTags(songId, tagIds)`: replace semantics, so the caller sends the full set and only song-group tag ids.
+
+**Flows** (`lib/queries/pcoSongs.ts`, server-only; each one re-reads first, then writes, then logs):
+- **Credits editor.**
+  - The song page's CreditsCard shows the parse status (ok, legacy, unparsed) and the roles as rows of names. A guided split turns a legacy string into roles.
+  - Save re-reads the PCO song, writes `renderCredits` to `author`, then updates the mirror and the derived credits.
+  - Never a mass rewrite: one song, when the user saves.
+- **Create in Planning Center** (a catalog song with no link).
+  - A form prefilled with the hymn title (plus ` (TUNE)` when the hymn has several tunes, which is the church's practice), the credits as roles, the copyright and an optional CCLI number.
+  - Creating POSTs the song without the CCLI number. When there is one, it is then PATCHed in and the song read back; any credit or title PCO replaced is written back unless the user ticked "Use CCLI's details".
+  - Then the song is linked (`manual`) and mirrored.
+- **Add to plan** (song page, linked songs).
+  - Pick one of the upcoming plans (`filter=future` per service type).
+  - The item gets the song's PCO title and its default arrangement.
+  - Revalidate that plan. Writes go one at a time, with no undo; the confirmation names the plan.
+- **Tags.**
+  - A `tags` job, hourly after `pco-songs`, reads `tag_groups?include=tags` (song groups only), then `songs?where[song_tag_ids]=<id>` per song tag, using ids only from that fresh read.
+  - The song page's TagsCard edits tags per group, respecting `allow_multiple_selections`. Save re-reads the song's tags, sends the full new set, updates the mirror and logs.
+  - The catalog list gains a `tag` filter.
+
+**Email** (`lib/email.ts` with Nodemailer over `SMTP_URL`, from `EMAIL_FROM`).
+- Not configured → the Email button explains how to configure it and sends nothing.
+- `EmailSummaryAction` on the plan header opens a `ui/Dialog` preview:
+  - the subject from `emailSubjectTemplate` (e.g. `Songs for {date} · {service}`);
+  - recipients from `emailRecipients`;
+  - a plain-text body: the plan, the schedule text, then each song's copyright text.
+- Send writes a `write_log` row (`kind: "email"`) without the body's personal data; recipients are fine.
+- Tests use a stub transport.
+- `deploy.yml` writes `SMTP_URL` and `EMAIL_FROM` from secrets when they are set.
+- The preview is local, but Send waits on SMTP, so Send is an event-handler action with its pending state in `useState` (convention 15).
+
+**Settings.** New cards for credits (roles and their phrases) and email (recipients, subject template, and whether the transport is configured).
+
 **Agent rules** (every implementer brief):
 - Work only inside your phase's worktree (named in your brief), with absolute paths. Never touch `/Users/davidpolar/dev/service-integrator` (the main checkout).
 - Stay inside your listed file set. Commit with explicit paths (`git commit -m "…" -- <paths>`), retrying if `index.lock` is held, so agents sharing the tree never commit each other's files.
