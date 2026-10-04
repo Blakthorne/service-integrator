@@ -1,7 +1,6 @@
 import "server-only";
 import { cache } from "react";
 import type { PcoLibrarySong } from "../domain";
-import type { PcoSong } from "../unusedHymns";
 import { pcoFetch, pcoFetchAll } from "./client";
 import { assertPcoId } from "./ids";
 import { toPcoLibrarySong } from "./mappers";
@@ -9,23 +8,6 @@ import type { PcoSingleResponse, PcoSongResource } from "./resources";
 
 /** 10,000 songs at per_page=100; the library had 397 songs on 2026-10-03. */
 const MAX_SONG_PAGES = 100;
-
-/**
- * The entire PCO song library (title and last-scheduled date of each song),
- * paged 100 at a time through links.next. Throws PcoError on a failed page,
- * or an error if the library has more than MAX_SONG_PAGES pages.
- */
-export const fetchAllSongs = cache(async (): Promise<PcoSong[]> => {
-    const { data } = await pcoFetchAll<PcoSongResource>(
-        "/songs?per_page=100",
-        "songs",
-        { maxPages: MAX_SONG_PAGES }
-    );
-    return data.map((resource) => ({
-        title: resource.attributes.title,
-        lastScheduledAt: resource.attributes.last_scheduled_at,
-    }));
-});
 
 /**
  * The whole song library with every field the mirror keeps, for the sync

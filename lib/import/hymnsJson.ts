@@ -12,7 +12,6 @@ import type {
 } from "@/lib/domain";
 import { levenshtein } from "@/lib/fuzzy";
 import { normalizeTitle } from "@/lib/normalizeTitle";
-import type { RawHymn } from "@/lib/unusedHymns";
 import type {
     PlannedAlias,
     PlannedBook,
@@ -44,6 +43,18 @@ import type {
  *   one when that song already has an entry in Great Hymns, since a song has
  *   one plain entry per book: nothing is dropped.
  */
+
+/**
+ * One record of `hymns.json`: a hymn sung to one tune, with its number in
+ * each of the two books (-1 when it is not in the book, 0 for a location
+ * without a number, the front cover) and "" when it has no tune.
+ */
+export interface RawHymn {
+    song_title: string;
+    tune_name: string;
+    great_hymns_of_the_faith: number;
+    rejoice_hymns: number;
+}
 
 /** A book the seed creates, and the field of a record that holds its numbers. */
 interface SeedBook extends PlannedBook {

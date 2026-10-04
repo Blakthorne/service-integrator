@@ -27,4 +27,4 @@ export {
     type AllPlans,
 } from "./plans";
 export { getPlanItems, type PlanItems } from "./planItems";
-export { fetchAllSongs, fetchSongLibrary, getSong } from "./songs";
+export { fetchSongLibrary, getSong } from "./songs";

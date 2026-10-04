@@ -1,6 +1,6 @@
 import "server-only";
 import hymnData from "@/hymns.json";
-import type { RawHymn } from "./unusedHymns";
+import type { RawHymn } from "@/lib/import/hymnsJson";
 
 /**
  * The hymnbook catalog (Rejoice Hymns + Great Hymns of the Faith). Server-only
