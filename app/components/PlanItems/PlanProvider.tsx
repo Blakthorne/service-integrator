@@ -9,7 +9,6 @@ import {
 } from "react";
 import type {
     CatalogMatch,
-    HymnData,
     Plan,
     PlanItemWithSong,
     ScheduleSelection,
@@ -30,8 +29,6 @@ export interface PlanContextValue {
     serviceType: ServiceType;
     /** The plan's items sorted by sequence, each joined to its song. */
     items: PlanItemWithSong[];
-    /** Hymnbook matches for the song items' titles. */
-    hymns: HymnData[];
     /**
      * The catalog song each song item's Planning Center song is linked to,
      * by Planning Center song id.
@@ -65,7 +62,7 @@ interface PlanProviderProps {
  * the provider by plan, so another plan starts with no selections.
  */
 export default function PlanProvider({ detail, children }: PlanProviderProps) {
-    const { plan, serviceType, items, hymns, catalog } = detail;
+    const { plan, serviceType, items, catalog } = detail;
     const [selections, dispatch] = useReducer(scheduleSelectionsReducer, {});
 
     const scheduleItems = useMemo(
@@ -89,7 +86,6 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             plan,
             serviceType,
             items,
-            hymns,
             catalog,
             scheduleItems,
             chooseOption,
@@ -99,7 +95,6 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             plan,
             serviceType,
             items,
-            hymns,
             catalog,
             scheduleItems,
             chooseOption,

@@ -149,11 +149,11 @@ describe("getPlansByDate", () => {
 });
 
 describe("getPlanDetail", () => {
-    test("loads the plan, its service type and its items, and matches the songs to hymns", async () => {
+    test("loads the plan, its service type and its items", async () => {
         const fetchMock = stubFetchRoutes(planDetailRoutes());
         const { getPlanDetail } = await loadQueries();
 
-        const { plan, serviceType, items, hymns } = await getPlanDetail(MORNING, PLAN);
+        const { plan, serviceType, items } = await getPlanDetail(MORNING, PLAN);
 
         expect(calledUrls(fetchMock).sort()).toEqual(
             [urls.plan, urls.serviceType, urls.items].sort()
@@ -165,16 +165,6 @@ describe("getPlanDetail", () => {
             ["2", "20"],
             ["3", "30"],
             ["4", "40"],
-        ]);
-        // Song items only (the "Amazing Grace" header is skipped), in sequence
-        // order; titles missing from the hymnbooks are left out.
-        expect(hymns.map((hymn) => hymn.song_title)).toEqual([
-            "Come, Thou Fount of Every Blessing",
-            "Abide with Me",
-        ]);
-        expect(hymns[0].versions.map((version) => version.tune_name)).toEqual([
-            "NETTLETON",
-            "WARRENTON",
         ]);
     });
 

@@ -6,15 +6,12 @@ import { findCatalogMatches, listCatalogSongs } from "@/lib/db/catalog";
 import { findPcoSongs } from "@/lib/db/pcoSongs";
 import type {
     CatalogMatch,
-    HymnData,
     LinkSuggestion,
     Plan,
     PlanItemWithSong,
     PlanSummary,
     ServiceType,
 } from "@/lib/domain";
-import { hymnCatalog } from "@/lib/hymnCatalog";
-import { buildHymnIndex, matchHymns } from "@/lib/hymnMatch";
 import {
     getAllPlans,
     getPlan,
@@ -26,9 +23,6 @@ import { planLabel } from "@/lib/planLabel";
 import { groupPlansByDate, sortPlanDates } from "@/lib/plansByDate";
 import { TOP_SUGGESTIONS, buildCatalogIndex, suggestLinks } from "@/lib/reconcile";
 import { createTtlCache } from "@/lib/ttlCache";
-
-/** The hymnbook lookup, built once per server process. */
-const hymnIndex = buildHymnIndex(hymnCatalog);
 
 /** What the plans list shows. */
 export interface PlansByDate {
@@ -61,8 +55,6 @@ export interface PlanData {
 
 /** Everything a plan's pages show. */
 export interface PlanDetail extends PlanData {
-    /** Hymnbook matches for the song items' titles, in item order. */
-    hymns: HymnData[];
     /**
      * The catalog song each song item's Planning Center song is linked to,
      * by Planning Center song id: its title, tune and labelled entries in
@@ -136,22 +128,18 @@ function planCatalogLinks(
 }
 
 /**
- * Load a plan, its service type and its items in parallel, match its songs
- * against the hymnbooks, and find their catalog links and suggestions in
- * the database. PCO errors pass through (wrap the call in orNotFound to turn
- * a missing plan into a 404), and so does a database that cannot be opened.
+ * Load a plan, its service type and its items in parallel, and find their
+ * songs' catalog links and suggestions in the database. PCO errors pass
+ * through (wrap the call in orNotFound to turn a missing plan into a 404),
+ * and so does a database that cannot be opened.
  */
 export const getPlanDetail = cache(
     async (serviceTypeId: string, planId: string): Promise<PlanDetail> => {
         const { plan, serviceType, items } = await getPlanData(serviceTypeId, planId);
-        const songTitles = items
-            .filter((item) => item.itemType === "song")
-            .map((item) => item.title);
         return {
             plan,
             serviceType,
             items,
-            hymns: matchHymns(hymnIndex, songTitles),
             ...planCatalogLinks(getDb(), items),
         };
     }
