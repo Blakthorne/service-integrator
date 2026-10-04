@@ -119,9 +119,10 @@ export default function EntryForm(props: EntryFormProps) {
 
     const placementError = fieldErrorOf(form.state, "placement");
     const bookError = fieldErrorOf(form.state, "book");
-    const placementErrorId = placementError ? `${idPrefix}-placement-error` : undefined;
     const label = entryFormLabel(book, values);
     const placement = values.placement === "location" ? "location" : "number";
+    // The placement's error is under the number or location field, and describes the mode buttons too.
+    const placementErrorId = placementError ? `${idPrefix}-${placement}-error` : undefined;
 
     return (
         <form onSubmit={form.onSubmit} className="space-y-4">
