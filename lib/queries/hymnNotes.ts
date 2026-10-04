@@ -195,9 +195,12 @@ export interface HymnNoteSyncItem {
      * - "nothing-to-do": none was needed ("unchanged", "keep" or "none");
      * - "changed": what it needs now is not what the preview showed (or the
      *   preview did not have it), so nothing was written for it: changed
-     *   since the preview; preview again.
+     *   since the preview; preview again;
+     * - "not-attempted": a write before it met Planning Center's rate limit
+     *   (a 429 the client did not retry), so the sync stopped there and
+     *   tried nothing for it: preview again in a minute.
      */
-    outcome: "done" | "failed" | "nothing-to-do" | "changed";
+    outcome: "done" | "failed" | "nothing-to-do" | "changed" | "not-attempted";
     /** The changes made, in order. */
     made: HymnNoteChange[];
     /** The notes it left alone because the app did not write them. */
@@ -223,6 +226,11 @@ export interface HymnNoteSyncCounts {
      * before it existed (a test's fixture) still type.
      */
     changed?: number;
+    /**
+     * Items not tried because Planning Center's rate limit stopped the sync
+     * first. Always counted, and optional in the type, as `changed` is.
+     */
+    notAttempted?: number;
 }
 
 /** What `syncHymnNotes` did. */
@@ -314,6 +322,18 @@ function payloadOf(
     }
 }
 
+/** What `syncItem` did: the item's result, and whether Planning Center's rate limit stopped it. */
+interface ItemSync {
+    item: HymnNoteSyncItem;
+    /** A write met a 429 the client did not retry: the sync stops here. */
+    rateLimited: boolean;
+}
+
+/** True for Planning Center's "too many requests", which the client has already retried as far as it will. */
+function isRateLimited(error: unknown): boolean {
+    return error instanceof PcoError && error.status === 429;
+}
+
 /** Make an item's changes in order, logging each; stop at the first that fails. */
 async function syncItem(
     db: DatabaseSync,
@@ -321,7 +341,7 @@ async function syncItem(
     planId: string,
     category: ItemNoteCategory,
     diff: HymnNoteDiff
-): Promise<HymnNoteSyncItem> {
+): Promise<ItemSync> {
     const { itemId, title, sequence, action, keep } = diff;
     const made: HymnNoteChange[] = [];
     const target = `plan ${planId} item ${itemId}`;
@@ -339,31 +359,40 @@ async function syncItem(
             const result = writeError(error);
             logWrite(db, { kind: "item-note", target, ok: false, payload, result });
             return {
-                itemId,
-                title,
-                sequence,
-                action,
-                outcome: "failed",
-                made,
-                keep,
-                error: result.error,
+                item: {
+                    itemId,
+                    title,
+                    sequence,
+                    action,
+                    outcome: "failed",
+                    made,
+                    keep,
+                    error: result.error,
+                },
+                rateLimited: isRateLimited(error),
             };
         }
     }
     return {
-        itemId,
-        title,
-        sequence,
-        action,
-        outcome: diff.changes.length > 0 ? "done" : "nothing-to-do",
-        made,
-        keep,
-        error: null,
+        item: {
+            itemId,
+            title,
+            sequence,
+            action,
+            outcome: diff.changes.length > 0 ? "done" : "nothing-to-do",
+            made,
+            keep,
+            error: null,
+        },
+        rateLimited: false,
     };
 }
 
 /** An item the sync writes nothing for, with why (`outcome`). */
-function unwrittenItem(diff: HymnNoteDiff, outcome: "changed"): HymnNoteSyncItem {
+function unwrittenItem(
+    diff: HymnNoteDiff,
+    outcome: "changed" | "not-attempted"
+): HymnNoteSyncItem {
     const { itemId, title, sequence, action } = diff;
     return { itemId, title, sequence, action, outcome, made: [], keep: [], error: null };
 }
@@ -378,6 +407,7 @@ function countSync(items: readonly HymnNoteSyncItem[]): Required<HymnNoteSyncCou
         kept: 0,
         failed: 0,
         changed: 0,
+        notAttempted: 0,
     };
     for (const item of items) {
         counts.kept += item.keep.length;
@@ -387,6 +417,8 @@ function countSync(items: readonly HymnNoteSyncItem[]): Required<HymnNoteSyncCou
             counts.failed += 1;
         } else if (item.outcome === "changed") {
             counts.changed += 1;
+        } else if (item.outcome === "not-attempted") {
+            counts.notAttempted += 1;
         }
         for (const change of item.made) {
             if (change.kind === "create") {
@@ -426,7 +458,9 @@ function countSync(items: readonly HymnNoteSyncItem[]): Required<HymnNoteSyncCou
  * (someone is waiting), recording a `write_log` row (`item-note`) for each,
  * with what it asked for and what came of it or Planning Center's error.
  * An item whose change fails stops there, and the sync goes on to the next
- * item.
+ * item; except at Planning Center's rate limit (a 429 the client did not
+ * retry), where the sync stops: every later item that needed a write is
+ * reported "not-attempted", and nothing more is sent.
  *
  * A missing category, several of the name, or settings or categories that
  * could not be read, refuse the sync ("no-category" or "unavailable"):
@@ -467,12 +501,18 @@ export async function syncHymnNotes(
     }
     const expected = previewed === undefined ? null : previewedByItem(previewed);
     const results: HymnNoteSyncItem[] = [];
+    let rateLimited = false;
     for (const diff of status.items) {
         if (expected !== null && !matchesPreview(diff, expected.get(diff.itemId))) {
             results.push(unwrittenItem(diff, "changed"));
-            continue;
+        } else if (rateLimited && diff.changes.length > 0) {
+            // The same limit would refuse it too.
+            results.push(unwrittenItem(diff, "not-attempted"));
+        } else {
+            const synced = await syncItem(db, st, plan, status.category, diff);
+            results.push(synced.item);
+            rateLimited ||= synced.rateLimited;
         }
-        results.push(await syncItem(db, st, plan, status.category, diff));
     }
     return { ok: true, category: status.category, items: results, counts: countSync(results) };
 }

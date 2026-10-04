@@ -543,6 +543,45 @@ describe("syncHymnNotes", () => {
         });
     });
 
+    test("stops at Planning Center's first 429, and tries none of the later items' writes", async () => {
+        seedAppNotes(...APP_NOTES);
+        stubPcoPacer();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const mark = lastWriteId();
+        // No Retry-After, so the client does not retry it.
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            ...writeRoutes(),
+            [`PATCH ${urls.note("2", "9002")}`]: () => json({ errors: [] }, { status: 429 }),
+        });
+
+        const result = await syncHymnNotes(ST, PLAN);
+
+        expect(writesSent(fetchMock).map(({ method, url }) => `${method} ${url}`)).toEqual([
+            `POST ${urls.notes("1")}`,
+            `PATCH ${urls.note("2", "9002")}`,
+        ]);
+        expect(result.ok && result.items.map(({ itemId, outcome, made }) => [itemId, outcome, made.length])).toEqual([
+            ["1", "done", 1],
+            ["2", "failed", 0],
+            ["3", "not-attempted", 0],
+            ["4", "not-attempted", 0],
+            ["5", "nothing-to-do", 0],
+        ]);
+        expect(result.ok && result.items[1].error).toMatch(/status: 429/);
+        expect(result).toMatchObject({
+            ok: true,
+            counts: { created: 1, updated: 0, deleted: 0, unchanged: 1, failed: 1, notAttempted: 2 },
+        });
+        // Only the writes sent are logged.
+        expect(
+            writesAfter(mark).map(({ ok, result: logged }) => [ok, (logged as { status?: number }).status ?? null])
+        ).toEqual([
+            [true, null],
+            [false, 429],
+        ]);
+    });
+
     test("stops an item at its first failed change, and tries none of its others", async () => {
         seedAppNotes(...APP_NOTES);
         vi.spyOn(console, "error").mockImplementation(() => {});

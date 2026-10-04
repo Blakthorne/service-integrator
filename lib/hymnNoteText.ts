@@ -213,6 +213,10 @@ export function previewSummary(diffs: readonly HymnNoteDiff[]): string {
 export const CHANGED_SINCE_PREVIEW_TEXT =
     "Changed since the preview, so nothing was written. Preview again to see what a sync would do now.";
 
+/** What a result says of an item not tried because Planning Center's rate limit stopped the sync. */
+export const NOT_ATTEMPTED_TEXT =
+    "Not tried: Planning Center asked the app to slow down, so the sync stopped before this song. Preview again in a minute.";
+
 /**
  * What became of a song item's notes in a sync, line by line: the failure
  * first, with Planning Center's reason, or that it changed since the
@@ -224,6 +228,9 @@ export function resultLines(item: HymnNoteSyncItem): HymnNoteLine[] {
     const lines: HymnNoteLine[] = [];
     if (item.outcome === "changed") {
         lines.push(line("failed", "Not written", CHANGED_SINCE_PREVIEW_TEXT));
+    }
+    if (item.outcome === "not-attempted") {
+        lines.push(line("failed", "Not written", NOT_ATTEMPTED_TEXT));
     }
     if (item.outcome === "failed") {
         const reason = item.error?.trim() ?? "";
@@ -239,13 +246,17 @@ export function resultLines(item: HymnNoteSyncItem): HymnNoteLine[] {
 
 /** Whether a result needs the person's attention: its writes failed, or were not made. */
 function needsAttention(item: HymnNoteSyncItem): boolean {
-    return item.outcome === "failed" || item.outcome === "changed";
+    return (
+        item.outcome === "failed" ||
+        item.outcome === "changed" ||
+        item.outcome === "not-attempted"
+    );
 }
 
 /**
  * The results' rows: the song items whose writes failed, or were not made
- * because they changed since the preview, first, so they are seen; then
- * the rest; each group in sequence order.
+ * (they changed since the preview, or the rate limit stopped the sync),
+ * first, so they are seen; then the rest; each group in sequence order.
  */
 export function resultRows(items: readonly HymnNoteSyncItem[]): HymnNoteRow[] {
     return [...items]
@@ -261,12 +272,14 @@ export function resultRows(items: readonly HymnNoteSyncItem[]): HymnNoteRow[] {
  * What the results say above their rows: the writes made ("Added 2 notes,
  * changed 1 and removed 1."), or that nothing needed writing; how many
  * songs' notes could not be written; how many changed since the preview and
- * were not written; how many songs needed nothing; and how many notes were
- * left alone.
+ * were not written; how many were not tried because Planning Center's rate
+ * limit stopped the sync; how many songs needed nothing; and how many notes
+ * were left alone.
  */
 export function resultSummary(counts: HymnNoteSyncCounts): string {
     const made = counts.created + counts.updated + counts.deleted;
     const changed = counts.changed ?? 0;
+    const notAttempted = counts.notAttempted ?? 0;
     const sentences: string[] = [];
     if (made > 0) {
         sentences.push(
@@ -294,7 +307,14 @@ export function resultSummary(counts: HymnNoteSyncCounts): string {
                 : `${changed} songs changed since the preview, so they were not written: preview again.`
         );
     }
-    if (made === 0 && counts.failed === 0 && changed === 0) {
+    if (notAttempted > 0) {
+        sentences.push(
+            notAttempted === 1
+                ? "Planning Center asked the app to slow down, so 1 song was not tried: preview again in a minute."
+                : `Planning Center asked the app to slow down, so ${notAttempted} songs were not tried: preview again in a minute.`
+        );
+    }
+    if (made === 0 && counts.failed === 0 && changed === 0 && notAttempted === 0) {
         sentences.push("Nothing needed writing.");
     }
     if (counts.unchanged > 0) {

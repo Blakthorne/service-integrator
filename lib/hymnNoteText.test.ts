@@ -3,6 +3,7 @@ import type { ItemNote } from "./domain";
 import {
     CHANGED_SINCE_PREVIEW_TEXT,
     MISSING_CATEGORY_HELP,
+    NOT_ATTEMPTED_TEXT,
     SYNC_DIALOG_DESCRIPTION,
     cardNoteBadge,
     confirmLabel,
@@ -283,6 +284,12 @@ describe("resultLines", () => {
         );
     });
 
+    test("an item the rate limit stopped the sync before says it was not tried", () => {
+        expect(
+            resultLines(syncItem({ itemId: "1", action: "create", outcome: "not-attempted" })).map(said)
+        ).toEqual([`Not written: ${NOT_ATTEMPTED_TEXT}`]);
+    });
+
     test("a note that needed nothing, the notes left alone, and a song with no note", () => {
         expect(
             resultLines(syncItem({ itemId: "1", action: "unchanged", outcome: "nothing-to-do" })).map(
@@ -312,13 +319,14 @@ describe("resultRows", () => {
         expect(rows[0]).toMatchObject({ title: "Song 2" });
     });
 
-    test("puts the items that changed since the preview with the failures", () => {
+    test("puts the items not written, changed or not tried, with the failures", () => {
         const rows = resultRows([
             syncItem({ itemId: "1" }),
+            syncItem({ itemId: "4", outcome: "not-attempted" }),
             syncItem({ itemId: "3", outcome: "changed" }),
             syncItem({ itemId: "2", outcome: "failed", error: "boom" }),
         ]);
-        expect(rows.map((row) => row.itemId)).toEqual(["2", "3", "1"]);
+        expect(rows.map((row) => row.itemId)).toEqual(["2", "3", "4", "1"]);
     });
 });
 
@@ -331,6 +339,7 @@ function counts(overrides: Partial<HymnNoteSyncCounts>): HymnNoteSyncCounts {
         kept: 0,
         failed: 0,
         changed: 0,
+        notAttempted: 0,
         ...overrides,
     };
 }
@@ -352,6 +361,15 @@ describe("resultSummary", () => {
         );
         expect(resultSummary(counts({ changed: 2, unchanged: 1 }))).toBe(
             "2 songs changed since the preview, so they were not written: preview again. 1 song needed nothing."
+        );
+    });
+
+    test("says how many songs the rate limit kept the sync from trying", () => {
+        expect(resultSummary(counts({ created: 1, failed: 1, notAttempted: 2 }))).toBe(
+            "Added 1 note. 1 song's note could not be written. Planning Center asked the app to slow down, so 2 songs were not tried: preview again in a minute."
+        );
+        expect(resultSummary(counts({ failed: 1, notAttempted: 1 }))).toBe(
+            "1 song's note could not be written. Planning Center asked the app to slow down, so 1 song was not tried: preview again in a minute."
         );
     });
 
