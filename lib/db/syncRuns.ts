@@ -100,6 +100,27 @@ export function finishSyncRun(
     }
 }
 
+/** The message of a run that a stopped server left in progress, as `finishInterruptedRuns` records it. */
+export const INTERRUPTED_MESSAGE = "interrupted (the server restarted)";
+
+/**
+ * Finish every run still in progress as failed, at `at`, with
+ * `INTERRUPTED_MESSAGE`. Call it at boot, before any job starts: a run still
+ * open then was cut short when the server stopped (a deploy, a crash), and
+ * would otherwise show as in progress forever. Returns how many it finished.
+ */
+export function finishInterruptedRuns(
+    db: DatabaseSync,
+    at: Date = new Date()
+): number {
+    const { changes } = db
+        .prepare(
+            "UPDATE sync_runs SET finished_at = ?, ok = 0, message = ? WHERE finished_at IS NULL"
+        )
+        .run(at.toISOString(), INTERRUPTED_MESSAGE);
+    return Number(changes);
+}
+
 /** The run of `kind` that started last (finished or not), or null if none has. */
 export function latestSyncRun(
     db: DatabaseSync,

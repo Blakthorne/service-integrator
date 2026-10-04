@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+    INTERRUPTED_MESSAGE,
+    finishInterruptedRuns,
     finishSyncRun,
     isSyncRunKind,
     latestSyncRun,
@@ -107,6 +109,37 @@ describe("finishSyncRun", () => {
             "Sync run 999 is not in progress"
         );
         expect(latestSyncRun(db, "backup")?.ok).toBe(true);
+    });
+});
+
+describe("finishInterruptedRuns", () => {
+    test("finishes every run still in progress as interrupted, and only those", () => {
+        const done = startSyncRun(db, "backup", T0);
+        finishSyncRun(db, done, { ok: true, message: "Wrote a backup" }, T0);
+        const backup = startSyncRun(db, "backup", T1);
+        const songs = startSyncRun(db, "pco-songs", T1);
+
+        expect(finishInterruptedRuns(db, T2)).toBe(2);
+        for (const id of [backup, songs]) {
+            expect(recentSyncRuns(db).find((run) => run.id === id)).toMatchObject({
+                finishedAt: T2.toISOString(),
+                ok: false,
+                message: INTERRUPTED_MESSAGE,
+            });
+        }
+        expect(recentSyncRuns(db).find((run) => run.id === done)).toMatchObject({
+            finishedAt: T0.toISOString(),
+            ok: true,
+            message: "Wrote a backup",
+        });
+        expect(INTERRUPTED_MESSAGE).toBe("interrupted (the server restarted)");
+    });
+
+    test("finishes nothing when no run is in progress", () => {
+        const id = startSyncRun(db, "backup", T0);
+        finishSyncRun(db, id, { ok: false, message: "disk full" }, T1);
+        expect(finishInterruptedRuns(db, T2)).toBe(0);
+        expect(latestSyncRun(db, "backup")?.message).toBe("disk full");
     });
 });
 
