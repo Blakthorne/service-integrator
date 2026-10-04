@@ -3,14 +3,17 @@ import type { CatalogSongSummary, LabelledEntry } from "@/lib/domain";
 import {
     CATALOG_PAGE_SIZE,
     arrangeCatalogSongs,
+    catalogTagIdsBySong,
     filterCatalogSongs,
     foldForSearch,
     isUsed,
     pageCatalogSongs,
     parseCatalogSongsQuery,
+    parseCatalogTag,
     selectCatalogSongs,
     sortCatalogSongs,
     type CatalogSongsQuery,
+    type CatalogTagFilter,
 } from "./filter";
 
 const BOOK_CODES = ["R", "G", "CB"];
@@ -561,5 +564,121 @@ describe("selectCatalogSongs", () => {
         const result = selectCatalogSongs(ROWS, query({}), BOOK_CODES);
         expect(result.total).toBe(ROWS.length);
         expect(result.rows[0]).toBe(chargeToKeep);
+    });
+});
+
+describe("the tag filter", () => {
+    const TAG_IDS = ["101", "102", "301"];
+    const hymn = row("Linked Hymn", "TUNE A", [["R", 1]], { pcoSongId: "5001", linkedBy: "auto" });
+    const chorus = row("Linked Chorus", "TUNE B", [["G", 2]], {
+        pcoSongId: "5002",
+        linkedBy: "manual",
+        lastScheduledAt: "2026-09-27T08:00:00Z",
+    });
+    const untagged = row("Linked, No Tags", "TUNE C", [["R", 3]], { pcoSongId: "5003" });
+    const notLinked = row("Not Linked", "TUNE D", [["R", 4]]);
+    const LIST = [hymn, chorus, untagged, notLinked];
+    const TAGS_BY_SONG: Record<string, string[]> = {
+        "5001": ["102", "301"],
+        "5002": ["101"],
+        // A Planning Center song not in the catalog.
+        "5999": ["102"],
+    };
+
+    function tagged(tagId: string): CatalogTagFilter {
+        return { tagId, tagIdsBySong: TAGS_BY_SONG };
+    }
+
+    function filter(tag: CatalogTagFilter | null, fields: Partial<CatalogSongsQuery> = {}) {
+        return filterCatalogSongs(LIST, { q: "", book: null, linked: "all", used: "all", tag, ...fields });
+    }
+
+    test("reads a known tag's id from ?tag=, spelled exactly", () => {
+        expect(parseCatalogTag(new URLSearchParams("tag=102"), TAG_IDS)).toBe("102");
+        expect(parseCatalogTag(new URLSearchParams("q=x&tag=301&page=2"), TAG_IDS)).toBe("301");
+    });
+
+    test("falls back to any tag for a missing, unknown or misspelled one", () => {
+        for (const query of ["", "tag=", "tag=999", "tag=+102", "tag=102x", "tag=Hymn", "tag=0102"]) {
+            expect(parseCatalogTag(new URLSearchParams(query), TAG_IDS)).toBeNull();
+        }
+        expect(parseCatalogTag(new URLSearchParams("tag=102"), [])).toBeNull();
+    });
+
+    test("leaves the rest of the view as parseCatalogSongsQuery reads it", () => {
+        expect(parseCatalogSongsQuery(new URLSearchParams("tag=102&linked=yes"), BOOK_CODES)).toEqual({
+            q: "",
+            book: null,
+            linked: "yes",
+            used: "all",
+            sort: "title",
+            page: 1,
+        });
+    });
+
+    test("keeps every row with no tag filter", () => {
+        expect(filter(null)).toEqual(LIST);
+        expect(filterCatalogSongs(LIST, { q: "", book: null, linked: "all", used: "all" })).toEqual(LIST);
+    });
+
+    test("keeps the linked songs whose Planning Center song has the tag", () => {
+        expect(filter(tagged("102"))).toEqual([hymn]);
+        expect(filter(tagged("301"))).toEqual([hymn]);
+        expect(filter(tagged("101"))).toEqual([chorus]);
+    });
+
+    test("never keeps a song that is not linked, which has no tags", () => {
+        expect(filter(tagged("102"), { linked: "no" })).toEqual([]);
+        expect(filter({ tagId: "102", tagIdsBySong: {} })).toEqual([]);
+    });
+
+    test("combines with the other filters and the search", () => {
+        expect(filter(tagged("101"), { used: "never" })).toEqual([]);
+        expect(filter(tagged("102"), { used: "never" })).toEqual([hymn]);
+        expect(filter(tagged("102"), { book: "G" })).toEqual([]);
+        expect(filter(tagged("102"), { q: "hymn" })).toEqual([hymn]);
+        expect(filter(tagged("102"), { q: "chorus" })).toEqual([]);
+    });
+
+    test("ignores tags kept under a key that is not a song's own", () => {
+        const proto = row("Proto", null, [], { pcoSongId: "constructor" });
+        expect(
+            filterCatalogSongs([proto], {
+                q: "",
+                book: null,
+                linked: "all",
+                used: "all",
+                tag: { tagId: "102", tagIdsBySong: {} },
+            })
+        ).toEqual([]);
+    });
+
+    test("applies before the list sorts and pages it, and to the export", () => {
+        const query: CatalogSongsQuery = {
+            q: "",
+            book: null,
+            linked: "all",
+            used: "all",
+            sort: "title",
+            page: 1,
+        };
+        const songs = [chorus, hymn, notLinked];
+        const tagsBySong = { "5001": ["101"], "5002": ["101"] };
+        expect(
+            arrangeCatalogSongs(songs, { ...query, tag: { tagId: "101", tagIdsBySong: tagsBySong } }, BOOK_CODES)
+        ).toEqual([chorus, hymn]);
+        expect(
+            selectCatalogSongs(songs, { ...query, tag: { tagId: "101", tagIdsBySong: tagsBySong } }, BOOK_CODES, 1)
+        ).toEqual({ rows: [chorus], page: 1, totalPages: 2, total: 2 });
+        expect(arrangeCatalogSongs(songs, query, BOOK_CODES)).toEqual([chorus, hymn, notLinked]);
+    });
+
+    test("trims the tags to the songs the list links to", () => {
+        const trimmed = catalogTagIdsBySong(LIST, TAGS_BY_SONG);
+        expect(trimmed).toEqual({ "5001": ["102", "301"], "5002": ["101"] });
+        trimmed["5001"].push("x");
+        expect(TAGS_BY_SONG["5001"]).toEqual(["102", "301"]);
+        expect(catalogTagIdsBySong([], TAGS_BY_SONG)).toEqual({});
+        expect(catalogTagIdsBySong([row("P", null, [], { pcoSongId: "toString" })], {})).toEqual({});
     });
 });

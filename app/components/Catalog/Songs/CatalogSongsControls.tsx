@@ -2,7 +2,7 @@
 
 import Segmented, { type SegmentedOption } from "@/app/components/ui/Segmented";
 import type { CatalogLinked, CatalogSort, CatalogUsed } from "@/lib/catalog/filter";
-import type { Book } from "@/lib/domain";
+import type { Book, PcoTag, PcoTagGroup } from "@/lib/domain";
 import SearchBox from "../SearchBox";
 
 /** What the book filter needs of a book. */
@@ -10,6 +10,14 @@ export type CatalogBookOption = Pick<Book, "code" | "name" | "shortName">;
 
 /** The book filter's value for every book: never a book code, which starts with a letter. */
 export const ALL_BOOKS = "";
+
+/** What the tag filter needs of a song tag group: its name, and its tags' ids and names. */
+export type CatalogTagGroupOption = Pick<PcoTagGroup, "id" | "name"> & {
+    tags: Pick<PcoTag, "id" | "name">[];
+};
+
+/** The tag filter's value for any tag: never a tag's id, which is digits. */
+export const ANY_TAG = "";
 
 const SORT_OPTIONS: readonly SegmentedOption<CatalogSort>[] = [
     { value: "title", label: "Title" },
@@ -38,8 +46,12 @@ interface CatalogSongsControlsProps {
     book: string;
     linked: CatalogLinked;
     used: CatalogUsed;
+    /** The chosen tag's id, or `ANY_TAG`. */
+    tag: string;
     sort: CatalogSort;
     books: readonly CatalogBookOption[];
+    /** The song tag groups that have tags, by name; with none, there is no tag filter. */
+    tagGroups: readonly CatalogTagGroupOption[];
     /** The count line, such as "12 of 921 songs". */
     summary: string;
     /** How many songs "Export CSV" would write: every song the filters leave, on every page. */
@@ -48,6 +60,7 @@ interface CatalogSongsControlsProps {
     onBookChange: (book: string) => void;
     onLinkedChange: (linked: CatalogLinked) => void;
     onUsedChange: (used: CatalogUsed) => void;
+    onTagChange: (tag: string) => void;
     onSortChange: (sort: CatalogSort) => void;
     /** Called to download the songs the filters leave as a CSV file. */
     onExport: () => void;
@@ -56,23 +69,69 @@ interface CatalogSongsControlsProps {
 const GROUP_LABEL =
     "block text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400";
 
+interface TagFilterProps {
+    tag: string;
+    tagGroups: readonly CatalogTagGroupOption[];
+    onTagChange: (tag: string) => void;
+}
+
 /**
- * The songs list's search, book, Planning Center link and usage filters and
- * sort order, the count of what they leave, and the Export CSV button.
+ * The tag filter: a list of Planning Center's song tags, grouped as
+ * Planning Center groups them, with "Any tag" first. A list rather than a
+ * row of buttons, since a church may have many tags in several groups.
+ * Only a song linked to Planning Center has tags, which its label says.
+ */
+function TagFilter({ tag, tagGroups, onTagChange }: TagFilterProps) {
+    return (
+        <div className="max-w-full space-y-1">
+            <label htmlFor="catalog-tag-filter" className={GROUP_LABEL}>
+                Planning Center tag
+            </label>
+            <select
+                id="catalog-tag-filter"
+                value={tag}
+                onChange={(event) => onTagChange(event.target.value)}
+                // The height of the Segmented rows beside it; the ring is the
+                // one they draw, 3:1 against the page.
+                className="block max-w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 dark:focus-visible:ring-blue-400"
+            >
+                <option value={ANY_TAG}>Any tag</option>
+                {tagGroups.map((group) => (
+                    <optgroup key={group.id} label={group.name}>
+                        {group.tags.map((option) => (
+                            <option key={option.id} value={option.id}>
+                                {option.name}
+                            </option>
+                        ))}
+                    </optgroup>
+                ))}
+            </select>
+        </div>
+    );
+}
+
+/**
+ * The songs list's search, book, Planning Center link, usage and tag
+ * filters and sort order, the count of what they leave, and the Export CSV
+ * button. The tag filter shows only once the tags sync has brought some
+ * tags.
  */
 export default function CatalogSongsControls({
     query,
     book,
     linked,
     used,
+    tag,
     sort,
     books,
+    tagGroups,
     summary,
     exportCount,
     onQueryChange,
     onBookChange,
     onLinkedChange,
     onUsedChange,
+    onTagChange,
     onSortChange,
     onExport,
 }: CatalogSongsControlsProps) {
@@ -130,6 +189,9 @@ export default function CatalogSongsControls({
                         ariaLabel="Filter by usage"
                     />
                 </div>
+                {tagGroups.length > 0 && (
+                    <TagFilter tag={tag} tagGroups={tagGroups} onTagChange={onTagChange} />
+                )}
                 <div className="max-w-full space-y-1">
                     <span className={GROUP_LABEL}>Sort</span>
                     <Segmented
