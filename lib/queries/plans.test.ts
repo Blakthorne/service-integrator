@@ -1,4 +1,14 @@
+import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import {
+    openTestDb,
+    seedBook,
+    seedEntry,
+    seedHymn,
+    seedPcoSong,
+    seedSong,
+    seedTune,
+} from "@/lib/db/testing";
 import {
     PCO_BASE,
     calledUrls,
@@ -11,6 +21,13 @@ import {
     stubFetchRoutes,
     stubPcoCredentials,
 } from "@/lib/pco/testing";
+
+// vi.hoisted: vi.mock factories run before the module's own declarations.
+const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
+vi.mock("@/lib/db", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/db")>()),
+    getDb,
+}));
 
 /** A fresh copy of the module, so the plan-label cache starts empty. */
 async function loadQueries() {
@@ -58,9 +75,17 @@ function planDetailRoutes(): Record<string, unknown> {
     };
 }
 
-beforeEach(stubPcoCredentials);
+let db: DatabaseSync;
+
+beforeEach(() => {
+    stubPcoCredentials();
+    db = openTestDb();
+    getDb.mockReturnValue(db);
+});
 
 afterEach(() => {
+    db.close();
+    getDb.mockReset();
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -153,6 +178,16 @@ describe("getPlanDetail", () => {
         ]);
     });
 
+    test("finds no catalog links in an empty catalog, and nothing to suggest", async () => {
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { catalog, suggestions } = await getPlanDetail(MORNING, PLAN);
+
+        expect(catalog).toEqual({});
+        expect(suggestions).toEqual({ "20": [], "30": [], "40": [] });
+    });
+
     test("lets a missing plan's PcoError through, for orNotFound to handle", async () => {
         stubFetchRoutes({
             ...planDetailRoutes(),
@@ -164,6 +199,192 @@ describe("getPlanDetail", () => {
             name: "PcoError",
             status: 404,
         });
+    });
+});
+
+describe("getPlanDetail's catalog links", () => {
+    /** Plan routes whose items are these, with these songs included. */
+    function routesWith(
+        items: ReturnType<typeof itemResource>[],
+        included: ReturnType<typeof songResource>[]
+    ): Record<string, unknown> {
+        return { ...planDetailRoutes(), [urls.items]: listPage(items, { included }) };
+    }
+
+    /**
+     * Come, Thou Fount to two tunes, and Abide with Me linked to Planning
+     * Center song 30, at R-517 and G-64.
+     */
+    function seedCatalog() {
+        const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns" });
+        const great = seedBook(db, { code: "G", name: "Great Hymns of the Faith" });
+        const fount = seedHymn(db, { title: "Come, Thou Fount of Every Blessing" });
+        const songs = {
+            nettleton: seedSong(db, { hymnId: fount, tuneId: seedTune(db, { name: "NETTLETON" }) }),
+            warrenton: seedSong(db, { hymnId: fount, tuneId: seedTune(db, { name: "WARRENTON" }) }),
+            abide: seedSong(db, {
+                hymnId: seedHymn(db, { title: "Abide with Me" }),
+                tuneId: seedTune(db, { name: "EVENTIDE" }),
+                pcoSongId: "30",
+                linkedAt: "2026-10-01T12:00:00.000Z",
+                linkedBy: "manual",
+            }),
+        };
+        seedEntry(db, { bookId: great, songId: songs.abide, number: 64 });
+        seedEntry(db, { bookId: rejoice, songId: songs.abide, number: 517 });
+        seedEntry(db, { bookId: rejoice, songId: songs.nettleton, number: 553 });
+        seedEntry(db, { bookId: great, songId: songs.nettleton, number: 17 });
+        seedEntry(db, { bookId: rejoice, songId: songs.warrenton, number: 554 });
+        seedPcoSong(db, { id: "30", title: "Abide with Me" });
+        return songs;
+    }
+
+    test("gives each linked song its catalog song, and the others their best suggestions", async () => {
+        const songs = seedCatalog();
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { catalog, suggestions } = await getPlanDetail(MORNING, PLAN);
+
+        expect(catalog).toEqual({
+            "30": {
+                songId: songs.abide,
+                title: "Abide with Me",
+                tuneName: "EVENTIDE",
+                entries: [
+                    expect.objectContaining({ label: "R-517" }),
+                    expect.objectContaining({ label: "G-64" }),
+                ],
+            },
+        });
+        expect(Object.keys(suggestions).sort()).toEqual(["20", "40"]);
+        expect(
+            suggestions["20"].map(({ songId, tuneName, reason, entries }) => [
+                songId,
+                tuneName,
+                reason,
+                entries.map(({ label }) => label),
+            ])
+        ).toEqual([
+            [songs.nettleton, "NETTLETON", "exact", ["R-553", "G-17"]],
+            [songs.warrenton, "WARRENTON", "exact", ["R-554"]],
+        ]);
+        expect(suggestions["40"]).toEqual([]);
+    });
+
+    test("follows the link and the song's title, not the item's", async () => {
+        const songs = seedCatalog();
+        stubFetchRoutes(
+            routesWith(
+                [
+                    itemResource("2", { title: "Come Thou Fount (Key of D)", sequence: 1 }, songLink("20")),
+                    itemResource("3", { title: "Abide with Me (Acoustic)", sequence: 2 }, songLink("30")),
+                    itemResource("5", { title: "Abide with Me, Reprise", sequence: 3 }, songLink("30")),
+                ],
+                [
+                    songResource("20", { title: "Come, Thou Fount of Every Blessing" }),
+                    songResource("30", { title: "Abide with Me" }),
+                ]
+            )
+        );
+        const { getPlanDetail } = await loadQueries();
+
+        const { catalog, suggestions } = await getPlanDetail(MORNING, PLAN);
+
+        expect(Object.keys(catalog)).toEqual(["30"]);
+        expect(catalog["30"].songId).toBe(songs.abide);
+        expect(suggestions["20"].map(({ songId }) => songId)).toEqual([
+            songs.nettleton,
+            songs.warrenton,
+        ]);
+    });
+
+    test("suggests by the mirror's title when Planning Center sent an item without its song", async () => {
+        const songs = seedCatalog();
+        seedPcoSong(db, { id: "20", title: "Come, Thou Fount of Every Blessing" });
+        stubFetchRoutes(
+            routesWith(
+                [itemResource("2", { title: "Come Thou Fount (Key of D)" }, songLink("20"))],
+                []
+            )
+        );
+        const { getPlanDetail } = await loadQueries();
+
+        const { suggestions } = await getPlanDetail(MORNING, PLAN);
+
+        expect(suggestions["20"].map(({ songId }) => songId)).toEqual([
+            songs.nettleton,
+            songs.warrenton,
+        ]);
+    });
+
+    test("suggests nothing for a song set aside as not hymnal material", async () => {
+        seedCatalog();
+        seedPcoSong(db, {
+            id: "40",
+            title: "A Song Not In The Hymnbooks",
+            ignoredAt: "2026-10-02T12:00:00.000Z",
+        });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { suggestions } = await getPlanDetail(MORNING, PLAN);
+
+        expect(Object.keys(suggestions)).toEqual(["20"]);
+    });
+
+    test("asks the database a fixed number of queries, however many songs the plan has", async () => {
+        seedCatalog();
+        const prepare = vi.spyOn(db, "prepare");
+        const { getPlanDetail } = await loadQueries();
+        const songItem = (id: string, songId: string, title: string) =>
+            itemResource(id, { title, sequence: Number(id) }, songLink(songId));
+
+        stubFetchRoutes(
+            routesWith(
+                [songItem("1", "20", "Come, Thou Fount of Every Blessing"), songItem("2", "30", "Abide with Me")],
+                [songResource("20", { title: "Come, Thou Fount of Every Blessing" })]
+            )
+        );
+        await getPlanDetail(MORNING, PLAN);
+        const fewSongs = prepare.mock.calls.length;
+        expect(fewSongs).toBe(7);
+
+        prepare.mockClear();
+        stubFetchRoutes(
+            routesWith(
+                Array.from({ length: 12 }, (_, i) =>
+                    songItem(String(i + 1), String(100 + i), `Song ${i}`)
+                ),
+                []
+            )
+        );
+        await getPlanDetail(MORNING, PLAN);
+        expect(prepare.mock.calls.length).toBe(fewSongs);
+
+        // Every song linked: no suggestions to find.
+        prepare.mockClear();
+        stubFetchRoutes(routesWith([songItem("1", "30", "Abide with Me")], []));
+        await getPlanDetail(MORNING, PLAN);
+        expect(prepare.mock.calls.length).toBe(2);
+
+        // No song items: nothing to ask.
+        prepare.mockClear();
+        stubFetchRoutes(
+            routesWith([itemResource("1", { title: "Welcome", item_type: "header" })], [])
+        );
+        await getPlanDetail(MORNING, PLAN);
+        expect(prepare).not.toHaveBeenCalled();
+    });
+
+    test("lets a database that cannot be opened fail the plan", async () => {
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        await expect(getPlanDetail(MORNING, PLAN)).rejects.toThrow("Could not open the database");
     });
 });
 
@@ -217,6 +438,19 @@ describe("getPlanLabels", () => {
             expect.stringContaining(PLAN),
             expect.objectContaining({ name: "PcoError", status: 500 })
         );
+    });
+
+    test("does not need the database", async () => {
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanLabels } = await loadQueries();
+
+        await expect(getPlanLabels(MORNING, PLAN)).resolves.toMatchObject({
+            plan: "October 4, 2026 · Sunday Morning",
+        });
+        expect(getDb).not.toHaveBeenCalled();
     });
 
     test("falls back on any error, even missing credentials", async () => {

@@ -7,6 +7,7 @@ import type {
     BookEntry,
     BookSummary,
     CatalogCounts,
+    CatalogMatch,
     CatalogSongDetail,
     CatalogSongSummary,
     Entry,
@@ -321,6 +322,58 @@ export function findCatalogSongLabel(
         )
         .get(songId);
     return row ? songLabelOf(text(row.title), nullableText(row.tune_name)) : null;
+}
+
+/**
+ * The catalog songs linked to these Planning Center songs, by Planning
+ * Center song id, each with its hymn's title, its tune's name and its
+ * labelled entries in book order: what a plan page shows beside its items.
+ * Ids no song is linked to are left out. Two queries, however many ids, and
+ * none for no ids.
+ */
+export function findCatalogMatches(
+    db: DatabaseSync,
+    pcoSongIds: readonly string[]
+): Map<string, CatalogMatch> {
+    const matches = new Map<string, CatalogMatch>();
+    if (pcoSongIds.length === 0) {
+        return matches;
+    }
+    const ids = JSON.stringify([...new Set(pcoSongIds)]);
+    const linked = "s.pco_song_id IN (SELECT value FROM json_each(?))";
+    const entries = groupBy(
+        db
+            .prepare(
+                `SELECT ${ENTRY_COLUMNS}
+                 FROM entries e
+                 JOIN books b ON b.id = e.book_id
+                 JOIN songs s ON s.id = e.song_id
+                 WHERE ${linked}
+                 ORDER BY ${BOOK_ORDER}, ${PLACEMENT_ORDER}, ${VARIANT_ORDER}`
+            )
+            .all(ids)
+            .map(toLabelledEntry),
+        (entry) => entry.songId
+    );
+    const songs = db
+        .prepare(
+            `SELECT s.id, s.pco_song_id, h.title, t.name AS tune_name
+             FROM songs s
+             JOIN hymns h ON h.id = s.hymn_id
+             LEFT JOIN tunes t ON t.id = s.tune_id
+             WHERE ${linked}`
+        )
+        .all(ids);
+    for (const row of songs) {
+        const songId = int(row.id);
+        matches.set(text(row.pco_song_id), {
+            songId,
+            title: text(row.title),
+            tuneName: nullableText(row.tune_name),
+            entries: entries.get(songId) ?? [],
+        });
+    }
+    return matches;
 }
 
 // ---------------------------------------------------------------------------

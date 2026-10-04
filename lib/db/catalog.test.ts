@@ -4,6 +4,7 @@ import {
     countCatalog,
     findBook,
     findBookLabel,
+    findCatalogMatches,
     findCatalogSong,
     findCatalogSongLabel,
     findTune,
@@ -415,6 +416,51 @@ describe("findCatalogSongLabel", () => {
         );
         expect(findCatalogSongLabel(db, songs.thankYouNoTune)).toBe("Thank You, Lord");
         expect(findCatalogSongLabel(db, 9999)).toBeNull();
+    });
+});
+
+describe("findCatalogMatches", () => {
+    test("gives the songs linked to Planning Center songs, by Planning Center id, with their entries in book order", () => {
+        const { songs } = seedCatalog();
+        db.prepare("UPDATE songs SET pco_song_id = '1016' WHERE id = ?").run(songs.doxology);
+        const matches = findCatalogMatches(db, ["1001", "1016", "404", "1001"]);
+        expect([...matches.keys()].sort()).toEqual(["1001", "1016"]);
+        expect(matches.get("1001")).toEqual({
+            songId: songs.amazingGrace,
+            title: "Amazing Grace",
+            tuneName: "NEW BRITAIN",
+            entries: listCatalogSongs(db).find(({ id }) => id === songs.amazingGrace)?.entries,
+        });
+        expect(labels(matches.get("1001")!)).toEqual(["R-108", "R-109", "G-247", "Chorus Book"]);
+        expect(matches.get("1016")).toMatchObject({
+            songId: songs.doxology,
+            title: "Doxology",
+            tuneName: "OLD HUNDREDTH",
+        });
+        expect(labels(matches.get("1016")!)).toEqual(["R-14", "G-Front Cover"]);
+    });
+
+    test("gives a linked song with no tune and no entries", () => {
+        const song = seedSong(db, { pcoSongId: "1002" });
+        expect(findCatalogMatches(db, ["1002"]).get("1002")).toMatchObject({
+            songId: song,
+            tuneName: null,
+            entries: [],
+        });
+    });
+
+    test("runs two queries, however many ids, and none for none", () => {
+        seedCatalog();
+        expect(countQueries(() => findCatalogMatches(db, ["1001"]))).toBe(2);
+        expect(
+            countQueries(() =>
+                findCatalogMatches(
+                    db,
+                    Array.from({ length: 50 }, (_, i) => String(1000 + i))
+                )
+            )
+        ).toBe(2);
+        expect(countQueries(() => findCatalogMatches(db, []))).toBe(0);
     });
 });
 
