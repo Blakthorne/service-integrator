@@ -296,3 +296,113 @@ export interface ImportRunSummary {
     /** How many rows of each kind it adds, such as { songs: 921, entries: 1247 }. */
     planned: Record<string, number>;
 }
+
+/** How many rows of each kind the seed import adds. */
+export type SeedImportCounts = {
+    books: number;
+    hymns: number;
+    hymnAliases: number;
+    tunes: number;
+    tuneAliases: number;
+    songs: number;
+    /** Of the songs, how many have no known tune. */
+    songsWithoutTune: number;
+    entries: number;
+};
+
+/**
+ * A Great Hymns record with no tune whose hymn has tunes in Rejoice Hymns:
+ * one hymn split over two rows.
+ */
+export interface SeedSplitPair {
+    /** The hymn's title. */
+    title: string;
+    /** Its Great Hymns entry, such as "G-369". */
+    label: string;
+    /**
+     * "merged": the hymn has one Rejoice tune, so the entry joined that song;
+     * "ambiguous": it has several, so the entry is a tune-less song of its own.
+     */
+    outcome: "merged" | "ambiguous";
+    /** The hymn's Rejoice tunes: the one it joined, or the candidates. */
+    tunes: string[];
+}
+
+/** A descant or round, imported as a variant note on its hymn's entry. */
+export interface SeedVariant {
+    /** The title as the file has it, such as "America the Beautiful (Descant - last stanza only)". */
+    record: string;
+    /** The hymn it belongs to. */
+    title: string;
+    /** The parenthetical, such as "Descant - last stanza only" or "A Round". */
+    variantNote: string;
+    /** Its tune; null when the record had none and the hymn had no single other tune. */
+    tune: string | null;
+    /** True when the record had no tune and took the hymn's only one. */
+    tuneFromBase: boolean;
+    /** True when its song also has entries without a variant note (a descant to the usual tune). */
+    sharesSong: boolean;
+    /** Its entries' labels. */
+    labels: string[];
+}
+
+/** A fix from the seed's explicit merge list. */
+export interface SeedMerge {
+    /** A tune spelled two ways, a hymn titled two ways, or a misspelt title. */
+    kind: "tune-alias" | "hymn-alias" | "title-fix";
+    /** The spelling that becomes an alias. */
+    from: string;
+    /** The spelling kept as the name or title. */
+    to: string;
+    /** How many records it changed; 0 means the list has gone out of date. */
+    records: number;
+}
+
+/** A song with no known tune: the first reconcile work list. */
+export interface SeedSongWithoutTune {
+    title: string;
+    labels: string[];
+    /**
+     * Why: the file gave none ("no-tune"), its split pair had several
+     * candidates ("ambiguous-split-pair"), or it is a variant whose hymn had
+     * no single tune ("variant-without-tune").
+     */
+    reason: "no-tune" | "ambiguous-split-pair" | "variant-without-tune";
+}
+
+/** Two hymns with nearly the same title that the seed did not merge, for a human to judge. */
+export interface SeedPossibleDuplicate {
+    titles: [string, string];
+    /** Each hymn's entry labels. */
+    labels: [string[], string[]];
+}
+
+/** An entry the seed left out because the catalog's rules forbid it. */
+export interface SeedSkippedEntry {
+    /** The record's title, as the file has it. */
+    record: string;
+    label: string;
+    /** Another record has the number, or the song already has an entry there with the same variant note. */
+    reason: "number-taken" | "song-already-in-book";
+}
+
+/** The review of the seed import from hymns.json: what it read, what it adds, and what needs a look. */
+export interface SeedImportReport {
+    input: {
+        records: number;
+        /** Records whose tune is empty. */
+        recordsWithoutTune: number;
+        /** Records with a number in each book (the front cover counts), by book code. */
+        recordsByBook: Record<string, number>;
+    };
+    /** The rows applying it adds. */
+    planned: SeedImportCounts;
+    /** The entries it adds to each book, by book code. */
+    entriesByBook: Record<string, number>;
+    splitPairs: SeedSplitPair[];
+    variants: SeedVariant[];
+    merges: SeedMerge[];
+    songsWithoutTune: SeedSongWithoutTune[];
+    possibleDuplicates: SeedPossibleDuplicate[];
+    skippedEntries: SeedSkippedEntry[];
+}
