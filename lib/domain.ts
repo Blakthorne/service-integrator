@@ -213,7 +213,17 @@ export interface CatalogSongSummary {
     tuneName: string | null;
     /** The tune's other names, which search also matches. */
     tuneAliases: string[];
+    /** The Planning Center song it is linked to, or null when it is not linked. */
     pcoSongId: string | null;
+    /** How its link was made; null when it is not linked (or a newer build made it). */
+    linkedBy: SongLinkSource | null;
+    /**
+     * When its Planning Center song was last scheduled, as Planning Center
+     * gives it (counting upcoming plans): null when it is not linked, the
+     * mirror lacks the song, or the song was never scheduled. A song is used
+     * when this is set.
+     */
+    lastScheduledAt: string | null;
     /** Its entries in book order, then by number or position. */
     entries: LabelledEntry[];
 }

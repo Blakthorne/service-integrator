@@ -18,6 +18,7 @@ import {
     seedBook,
     seedEntry,
     seedHymn,
+    seedPcoSong,
     seedSong,
     seedTune,
 } from "./testing";
@@ -233,6 +234,8 @@ describe("listCatalogSongs", () => {
             tuneName: "NEW BRITAIN",
             tuneAliases: [],
             pcoSongId: "1001",
+            linkedBy: "import",
+            lastScheduledAt: null,
             entries: [
                 {
                     id: entries.amazingGraceRejoice,
@@ -296,6 +299,45 @@ describe("listCatalogSongs", () => {
             tuneAliases: [],
             pcoSongId: null,
             entries: [expect.objectContaining({ label: "G-221" })],
+        });
+    });
+
+    test("gives each song its link and when its Planning Center song was last scheduled", () => {
+        const { songs } = seedCatalog();
+        seedPcoSong(db, { id: "1001", lastScheduledAt: "2026-09-27T08:00:00Z" });
+        seedPcoSong(db, { id: "1016", lastScheduledAt: null });
+        db.prepare(
+            "UPDATE songs SET pco_song_id = '1016', linked_by = 'auto' WHERE id = ?"
+        ).run(songs.doxology);
+        db.prepare(
+            "UPDATE songs SET pco_song_id = '1404', linked_by = 'manual' WHERE id = ?"
+        ).run(songs.allPeople);
+        const rows = new Map(listCatalogSongs(db).map((row) => [row.id, row]));
+        const link = (id: number) => {
+            const { pcoSongId, linkedBy, lastScheduledAt } = rows.get(id)!;
+            return { pcoSongId, linkedBy, lastScheduledAt };
+        };
+        expect(link(songs.amazingGrace)).toEqual({
+            pcoSongId: "1001",
+            linkedBy: "import",
+            lastScheduledAt: "2026-09-27T08:00:00Z",
+        });
+        // Linked, but never scheduled.
+        expect(link(songs.doxology)).toEqual({
+            pcoSongId: "1016",
+            linkedBy: "auto",
+            lastScheduledAt: null,
+        });
+        // Linked to a song the mirror lacks.
+        expect(link(songs.allPeople)).toEqual({
+            pcoSongId: "1404",
+            linkedBy: "manual",
+            lastScheduledAt: null,
+        });
+        expect(link(songs.rejoice)).toEqual({
+            pcoSongId: null,
+            linkedBy: null,
+            lastScheduledAt: null,
         });
     });
 

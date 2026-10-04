@@ -44,6 +44,8 @@ function row(
         tuneName,
         tuneAliases: [],
         pcoSongId: null,
+        linkedBy: null,
+        lastScheduledAt: null,
         entries: entries.map(
             (spec, index): LabelledEntry => ({
                 id: id * 100 + index,

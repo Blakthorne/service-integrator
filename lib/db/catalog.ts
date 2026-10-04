@@ -144,8 +144,10 @@ function aliasesByOwner(rows: Row[]): Map<number, string[]> {
 
 /**
  * Songs as list rows, in `orderBy` order, each with its hymn's and tune's
- * aliases and its labelled entries in book order. Four queries, whatever the
- * number of songs: the songs, their entries, and the two kinds of alias.
+ * aliases, its link and when its Planning Center song was last scheduled,
+ * and its labelled entries in book order. Four queries, whatever the number
+ * of songs: the songs (with their links), their entries, and the two kinds
+ * of alias.
  */
 function songSummaries(
     db: DatabaseSync,
@@ -160,10 +162,12 @@ function songSummaries(
 
     const songs = db
         .prepare(
-            `SELECT s.id, s.hymn_id, h.title, s.tune_id, t.name AS tune_name, s.pco_song_id
+            `SELECT s.id, s.hymn_id, h.title, s.tune_id, t.name AS tune_name, s.pco_song_id,
+                    s.linked_by, p.last_scheduled_at
              FROM songs s
              JOIN hymns h ON h.id = s.hymn_id
              LEFT JOIN tunes t ON t.id = s.tune_id
+             LEFT JOIN pco_songs p ON p.id = s.pco_song_id
              ${where}
              ORDER BY ${orderBy}`
         )
@@ -213,6 +217,8 @@ function songSummaries(
             tuneName: nullableText(row.tune_name),
             tuneAliases: tuneId === null ? [] : (tuneAliases.get(tuneId) ?? []),
             pcoSongId: nullableText(row.pco_song_id),
+            linkedBy: linkSource(row.linked_by),
+            lastScheduledAt: nullableText(row.last_scheduled_at),
             entries: entries.get(id) ?? [],
         };
     });
