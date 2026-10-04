@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
     CATALOG_SECTIONS,
+    NAV_HOME_ITEM,
     NAV_ITEMS,
     NAV_UTILITY_ITEMS,
     PLAN_TABS,
@@ -185,6 +186,28 @@ describe("navAriaCurrent", () => {
     });
 });
 
+describe("NAV_HOME_ITEM", () => {
+    test("links to the dashboard at /, drawn as a house where the app's name is hidden", () => {
+        expect(NAV_HOME_ITEM.href).toBe(routes.home());
+        expect(NAV_HOME_ITEM.label).toBe("Dashboard");
+        expect(NAV_HOME_ITEM.icon).toBe("home");
+    });
+
+    test.each<[string, "page" | undefined]>([
+        ["/", "page"],
+        ["/plans", undefined],
+        ["/plans/1405391/98765", undefined],
+        ["/catalog", undefined],
+        ["/catalog/songs/42", undefined],
+        ["/settings", undefined],
+        ["/auth/signin", undefined],
+        ["", undefined],
+    ])("%j: aria-current=%s", (pathname, current) => {
+        expect(NAV_HOME_ITEM.isActive(pathname)).toBe(current !== undefined);
+        expect(navAriaCurrent(NAV_HOME_ITEM, pathname)).toBe(current);
+    });
+});
+
 describe("NAV_UTILITY_ITEMS", () => {
     const [settings] = NAV_UTILITY_ITEMS;
 
@@ -207,9 +230,9 @@ describe("NAV_UTILITY_ITEMS", () => {
         expect(navAriaCurrent(settings, pathname)).toBe(current);
     });
 
-    test("never marks it and a section link as the current page at once", () => {
-        const items = [...NAV_ITEMS, ...NAV_UTILITY_ITEMS];
-        for (const pathname of ["/", "/plans", "/catalog", "/settings"]) {
+    test("never marks two links of the bar as the current page at once", () => {
+        const items = [NAV_HOME_ITEM, ...NAV_ITEMS, ...NAV_UTILITY_ITEMS];
+        for (const pathname of ["/", "/plans", "/plans/1/2", "/catalog", "/catalog/books", "/settings"]) {
             const pages = items.filter(
                 (item) => navAriaCurrent(item, pathname) === "page"
             );
