@@ -426,6 +426,7 @@ Phase 0 spike, 2026-10-03, API version 2018-11-01. It made 55 read-only requests
   - Past schedules need `filter=after&after=<date>`, or `filter=most_recent&amount=N` (past only).
   - A SongSchedule's id is the plan item's id.
 - **Plans:** support `where[updated_at][gt|gte]`, `order=-updated_at`, and the filters `future`, `past`, `after`, `before` and `no_dates`.
+  - `filter=future` keeps all of today's plans for the whole day. Checked live on Sunday 2026-10-04 at 09:20 EDT, it still returned that day's Sunday Morning plan (`sort_date` 11:00Z) and Sunday Evening plan (`sort_date` 08:00Z).
 - **Rate limits:** every response carries lowercase `x-pco-api-request-rate-limit` (100), `-period` (20, a bare number) and `-count` headers. PCO may change the limits at any time and says never to hard-code them; the pacer adapts to them (see `docs/architecture.md`).
 
 **Writes (observed live)**

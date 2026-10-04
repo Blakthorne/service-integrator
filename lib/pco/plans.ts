@@ -84,7 +84,8 @@ export const getPlan = cache(
 
 /**
  * A service type's next plan: of the plans Planning Center counts as future
- * (`filter=future`), the earliest by `sort_date`, or null when there is
+ * (`filter=future`, which keeps all of today's plans for the whole day, as
+ * the spike found), the earliest by `sort_date`, or null when there is
  * none. One request: it asks for them earliest first (`order=sort_date`),
  * and only a few plans lie ahead (the spike found just next Sunday's), so
  * the first page holds the earliest; the earliest is picked here too, so
