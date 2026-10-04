@@ -17,7 +17,7 @@ describe("the barrel", () => {
     test("leaves out the write plumbing: only modules inside lib/pco write to PCO", () => {
         const exported = Object.keys(barrel);
         expect(exported).toContain("PcoError");
-        for (const name of ["pcoMutate", "jsonApi", "toOne"]) {
+        for (const name of ["pcoMutate", "jsonApi", "toOne", "toMany"]) {
             expect(exported).not.toContain(name);
         }
     });

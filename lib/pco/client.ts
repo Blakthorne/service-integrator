@@ -355,9 +355,15 @@ export async function pcoMutate<T = unknown>(
     return (await request(servicesUrl(path), init, readOptionalJson, options)) as T | null;
 }
 
-/** A to-one relationship in a write body. Its ID has passed assertPcoId. */
+/** A resource identifier in a write body. Its ID has passed assertPcoId. */
+export interface PcoWriteIdentifier {
+    type: string;
+    id: PcoId;
+}
+
+/** A relationship in a write body: to-one (toOne) or to-many (toMany). */
 export interface PcoWriteRelationship {
-    data: { type: string; id: PcoId };
+    data: PcoWriteIdentifier | PcoWriteIdentifier[];
 }
 
 /** The JSON:API document a write sends; build it with jsonApi. */
@@ -371,7 +377,7 @@ export interface PcoWriteBody {
 
 /**
  * Build a write's JSON:API body: `{ data: { type, attributes } }`, with
- * `relationships` when given. Build each relationship with toOne.
+ * `relationships` when given. Build each relationship with toOne or toMany.
  */
 export function jsonApi(
     type: string,
@@ -387,4 +393,13 @@ export function jsonApi(
  */
 export function toOne(type: string, id: string): PcoWriteRelationship {
     return { data: { type, id: assertPcoId(id) } };
+}
+
+/**
+ * A to-many relationship for jsonApi, `{ data: [{ type, id }, …] }`. An empty
+ * list is allowed: assign_tags with none clears a song's tags. Throws
+ * InvalidPcoIdError unless every ID is a PCO ID.
+ */
+export function toMany(type: string, ids: readonly string[]): PcoWriteRelationship {
+    return { data: ids.map((id) => ({ type, id: assertPcoId(id) })) };
 }

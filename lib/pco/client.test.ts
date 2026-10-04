@@ -8,6 +8,7 @@ import {
     pcoFetch,
     pcoFetchAll,
     pcoMutate,
+    toMany,
     toOne,
 } from "./client";
 import { InvalidPcoIdError } from "./ids";
@@ -656,6 +657,33 @@ describe("jsonApi", () => {
     test.each(["", "0", "01", "1.5", "../1", "1/2", " 1"])("toOne rejects the ID %j", (id) => {
         expect(() => toOne("Song", id)).toThrow(InvalidPcoIdError);
     });
+
+    test("toMany builds a to-many relationship, as assign_tags takes", () => {
+        expect(
+            jsonApi("TagAssignment", {}, { tags: toMany("Tag", ["11", "12"]) })
+        ).toStrictEqual({
+            data: {
+                type: "TagAssignment",
+                attributes: {},
+                relationships: {
+                    tags: {
+                        data: [
+                            { type: "Tag", id: "11" },
+                            { type: "Tag", id: "12" },
+                        ],
+                    },
+                },
+            },
+        });
+    });
+
+    test("toMany allows an empty list", () => {
+        expect(toMany("Tag", [])).toStrictEqual({ data: [] });
+    });
+
+    test.each([[["11", "../12"]], [["0"]], [["11", ""]]])("toMany rejects the IDs %j", (ids) => {
+        expect(() => toMany("Tag", ids)).toThrow(InvalidPcoIdError);
+    });
 });
 
 describe("pcoMutate", () => {
@@ -708,6 +736,19 @@ describe("pcoMutate", () => {
             [`PATCH ${BASE}/songs/9`]: () => new Response("", { status: 200 }),
         });
         await expect(pcoMutate("PATCH", "/songs/9", songBody)).resolves.toBeNull();
+    });
+
+    test("POSTs assign_tags with a to-many body and resolves to null on its 204", async () => {
+        const fetchMock = stubFetchRoutes({
+            [`POST ${BASE}/songs/9/assign_tags`]: () => new Response(null, { status: 204 }),
+        });
+        const body = jsonApi("TagAssignment", {}, { tags: toMany("Tag", ["11", "12"]) });
+
+        await expect(pcoMutate("POST", "/songs/9/assign_tags", body)).resolves.toBeNull();
+
+        expect(calledRequests(fetchMock)).toEqual([
+            { method: "POST", url: `${BASE}/songs/9/assign_tags`, body },
+        ]);
     });
 
     test.each([
