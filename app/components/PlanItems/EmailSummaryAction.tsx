@@ -103,13 +103,16 @@ function EmailPreviewFields({ view, textId }: { view: PlanEmailPreviewView; text
                 </p>
                 {/* The text is the email as it would be sent: plain text, so line breaks count.
                     A region that scrolls takes the keyboard (tabIndex) and has a name. */}
-                <pre
-                    tabIndex={0}
+                <div
+                    role="region"
                     aria-labelledby={textId}
-                    className="mt-1 max-h-[30vh] overflow-auto whitespace-pre-wrap sm:max-h-[40vh] break-words rounded-md border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                    tabIndex={0}
+                    className="mt-1 max-h-[30vh] overflow-auto rounded-md border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:max-h-[40vh] dark:border-gray-700 dark:bg-gray-900"
                 >
-                    {view.text}
-                </pre>
+                    <pre className="whitespace-pre-wrap break-words p-3 font-mono text-xs text-gray-900 dark:text-gray-100">
+                        {view.text}
+                    </pre>
+                </div>
             </div>
         </div>
     );
