@@ -39,7 +39,7 @@ export default function CatalogPage() {
                     action={
                         <Link
                             href={routes.catalogImport()}
-                            className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                            className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         >
                             Go to Import
                         </Link>
