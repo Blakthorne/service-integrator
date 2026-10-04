@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { openDatabase } from "./connection";
-import { withTransaction } from "./transaction";
+import { TransactionAbortedError, withTransaction } from "./transaction";
 
 let db: DatabaseSync;
 
@@ -23,6 +23,29 @@ function values(): number[] {
         .prepare("SELECT v FROM t ORDER BY v")
         .all()
         .map((row) => Number(row.v));
+}
+
+/** What `run` throws. */
+function thrownBy(run: () => unknown): unknown {
+    try {
+        run();
+    } catch (error) {
+        return error;
+    }
+    throw new Error("Expected a throw");
+}
+
+/**
+ * A table whose duplicate value makes SQLite roll the whole transaction back,
+ * savepoints included, as a full disk or an I/O error would.
+ */
+function createRollbackTable(): void {
+    db.exec("CREATE TABLE u (v INTEGER UNIQUE ON CONFLICT ROLLBACK) STRICT");
+}
+
+function insertDuplicates(): void {
+    db.exec("INSERT INTO u VALUES (1)");
+    db.exec("INSERT INTO u VALUES (1)");
 }
 
 /** Whether a transaction is open on `db`: BEGIN fails inside one. */
@@ -91,23 +114,111 @@ describe("withTransaction", () => {
         expect(inTransaction()).toBe(false);
     });
 
-    test("rethrows the original error when SQLite has already rolled back", () => {
-        db.exec("CREATE TABLE u (v INTEGER UNIQUE ON CONFLICT ROLLBACK) STRICT");
+    test("rethrows a statement's error when SQLite rolls back by itself", () => {
+        createRollbackTable();
         expect(() =>
             withTransaction(db, () => {
                 insert(1);
-                withTransaction(db, () => {
-                    db.exec("INSERT INTO u VALUES (1)");
-                    // Rolls the whole transaction back, savepoints included.
-                    db.exec("INSERT INTO u VALUES (1)");
-                });
+                insertDuplicates();
             })
-        ).toThrow(/UNIQUE constraint failed/);
+        ).toThrow(/^UNIQUE constraint failed: u\.v$/);
         expect(values()).toEqual([]);
         expect(inTransaction()).toBe(false);
 
         withTransaction(db, () => insert(5));
         expect(values()).toEqual([5]);
+    });
+
+    describe("when SQLite rolls the whole transaction back under a nested call", () => {
+        test("fails every open call with the original error as the cause", () => {
+            createRollbackTable();
+            const error = thrownBy(() =>
+                withTransaction(db, () => {
+                    insert(1);
+                    withTransaction(db, insertDuplicates);
+                })
+            );
+            expect(error).toBeInstanceOf(TransactionAbortedError);
+            expect((error as Error).message).toBe(
+                "SQLite rolled back the whole transaction: UNIQUE constraint failed: u.v"
+            );
+            expect(((error as Error).cause as Error).message).toBe(
+                "UNIQUE constraint failed: u.v"
+            );
+            expect(values()).toEqual([]);
+            expect(inTransaction()).toBe(false);
+        });
+
+        test("commits nothing when the outer fn catches the error and carries on", () => {
+            createRollbackTable();
+            let caught: unknown;
+            const error = thrownBy(() =>
+                withTransaction(db, () => {
+                    insert(1);
+                    try {
+                        withTransaction(db, insertDuplicates);
+                    } catch (nested) {
+                        caught = nested;
+                    }
+                    insert(3);
+                })
+            );
+            expect(caught).toBeInstanceOf(TransactionAbortedError);
+            expect(error).toBe(caught);
+            expect(((error as Error).cause as Error).message).toBe(
+                "UNIQUE constraint failed: u.v"
+            );
+            // Not [3]: the write after the rollback did not commit on its own.
+            expect(values()).toEqual([]);
+            expect(inTransaction()).toBe(false);
+
+            withTransaction(db, () => insert(5));
+            expect(values()).toEqual([5]);
+        });
+
+        test("fails a nested call made after it at once", () => {
+            createRollbackTable();
+            const later = vi.fn();
+            const error = thrownBy(() =>
+                withTransaction(db, () => {
+                    try {
+                        withTransaction(db, insertDuplicates);
+                    } catch {
+                        // carry on
+                    }
+                    withTransaction(db, later);
+                })
+            );
+            expect(error).toBeInstanceOf(TransactionAbortedError);
+            expect(later).not.toHaveBeenCalled();
+            expect(inTransaction()).toBe(false);
+        });
+
+        test("fails every level when each one catches and carries on", () => {
+            createRollbackTable();
+            const error = thrownBy(() =>
+                withTransaction(db, () => {
+                    insert(1);
+                    try {
+                        withTransaction(db, () => {
+                            insert(2);
+                            try {
+                                withTransaction(db, insertDuplicates);
+                            } catch {
+                                // carry on
+                            }
+                            insert(3);
+                        });
+                    } catch {
+                        // carry on
+                    }
+                    insert(4);
+                })
+            );
+            expect(error).toBeInstanceOf(TransactionAbortedError);
+            expect(values()).toEqual([]);
+            expect(inTransaction()).toBe(false);
+        });
     });
 
     describe("nested", () => {

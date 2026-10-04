@@ -1,19 +1,53 @@
 import "server-only";
 import type { DatabaseSync } from "node:sqlite";
+import { errorMessage } from "./errors";
 
 /**
- * Where the open-transaction depth of each connection lives. It is on
- * globalThis, like the connection `getDb()` caches, because Next bundles this
- * module more than once (convention 15) and every copy must agree on whether
- * a connection is inside a transaction. Bump the version if its shape changes.
+ * Thrown by `withTransaction` when SQLite rolled the whole transaction back by
+ * itself under a nested call (some errors do that: a conflict clause of
+ * ROLLBACK, a full disk, an I/O error). Every call still open on the
+ * connection then fails with this same error, so nothing is committed, even
+ * where an outer function caught it and carried on. Its `cause` is the error
+ * that brought the transaction down.
  */
-const DEPTHS_GLOBAL = Symbol.for("service-integrator.db.transactionDepths.v1");
+export class TransactionAbortedError extends Error {
+    constructor(cause: unknown) {
+        super(
+            `SQLite rolled back the whole transaction: ${errorMessage(cause)}`,
+            { cause }
+        );
+        this.name = "TransactionAbortedError";
+    }
+}
 
-function transactionDepths(): WeakMap<DatabaseSync, number> {
+/** The `withTransaction` calls open on one connection. */
+interface TransactionState {
+    /** How many are open: 0 outside a transaction. */
+    depth: number;
+    /** Set once SQLite has rolled the transaction back under a nested call. */
+    aborted: TransactionAbortedError | null;
+}
+
+/**
+ * Where each connection's transaction state lives. It is on globalThis, like
+ * the connection `getDb()` caches, because Next bundles this module more than
+ * once (convention 15) and every copy must agree on whether a connection is
+ * inside a transaction. `node:sqlite` cannot say (`isTransaction` needs Node
+ * 22.16). Bump the version if the state's shape changes.
+ */
+const STATES_GLOBAL = Symbol.for("service-integrator.db.transactions.v2");
+
+function transactionState(db: DatabaseSync): TransactionState {
     const scope = globalThis as unknown as {
-        [DEPTHS_GLOBAL]?: WeakMap<DatabaseSync, number>;
+        [STATES_GLOBAL]?: WeakMap<DatabaseSync, TransactionState>;
     };
-    return (scope[DEPTHS_GLOBAL] ??= new WeakMap());
+    const states = (scope[STATES_GLOBAL] ??= new WeakMap());
+    let state = states.get(db);
+    if (!state) {
+        state = { depth: 0, aborted: null };
+        states.set(db, state);
+    }
+    return state;
 }
 
 function isPromiseLike(value: unknown): boolean {
@@ -24,14 +58,13 @@ function isPromiseLike(value: unknown): boolean {
     );
 }
 
-/** Undo the current transaction or savepoint, if SQLite has not already. */
-function rollBack(db: DatabaseSync, sql: string): void {
+/** Run `sql`; false if it failed. */
+function tryExec(db: DatabaseSync, sql: string): boolean {
     try {
         db.exec(sql);
+        return true;
     } catch {
-        // Some failures (a full disk, a conflict clause of ROLLBACK) make
-        // SQLite roll the whole transaction back itself, so there is nothing
-        // left to undo. The caller rethrows the original error.
+        return false;
     }
 }
 
@@ -49,15 +82,30 @@ function rollBack(db: DatabaseSync, sql: string): void {
  * up front (waiting up to the busy timeout for another connection), so it never
  * fails halfway through on a lock. A call inside another is a savepoint: its
  * failure undoes only its own writes, and the outer `fn` may catch the error
- * and carry on. Never run BEGIN, COMMIT or ROLLBACK yourself on a connection
- * that uses this.
+ * and carry on.
+ *
+ * Except when SQLite rolls the whole transaction back by itself under a nested
+ * call: the savepoint is then gone, so that call opens a stand-in transaction
+ * (anything the callers write before they give up stays inside it, rather than
+ * committing on its own) and throws a `TransactionAbortedError`. Every call
+ * still open fails with that error, even one whose `fn` caught it, and the
+ * outermost rolls the stand-in back, so nothing commits. The same can happen
+ * to a statement `fn` runs itself, and `withTransaction` cannot see it: so
+ * catch a statement's error inside `fn` only around a nested `withTransaction`.
+ * Never run BEGIN, COMMIT or ROLLBACK yourself on a connection that uses this.
  */
 export function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
-    const depths = transactionDepths();
-    const depth = depths.get(db) ?? 0;
+    const state = transactionState(db);
+    const depth = state.depth;
+    if (depth === 0) {
+        state.aborted = null;
+    } else if (state.aborted) {
+        // The transaction this call would join is gone.
+        throw state.aborted;
+    }
     const savepoint = `nested_${depth}`;
     db.exec(depth === 0 ? "BEGIN IMMEDIATE" : `SAVEPOINT ${savepoint}`);
-    depths.set(db, depth + 1);
+    state.depth = depth + 1;
     try {
         const result = fn();
         if (isPromiseLike(result)) {
@@ -65,17 +113,33 @@ export function withTransaction<T>(db: DatabaseSync, fn: () => T): T {
                 "withTransaction needs a synchronous function, but this one returned a promise: its writes after an await would run outside the transaction."
             );
         }
+        if (state.aborted) {
+            // fn caught a nested call's TransactionAbortedError and carried on.
+            throw state.aborted;
+        }
         db.exec(depth === 0 ? "COMMIT" : `RELEASE ${savepoint}`);
         return result;
     } catch (error) {
-        rollBack(
-            db,
-            depth === 0
-                ? "ROLLBACK"
-                : `ROLLBACK TO ${savepoint}; RELEASE ${savepoint}`
-        );
-        throw error;
+        if (depth === 0) {
+            // Fails, harmlessly, when SQLite has already rolled back.
+            tryExec(db, "ROLLBACK");
+            const aborted = state.aborted;
+            state.aborted = null;
+            throw aborted ?? error;
+        }
+        if (
+            !state.aborted &&
+            !tryExec(db, `ROLLBACK TO ${savepoint}; RELEASE ${savepoint}`)
+        ) {
+            // The savepoint is gone, so SQLite rolled the whole transaction
+            // back. Open a stand-in, so that later writes cannot commit on
+            // their own (it fails, keeping them in, if a transaction is still
+            // open after all), and fail every open call.
+            state.aborted = new TransactionAbortedError(error);
+            tryExec(db, "BEGIN");
+        }
+        throw state.aborted ?? error;
     } finally {
-        depths.set(db, depth);
+        state.depth = depth;
     }
 }
