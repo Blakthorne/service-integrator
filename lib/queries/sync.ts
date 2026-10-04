@@ -7,7 +7,7 @@ import { applyAutoLinks } from "@/lib/db/links";
 import {
     listPcoSongs,
     markMissingPcoSongsRemoved,
-    upsertPcoSongs,
+    upsertListedPcoSongs,
 } from "@/lib/db/pcoSongs";
 import { listStoredSettings } from "@/lib/db/settings";
 import { fetchSongLibrary } from "@/lib/pco";
@@ -38,9 +38,12 @@ export type PcoSongsSyncCounts = {
  * stored `creditRoles` setting, or the default roles when it does not
  * parse), the songs the listing lacks are marked removed and those that
  * came back unmarked, and the auto-links `chooseAutoLinks` allows are made.
- * A song mirrored since the listing began (a link made from a page while it
- * was read) is not marked removed: Planning Center may have created it after
- * the listing passed it. A failed or partial read throws before anything is
+ * A song the mirror wrote since the listing began (a page saved it, or
+ * mirrored it for a link, while the listing was read) is left as it is:
+ * its fields and credits are newer than the listing's, so a save is never
+ * put back to what it was (`upsertListedPcoSongs`), and it is not marked
+ * removed, since Planning Center may have created it after the listing
+ * passed it. A failed or partial read throws before anything is
  * written, and so does a listing with no songs at all while the mirror has
  * some, which is taken for a failure rather than a library emptied at once.
  */
@@ -57,8 +60,13 @@ export async function syncPcoSongs(
                 "Planning Center listed no songs, though the mirror has some; nothing was changed"
             );
         }
-        const { added, updated } = upsertPcoSongs(db, songs, at);
-        deriveSongCredits(db, songs, resolveSettings(listStoredSettings(db)).settings.creditRoles);
+        const { added, updated, newer } = upsertListedPcoSongs(db, songs, listingStartedAt, at);
+        const written = new Set(newer);
+        deriveSongCredits(
+            db,
+            songs.filter(({ id }) => !written.has(id)),
+            resolveSettings(listStoredSettings(db)).settings.creditRoles
+        );
         const removed = markMissingPcoSongsRemoved(
             db,
             songs.map(({ id }) => id),
