@@ -15,6 +15,12 @@ import type { Route } from "next";
  * `parseBookCode` (letters, digits, `-` and `_`). Never pass anything else (a
  * title, free text, a raw URL parameter).
  */
+/** Filters of the catalog's songs list that other pages link to. */
+export interface CatalogListFilters {
+    linked?: "yes" | "no";
+    used?: "never";
+}
+
 export const routes = {
     home: () => "/" as const,
     plans: () => "/plans" as const,
@@ -34,6 +40,24 @@ export const routes = {
     catalogBook: (bookCode: string) => `/catalog/books/${bookCode}` as const,
     catalogImport: () => "/catalog/import" as const,
     catalogImportRun: (runId: number) => `/catalog/import/${runId}` as const,
+    /**
+     * The songs list with filters set, for links from other pages (Reconcile,
+     * the old Unused Hymns URL). The values are the list's own URL filters
+     * (see lib/catalog/filter.ts).
+     */
+    catalogFiltered: (filters: CatalogListFilters) => {
+        const query = new URLSearchParams();
+        if (filters.linked !== undefined) {
+            query.set("linked", filters.linked);
+        }
+        if (filters.used !== undefined) {
+            query.set("used", filters.used);
+        }
+        const search = query.toString();
+        return search === ""
+            ? ("/catalog" as const)
+            : (`/catalog?${search}` as const);
+    },
     catalogReconcile: () => "/catalog/reconcile" as const,
     /**
      * The new-song form. With a Planning Center song it is prefilled from

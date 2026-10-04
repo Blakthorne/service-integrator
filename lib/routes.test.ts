@@ -22,6 +22,15 @@ describe("routes", () => {
         expect(routes.catalogImport()).toBe("/catalog/import");
     });
 
+    test("catalogFiltered puts the songs list's filters in the query", () => {
+        expect(routes.catalogFiltered({})).toBe("/catalog");
+        expect(routes.catalogFiltered({ linked: "no" })).toBe("/catalog?linked=no");
+        expect(routes.catalogFiltered({ used: "never" })).toBe("/catalog?used=never");
+        expect(routes.catalogFiltered({ linked: "yes", used: "never" })).toBe(
+            "/catalog?linked=yes&used=never"
+        );
+    });
+
     test("the reconcile page and the new-song form", () => {
         expect(routes.catalogReconcile()).toBe("/catalog/reconcile");
         expect(routes.catalogSongNew()).toBe("/catalog/songs/new");
