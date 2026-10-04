@@ -12,6 +12,7 @@ import Dialog from "@/app/components/ui/Dialog";
 import type { HymnNoteStatus } from "@/lib/hymnNotes";
 import {
     MISSING_CATEGORY_HELP,
+    SYNC_DIALOG_DESCRIPTION,
     confirmLabel,
     previewRows,
     previewSummary,
@@ -272,7 +273,7 @@ export default function SyncHymnNotesAction({ serviceTypeId, planId }: SyncHymnN
                 open={open}
                 onClose={close}
                 title="Sync hymn notes"
-                description="Writes each song's hymnal numbers to its note in Planning Center. Notes in other categories, and notes the app did not write, are left alone."
+                description={SYNC_DIALOG_DESCRIPTION}
                 returnFocusRef={buttonRef}
                 dismissible={!syncing}
             >

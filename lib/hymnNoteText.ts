@@ -290,6 +290,15 @@ export function confirmLabel(changes: number): string {
     return `Write ${count(changes, "change")}`;
 }
 
+/**
+ * What the dialog says it does, under its title. A sync rewrites a song's
+ * hymnal note to its numbers whoever wrote the note, but removes only notes
+ * the app wrote (`diffHymnNotes`): a note it would remove and did not write
+ * is left alone.
+ */
+export const SYNC_DIALOG_DESCRIPTION =
+    "Each song's hymnal note is rewritten to its numbers, whoever wrote it; only notes the app wrote are ever removed. Notes in other categories are never touched.";
+
 /** What the dialog adds under a missing category's message: how to fix it. */
 export const MISSING_CATEGORY_HELP =
     "Planning Center's API can't create one, so add it in Planning Center's web app, then sync again. The category's name is a setting.";

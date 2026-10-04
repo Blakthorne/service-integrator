@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { ItemNote } from "./domain";
 import {
     MISSING_CATEGORY_HELP,
+    SYNC_DIALOG_DESCRIPTION,
     cardNoteBadge,
     confirmLabel,
     previewLines,
@@ -332,6 +333,23 @@ describe("confirmLabel and MISSING_CATEGORY_HELP", () => {
         expect(confirmLabel(1)).toBe("Write 1 change");
         expect(confirmLabel(3)).toBe("Write 3 changes");
         expect(MISSING_CATEGORY_HELP).toContain("web app");
+    });
+});
+
+describe("SYNC_DIALOG_DESCRIPTION", () => {
+    test("says a note is rewritten whoever wrote it, and only the app's are removed", () => {
+        expect(SYNC_DIALOG_DESCRIPTION).toContain("rewritten to its numbers, whoever wrote it");
+        expect(SYNC_DIALOG_DESCRIPTION).toContain("only notes the app wrote are ever removed");
+    });
+
+    test("is what the diff does: a hand-typed note is changed, and left alone only when it would go", () => {
+        const typed = note("R-1");
+        expect(previewLines(diffOf(songItem("1", ST_ANNE, [typed]))).map((l) => l.kind)).toEqual([
+            "change",
+        ]);
+        expect(previewLines(diffOf(songItem("1", null, [typed]))).map((l) => l.kind)).toEqual([
+            "left-alone",
+        ]);
     });
 });
 
