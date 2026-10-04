@@ -9,6 +9,7 @@ import {
 } from "react";
 import type {
     CatalogMatch,
+    LinkSuggestion,
     Plan,
     PlanItemWithSong,
     ScheduleSelection,
@@ -34,6 +35,11 @@ export interface PlanContextValue {
      * by Planning Center song id.
      */
     catalog: Record<string, CatalogMatch>;
+    /**
+     * The best few catalog songs for each song item's Planning Center song
+     * that is not linked and not set aside, by Planning Center song id.
+     */
+    suggestions: Record<string, LinkSuggestion[]>;
     /**
      * Why the catalog could not be read, or null. `catalog` is then empty,
      * and the plan's pages work without it.
@@ -71,7 +77,7 @@ interface PlanProviderProps {
  * the provider by plan, so another plan starts with no selections.
  */
 export default function PlanProvider({ detail, children }: PlanProviderProps) {
-    const { plan, serviceType, items, catalog, catalogError } = detail;
+    const { plan, serviceType, items, catalog, suggestions, catalogError } = detail;
     const [selections, dispatch] = useReducer(scheduleSelectionsReducer, {});
 
     // The defaults follow the catalog links, so a song linked from the tab
@@ -97,6 +103,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             serviceType,
             items,
             catalog,
+            suggestions,
             catalogError,
             scheduleItems,
             chooseOption,
@@ -107,6 +114,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             serviceType,
             items,
             catalog,
+            suggestions,
             catalogError,
             scheduleItems,
             chooseOption,
