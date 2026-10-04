@@ -32,7 +32,11 @@ vi.mock("@/lib/queries/selections", async (importOriginal) => ({
 }));
 
 import type { HymnNoteStatus } from "@/lib/hymnNotes";
-import type { PlanEmailPreview, SendPlanEmailResult } from "@/lib/queries/email";
+import type {
+    ExpectedPlanEmail,
+    PlanEmailPreview,
+    SendPlanEmailResult,
+} from "@/lib/queries/email";
 import type { HymnNotesSyncResult } from "@/lib/queries/hymnNotes";
 import { SELECTION_NOT_SAVED_MESSAGE } from "@/lib/queries/selections";
 import {
@@ -508,13 +512,21 @@ const EMAIL_PREVIEW: PlanEmailPreview = {
     text: "October 4, 2026 \u00b7 Sunday Morning\n",
 };
 
-/** What a send that the mail server took for both recipients returns. */
+/** What a send that the mail server took for both recipients, as previewed, returns. */
 const EMAIL_SENT: SendPlanEmailResult = {
     ok: true,
     to: EMAIL_PREVIEW.to,
     subject: EMAIL_PREVIEW.subject,
     accepted: EMAIL_PREVIEW.to,
     rejected: [],
+    textChanged: false,
+};
+
+/** What the dialog sends back with Send: the email its preview showed. */
+const EMAIL_PREVIEWED: ExpectedPlanEmail = {
+    to: EMAIL_PREVIEW.to,
+    subject: EMAIL_PREVIEW.subject,
+    text: EMAIL_PREVIEW.text,
 };
 
 describe("previewPlanEmailAction", () => {
@@ -580,9 +592,17 @@ describe("previewPlanEmailAction", () => {
 });
 
 describe("sendPlanEmailAction", () => {
-    function send(overrides: Partial<Record<"serviceTypeId" | "planId", unknown>> = {}) {
+    function send(
+        overrides: Partial<Record<"serviceTypeId" | "planId", unknown>> = {},
+        previewed: unknown = EMAIL_PREVIEWED
+    ) {
         const ids = { serviceTypeId: ST, planId: PLAN, ...overrides };
-        return sendPlanEmailAction(ids.serviceTypeId as string, ids.planId as string);
+        // An action's arguments come from the network, so they may be anything.
+        return sendPlanEmailAction(
+            ids.serviceTypeId as string,
+            ids.planId as string,
+            previewed as ExpectedPlanEmail
+        );
     }
 
     test("throws without a session, before it sends anything", async () => {
@@ -593,13 +613,54 @@ describe("sendPlanEmailAction", () => {
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
-    test("sends the plan's email and returns who got it, revalidating nothing", async () => {
+    test("sends the plan's email as previewed and returns who got it, revalidating nothing", async () => {
         sendPlanEmail.mockResolvedValue(EMAIL_SENT);
 
         await expect(send()).resolves.toEqual(EMAIL_SENT);
         expect(auth).toHaveBeenCalledTimes(1);
         expect(sendPlanEmail).toHaveBeenCalledTimes(1);
-        expect(sendPlanEmail).toHaveBeenCalledWith(ST, PLAN);
+        expect(sendPlanEmail).toHaveBeenCalledWith(ST, PLAN, EMAIL_PREVIEWED);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("holds the send to the preview it was sent, read down to its recipients, subject and text", async () => {
+        sendPlanEmail.mockResolvedValue(EMAIL_SENT);
+
+        // The dialog has the whole preview; whatever else comes with it is dropped.
+        await send({}, { ...EMAIL_PREVIEW, missing: ["SMTP_URL"], to: [...EMAIL_PREVIEW.to] });
+        expect(sendPlanEmail.mock.calls[0][2]).toStrictEqual(EMAIL_PREVIEWED);
+    });
+
+    test("returns a send whose text changed since the preview as it is: it says so itself", async () => {
+        const rebuilt: SendPlanEmailResult = { ...EMAIL_SENT, textChanged: true };
+        sendPlanEmail.mockResolvedValue(rebuilt);
+
+        await expect(send()).resolves.toEqual(rebuilt);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("refuses a preview that is not one, before it reads or sends anything", async () => {
+        for (const previewed of [
+            undefined,
+            null,
+            JSON.stringify(EMAIL_PREVIEWED),
+            [EMAIL_PREVIEWED],
+            { ...EMAIL_PREVIEWED, to: "pastor@example.org" },
+            { ...EMAIL_PREVIEWED, to: [42] },
+            { ...EMAIL_PREVIEWED, to: Array.from({ length: 26 }, (_, i) => `staff${i}@example.org`) },
+            { ...EMAIL_PREVIEWED, subject: undefined },
+            { ...EMAIL_PREVIEWED, text: null },
+        ]) {
+            // Called directly: the helper's default would stand in for undefined.
+            await expect(
+                sendPlanEmailAction(ST, PLAN, previewed as ExpectedPlanEmail)
+            ).resolves.toEqual({
+                ok: false,
+                kind: "failed",
+                message: expect.stringContaining("Preview again"),
+            });
+        }
+        expect(sendPlanEmail).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
@@ -627,6 +688,24 @@ describe("sendPlanEmailAction", () => {
                 ok: false,
                 kind: "unavailable",
                 message: "The settings could not be read, so the email was not sent: denied",
+            },
+        ],
+        [
+            "a send of the plan's email already under way",
+            {
+                ok: false,
+                kind: "busy",
+                message:
+                    "This plan's email is being sent already, so it was not sent again. Look at the recent writes in Settings to see how that send went.",
+            },
+        ],
+        [
+            "recipients that are not the preview's",
+            {
+                ok: false,
+                kind: "changed",
+                message:
+                    "The recipients have changed since the preview, so the email was not sent. Preview it again to see who it would go to now.",
             },
         ],
         [

@@ -379,7 +379,9 @@ interface EmailSummaryActionProps {
  * subject and its whole plain text, read-only), sends it on Send, and then
  * says who got it, or why nobody did. Email that is not set up on the
  * server, and no recipients, are explained (with the variables to set, and
- * a link to Settings) and offer no Send.
+ * a link to Settings) and offer no Send. Send sends back what the preview
+ * showed, and the send is refused, with Preview again, when the recipients
+ * or the subject are no longer those (another tab saved the settings).
  *
  * Both steps wait on something slow (Planning Center for the preview, the
  * SMTP server for the send), so each action is called from its click (Email
@@ -444,7 +446,12 @@ export default function EmailSummaryAction({ serviceTypeId, planId }: EmailSumma
         setAttempt((count) => count + 1);
         let result: SendPlanEmailState;
         try {
-            result = await sendPlanEmailAction(serviceTypeId, planId);
+            // What the preview showed, so the send goes to whom, and as, the person saw.
+            result = await sendPlanEmailAction(serviceTypeId, planId, {
+                to: previewed.to,
+                subject: previewed.subject,
+                text: previewed.text,
+            });
         } catch (error) {
             console.error("Failed to send the plan's email:", error);
             result = SEND_NO_ANSWER;

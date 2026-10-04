@@ -7,9 +7,11 @@ import type { ScheduleSelection } from "@/lib/domain";
 import type { HymnNoteStatus, PreviewedHymnNote } from "@/lib/hymnNotes";
 import { parsePcoId } from "@/lib/pco";
 import { parsePreviewedHymnNotes } from "@/lib/previewedHymnNotes";
+import { readPreviewedPlanEmail } from "@/lib/previewedPlanEmail";
 import {
     previewPlanEmail,
     sendPlanEmail,
+    type ExpectedPlanEmail,
     type PlanEmailPreview,
     type SendPlanEmailResult,
 } from "@/lib/queries/email";
@@ -276,15 +278,22 @@ export type PreviewPlanEmailState =
 
 /**
  * What a send tells the dialog (see `SendPlanEmailResult`): who the mail
- * server took the email for, or why nothing was sent: email is not set up,
- * there are no recipients, the settings or the plan could not be read, or
- * the send failed ("failed").
+ * server took the email for, and whether its text had changed since the
+ * preview; or why nothing was sent: email is not set up, there are no
+ * recipients, the settings could not be read, the plan's email is being
+ * sent already ("busy"), the recipients or the subject are not the
+ * preview's ("changed"), or the plan could not be read, the preview sent
+ * back is not one, or the send failed ("failed").
  */
 export type SendPlanEmailState = SendPlanEmailResult;
 
 /** Shown when the preview could not read the plan; the log has the details. */
 const EMAIL_PREVIEW_FAILURE_MESSAGE =
     "The plan could not be read from Planning Center, so the email could not be prepared. Try again; the server log has the details.";
+
+/** Shown when the email sent back with Send is not a preview: a stale or tampered page. */
+const EMAIL_PREVIEW_NOT_USABLE_MESSAGE =
+    "This page sent a preview the send could not check, so the email was not sent. Preview again.";
 
 /** Shown when the send could not read the plan, so nothing was sent; the log has the details. */
 const EMAIL_SEND_FAILURE_MESSAGE =
@@ -324,12 +333,19 @@ export async function previewPlanEmailAction(
 }
 
 /**
- * Send plan `planId`'s email to the recipients in the settings, now
- * (`sendPlanEmail`: it reads the plan again and builds the email from what
- * it finds, never from a preview, then sends it and records a `write_log`
- * row, without the email's text), and say what came of it. Email that is
- * not set up, no recipients and unreadable settings refuse the send with
- * their message, and so does a failed send.
+ * Send plan `planId`'s email to the recipients in the settings, now, as the
+ * dialog's preview showed it (`sendPlanEmail`: it reads the plan again and
+ * builds the email from what it finds, refuses as "changed", sending
+ * nothing, when the recipients or the subject are not the preview's, then
+ * sends it and records a `write_log` row, without the email's text), and
+ * say what came of it. Email that is not set up, no recipients, unreadable
+ * settings and a send of the plan's email already under way refuse the
+ * send with their message, and so does a failed send.
+ *
+ * `previewed` is the email the preview showed (its `to`, `subject` and
+ * `text`). It comes from a browser, so its shape is read first
+ * (`readPreviewedPlanEmail`, which keeps only those three fields); one that
+ * is not a preview is refused before anything is read or sent.
  *
  * A send waits on the SMTP server, so the dialog calls it from its Send
  * button, with its pending state in `useState` (convention 15). It
@@ -342,7 +358,8 @@ export async function previewPlanEmailAction(
  */
 export async function sendPlanEmailAction(
     serviceTypeId: string,
-    planId: string
+    planId: string,
+    previewed: ExpectedPlanEmail
 ): Promise<SendPlanEmailState> {
     const session = await auth();
     if (!session) {
@@ -353,8 +370,12 @@ export async function sendPlanEmailAction(
     if (st === null || plan === null) {
         return { ok: false, kind: "failed", message: NOT_A_PLAN_MESSAGE };
     }
+    const expected = readPreviewedPlanEmail(previewed);
+    if (expected === null) {
+        return { ok: false, kind: "failed", message: EMAIL_PREVIEW_NOT_USABLE_MESSAGE };
+    }
     try {
-        return await sendPlanEmail(st, plan);
+        return await sendPlanEmail(st, plan, expected);
     } catch (error) {
         console.error(`Failed to email plan ${st}/${plan}:`, error);
         return { ok: false, kind: "failed", message: EMAIL_SEND_FAILURE_MESSAGE };
