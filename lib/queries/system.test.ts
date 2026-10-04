@@ -11,7 +11,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
     getDb,
 }));
 
-import { getDatabaseStatus } from "./system";
+import { getDatabaseStatus, getLastPcoSongsSync } from "./system";
 
 let db: DatabaseSync;
 
@@ -76,5 +76,41 @@ describe("getDatabaseStatus", () => {
             ok: false,
             error: expect.stringContaining("no such table: sync_runs"),
         });
+    });
+});
+
+describe("getLastPcoSongsSync", () => {
+    test("is null before the first run", () => {
+        expect(getLastPcoSongsSync()).toEqual({ ok: true, lastRun: null });
+    });
+
+    test("gives the latest run of the song sync, finished or not", () => {
+        const at = new Date("2026-10-03T12:00:00.000Z");
+        const first = startSyncRun(db, "pco-songs", at);
+        finishSyncRun(db, first, { ok: true, message: "Synced 397 songs: no changes" }, at);
+        startSyncRun(db, "backup", at);
+        expect(getLastPcoSongsSync()).toEqual({
+            ok: true,
+            lastRun: expect.objectContaining({
+                id: first,
+                kind: "pco-songs",
+                ok: true,
+                message: "Synced 397 songs: no changes",
+            }),
+        });
+
+        const second = startSyncRun(db, "pco-songs", at);
+        expect(getLastPcoSongsSync()).toEqual({
+            ok: true,
+            lastRun: expect.objectContaining({ id: second, finishedAt: null, ok: null }),
+        });
+    });
+
+    test("logs, and says so, when the database cannot be read", () => {
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        expect(getLastPcoSongsSync()).toEqual({ ok: false });
+        expect(console.error).toHaveBeenCalledOnce();
     });
 });
