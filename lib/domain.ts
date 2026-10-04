@@ -104,3 +104,195 @@ export interface ScheduleSelection {
     customText?: string;
     selectedVersionIndex?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Catalog
+//
+// The app's own hymnal index, kept in the database (lib/db/catalog.ts) and
+// read through lib/queries/catalog.ts. A hymn is the words and a tune the
+// melody; a song is one hymn to one tune, the unit a Planning Center song
+// links to; an entry places a song in a book. Catalog IDs are SQLite
+// integers (parseCatalogId in lib/catalog/ids.ts checks them in URLs), and a
+// book is also found by its code. Timestamps are ISO 8601 UTC.
+// ---------------------------------------------------------------------------
+
+/** A hymnal, such as Rejoice Hymns, or a book with no numbers, such as a chorus book. */
+export interface Book {
+    id: number;
+    /** "R", "G", "CB": unique without regard to case, and the book's URL segment. */
+    code: string;
+    name: string;
+    shortName: string;
+    /** False for a book whose entries have a position, not a number. */
+    numbered: boolean;
+    /** How its entries are labelled: "R-{n}", or an unnumbered book's short name. */
+    labelFormat: string;
+    /** Books are listed, and a song's entries ordered, by this. */
+    sortOrder: number;
+    active: boolean;
+}
+
+/** A text (the words), shared by every tune it is sung to. */
+export interface Hymn {
+    id: number;
+    title: string;
+    firstLine: string | null;
+    notes: string | null;
+}
+
+/** A hymn with its other titles. */
+export interface HymnWithAliases extends Hymn {
+    aliases: string[];
+}
+
+/** A melody, such as ST. ANNE, shared by every hymn sung to it. */
+export interface Tune {
+    id: number;
+    name: string;
+    meter: string | null;
+    notes: string | null;
+}
+
+/** A tune with its other names (DARWAL for DARWALL). */
+export interface TuneWithAliases extends Tune {
+    aliases: string[];
+}
+
+/** How a catalog song got its Planning Center link. */
+export type SongLinkSource = "auto" | "manual" | "import";
+
+/**
+ * A catalog song: one hymn to one tune, and at most one Planning Center song.
+ * Not to be confused with `Song`, a song of the Planning Center library.
+ */
+export interface CatalogSong {
+    id: number;
+    hymnId: number;
+    /** Null when the tune is unknown. */
+    tuneId: number | null;
+    /** The linked Planning Center song's id, or null. */
+    pcoSongId: string | null;
+    linkedAt: string | null;
+    linkedBy: SongLinkSource | null;
+    notes: string | null;
+}
+
+/** Where a song appears in a book. */
+export interface Entry {
+    id: number;
+    bookId: number;
+    songId: number;
+    /** Its number in a numbered book; null in an unnumbered book or at a location. */
+    number: number | null;
+    /** Its order inside an unnumbered book. */
+    position: number | null;
+    /** A place without a number, such as "front cover" (the Doxology in G). */
+    locationLabel: string | null;
+    /** What the book prints here, such as "Descant - last stanza only". Shown beside the label, never in it. */
+    variantNote: string | null;
+}
+
+/** An entry with its book's code and its label, ready to show. */
+export interface LabelledEntry extends Entry {
+    bookCode: string;
+    /** "R-396", "G-Front Cover", or an unnumbered book's short name (see `formatEntryLabel`). */
+    label: string;
+}
+
+/** A row of the songs list (`/catalog`): what it shows, filters and sorts by. */
+export interface CatalogSongSummary {
+    /** The song's id. */
+    id: number;
+    hymnId: number;
+    /** The hymn's title. */
+    title: string;
+    /** The hymn's other titles, which search also matches. */
+    aliases: string[];
+    tuneId: number | null;
+    /** Null when the tune is unknown. */
+    tuneName: string | null;
+    /** The tune's other names, which search also matches. */
+    tuneAliases: string[];
+    pcoSongId: string | null;
+    /** Its entries in book order, then by number or position. */
+    entries: LabelledEntry[];
+}
+
+/** A song with what its page shows: its hymn, its tune, its entries and its relatives. */
+export interface CatalogSongDetail extends CatalogSong {
+    hymn: HymnWithAliases;
+    /** Null when the tune is unknown. */
+    tune: TuneWithAliases | null;
+    /** Its entries in book order, then by number or position. */
+    entries: LabelledEntry[];
+    /** The hymn's other songs: the other tunes it is sung to (and a tune-less song), by tune name. */
+    otherTunes: CatalogSongSummary[];
+    /** The tune's other songs: the other hymns sung to it, by title. Empty when the tune is unknown. */
+    otherHymns: CatalogSongSummary[];
+}
+
+/** A row of the tunes list. */
+export interface TuneSummary extends TuneWithAliases {
+    /** How many songs use it, which is how many hymns are sung to it. */
+    songCount: number;
+}
+
+/** A tune with what its page shows. */
+export interface TuneDetail extends TuneWithAliases {
+    /** Its songs, one per hymn sung to it, by title. */
+    songs: CatalogSongSummary[];
+}
+
+/** A row of the books list. */
+export interface BookSummary extends Book {
+    entryCount: number;
+}
+
+/** A line of a book's page: an entry with its song's hymn and tune. */
+export interface BookEntry extends LabelledEntry {
+    hymnId: number;
+    /** The hymn's title. */
+    title: string;
+    tuneId: number | null;
+    tuneName: string | null;
+    pcoSongId: string | null;
+}
+
+/** A book with what its page shows. */
+export interface BookDetail extends Book {
+    /**
+     * Its entries in browse order: those at a location (the front cover)
+     * first, then by number, or by position in an unnumbered book.
+     */
+    entries: BookEntry[];
+}
+
+/** How much the catalog holds; all zero before the seed import. */
+export interface CatalogCounts {
+    books: number;
+    hymns: number;
+    tunes: number;
+    songs: number;
+    entries: number;
+}
+
+/** What an import reads: the seed file (more kinds join with later imports). */
+export type ImportRunKind = "hymns-json";
+
+/** A run is previewed, then applied or discarded, once. */
+export type ImportRunStatus = "preview" | "applied" | "discarded";
+
+/** A row of the import runs list. */
+export interface ImportRunSummary {
+    id: number;
+    /** When it was previewed. */
+    at: string;
+    kind: ImportRunKind;
+    status: ImportRunStatus;
+    /** What it read, such as "hymns.json". */
+    sourceName: string;
+    /** The book it imports into, or null for the seed, which creates its books. */
+    bookId: number | null;
+    /** How many rows of each kind it adds, such as { songs: 921, entries: 1247 }. */
+    planned: Record<string, number>;
+}
