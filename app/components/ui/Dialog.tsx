@@ -5,7 +5,14 @@ import { useEffect, useId, useRef } from "react";
 interface DialogProps {
     /** Whether the dialog is showing. The parent owns this and sets it to false in `onClose`. */
     open: boolean;
-    /** Called when the dialog has closed: Escape, its close button, or `open` going false. */
+    /**
+     * Called once the dialog has closed, however it closed: Escape (a
+     * repeated Escape too, which a dialog that is not `dismissible` cannot
+     * stop), its close button, or `open` going false. Set `open` to false in
+     * it, always. The dialog is closed already, so it is not a request to
+     * refuse: left true, `open` would say it is showing when it is not, and
+     * setting it true again would not open it.
+     */
     onClose: () => void;
     /** The dialog's heading. It also names the dialog for screen readers. */
     title: string;
@@ -24,7 +31,10 @@ interface DialogProps {
      * what comes back (a refusal) lands where they are looking and not in a
      * dialog they closed; `open` still closes it. A browser may let repeated
      * Escape presses through anyway, so that a dialog cannot trap the
-     * keyboard: this stops a stray key press, not a determined one.
+     * keyboard (Chromium does on the third): this stops a stray key press,
+     * not a determined one. Such a close calls `onClose` like any other, and
+     * a parent that must show what the action brings back opens the dialog
+     * again when it comes.
      */
     dismissible?: boolean;
     children: React.ReactNode;
@@ -73,8 +83,10 @@ export default function Dialog({
         };
     }, [open]);
 
-    // The browser fires `close` however the dialog closed: on Escape, and
-    // after the `close()` above. Hand focus back, then tell the parent.
+    // The browser fires `close` however the dialog closed: on Escape, from
+    // the close button, and after the `close()` above. Every close comes
+    // through here, so the parent hears of each one the same way, after it
+    // has happened. Hand focus back, then tell the parent.
     function handleClose() {
         // The event is queued, so one for a close that the dialog has since
         // opened again from (React's Strict Mode does that in development) is stale.
@@ -108,7 +120,9 @@ export default function Dialog({
                     {dismissible && (
                         <button
                             type="button"
-                            onClick={onClose}
+                            // Closes the dialog itself, so `onClose` comes from
+                            // the `close` event, as for Escape.
+                            onClick={() => dialogRef.current?.close()}
                             aria-label="Close"
                             className="-m-1 rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                         >

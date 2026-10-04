@@ -167,7 +167,10 @@ interface SyncHymnNotesActionProps {
  * never in a transition or a form action, which would hold every navigation
  * until Planning Center answered (convention 15). A preview whose dialog
  * was closed, or opened again, before it answered is ignored. While the
- * sync runs the dialog cannot be closed, so its results are seen; the sync
+ * sync runs the dialog cannot be dismissed, but the browser may still close
+ * it (Chromium lets a third Escape through): the sync then goes on, Sync
+ * hymn notes opens the dialog on it again rather than start a preview, and
+ * its results open the dialog themselves, so they are seen. The sync
  * revalidates the plan, so the cards' note statuses follow.
  *
  * Focus: the dialog's close button has it while the preview is read; then
@@ -225,19 +228,27 @@ export default function SyncHymnNotesAction({ serviceTypeId, planId }: SyncHymnN
         }
         if (request === requestRef.current) {
             setState({ phase: "results", result });
+            // Open again if the browser closed the dialog while the sync ran.
+            setOpen(true);
         }
     }
 
     function openDialog() {
         setOpen(true);
-        void preview();
+        // The browser closed the dialog on a running sync: show it again, and
+        // read nothing from Planning Center until it is done.
+        if (state.phase !== "syncing") {
+            void preview();
+        }
     }
 
+    // The dialog has closed, however it closed (see `ui/Dialog`), so the state
+    // always follows. A preview still being read is dropped; a sync goes on,
+    // and opens the dialog again with its results.
     function close() {
-        if (state.phase === "syncing") {
-            return;
+        if (state.phase !== "syncing") {
+            requestRef.current += 1;
         }
-        requestRef.current += 1;
         setOpen(false);
     }
 
