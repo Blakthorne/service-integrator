@@ -1,12 +1,18 @@
 import "server-only";
 
 /**
- * At most PACER_LIMIT paced requests start in any PACER_WINDOW_MS. PCO allows
- * the whole org 100 requests per 20 s, so 20 are left for page loads, which
- * are never paced, while a sync job runs.
+ * The rate limit assumed until a PCO response says otherwise. PCO adjusts its
+ * limits at any time (silently down to 10 per 20 s for a burst at one
+ * endpoint) and says to rely on its headers, so these are only a start.
  */
-export const PACER_LIMIT = 80;
-export const PACER_WINDOW_MS = 20_000;
+export const DEFAULT_RATE_LIMIT = 100;
+export const DEFAULT_RATE_PERIOD_SECONDS = 20;
+
+/**
+ * Paced requests use at most this share of the advertised limit (and at least
+ * one request a period), leaving the rest for page loads, which never wait.
+ */
+export const PACED_SHARE = 0.8;
 
 /** What one PCO response's headers say about the rate limit. */
 export interface RateLimitInfo {
@@ -51,13 +57,31 @@ export function readRateLimit(headers: Pick<Headers, "get"> | undefined): RateLi
     };
 }
 
+/** The limits a pacer works to. */
+export interface PacerLimits {
+    /** The advertised limit: requests per period. */
+    limit: number;
+    periodMs: number;
+    /** Paced requests per period: PACED_SHARE of the limit, at least 1. */
+    budget: number;
+}
+
 /** Rations the requests of sync jobs to Planning Center. */
 export interface Pacer {
     /**
-     * Resolves when one more request may start, using up one turn. Callers
-     * are served in the order they call.
+     * Resolves when one more paced request may start, using up one turn.
+     * Callers are served in the order they call.
      */
     acquire(): Promise<void>;
+    /**
+     * Learn from the headers of any PCO response, paced or not: adopt its
+     * limit and period, and when its count has reached the budget, hold every
+     * paced caller until the window has rolled over.
+     */
+    observe(headers: Pick<Headers, "get"> | undefined): void;
+    /** Hold every paced caller for `ms` from now; a hold is never shortened. */
+    pause(ms: number): void;
+    limits(): PacerLimits;
 }
 
 /** Options for createPacer; tests inject both. */
@@ -69,35 +93,50 @@ export interface PacerOptions {
 }
 
 /**
- * A token bucket of PACER_LIMIT tokens in which each request takes one and
- * every token comes back PACER_WINDOW_MS after it was taken (not at a steady
- * rate, which would let a full bucket's burst plus the refill exceed PCO's
- * limit). So the first PACER_LIMIT requests start at once, the next waits
- * until the first is a window old, and no window, fixed or sliding, ever
- * holds more than PACER_LIMIT starts. The default clock is monotonic, so a
- * wall-clock change cannot stall a sync or release a burst.
+ * A token bucket of `budget` tokens in which each paced request takes one and
+ * every token comes back a period after it was taken (not at a steady rate,
+ * which would let a full bucket's burst plus the refill exceed the limit). So
+ * the first `budget` requests start at once, the next waits until the first
+ * is a period old, and no window, fixed or sliding, holds more than `budget`
+ * paced starts. The limit and period follow PCO's headers (see observe).
+ * The default clock is monotonic, so a wall-clock change cannot stall a sync
+ * or release a burst.
  */
 export function createPacer({
     now = () => performance.now(),
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }: PacerOptions = {}): Pacer {
+    let limit = DEFAULT_RATE_LIMIT;
+    let periodMs = DEFAULT_RATE_PERIOD_SECONDS * 1000;
+    // No paced request starts before this.
+    let heldUntil = -Infinity;
     // When each token still out was taken, oldest first.
     const taken: number[] = [];
     // Turns are granted one at a time, in call order.
     let queue: Promise<void> = Promise.resolve();
 
+    const budget = () => Math.max(1, Math.floor(limit * PACED_SHARE));
+
+    function pause(ms: number): void {
+        heldUntil = Math.max(heldUntil, now() + ms);
+    }
+
     async function takeToken(): Promise<void> {
         for (;;) {
             const time = now();
-            while (taken.length > 0 && taken[0] <= time - PACER_WINDOW_MS) {
+            if (time < heldUntil) {
+                await sleep(Math.ceil(heldUntil - time));
+                continue;
+            }
+            while (taken.length > 0 && taken[0] <= time - periodMs) {
                 taken.shift();
             }
-            if (taken.length < PACER_LIMIT) {
+            if (taken.length < budget()) {
                 taken.push(time);
                 return;
             }
             // Rounded up: setTimeout truncates, and waking early only loops.
-            await sleep(Math.ceil(taken[0] + PACER_WINDOW_MS - time));
+            await sleep(Math.ceil(taken[0] + periodMs - time));
         }
     }
 
@@ -108,16 +147,28 @@ export function createPacer({
             queue = turn.catch(() => {});
             return turn;
         },
+        observe(headers) {
+            const info = readRateLimit(headers);
+            limit = info.limit ?? limit;
+            periodMs = info.periodSeconds === undefined ? periodMs : info.periodSeconds * 1000;
+            if (info.count !== undefined && info.count >= budget()) {
+                // PCO does not say when its window started, so only a whole
+                // period from now is sure to be past it.
+                pause(periodMs);
+            }
+        },
+        pause,
+        limits: () => ({ limit, periodMs, budget: budget() }),
     };
 }
 
 /**
  * Where the shared pacer lives on globalThis. Whichever copy of this module
  * asks first creates it, and it is kept for the life of the process, so a
- * pacer with other limits would never replace it, not even on a dev server's
- * hot reload. Bump the version whenever the pacer's shape or limits change.
+ * pacer of another shape would never replace it, not even on a dev server's
+ * hot reload. Bump the version whenever the pacer's shape or defaults change.
  */
-const PACER_GLOBAL = Symbol.for("service-integrator.pcoPacer.v1");
+const PACER_GLOBAL = Symbol.for("service-integrator.pcoPacer.v2");
 
 /**
  * The pacer that every paced request in the process waits on, created on
@@ -125,7 +176,8 @@ const PACER_GLOBAL = Symbol.for("service-integrator.pcoPacer.v1");
  * this module is loaded more than once: a server action that a client
  * component imports is compiled in its own module layer (convention 15), and
  * instrumentation.ts, which starts the scheduled sync jobs, is bundled apart
- * from the pages. A bucket per copy would let through a multiple of the rate.
+ * from the pages. A bucket per copy would let through a multiple of the rate,
+ * and what one copy learns from PCO's headers would be lost on the others.
  */
 export function pcoPacer(): Pacer {
     const scope = globalThis as unknown as { [PACER_GLOBAL]?: Pacer };

@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import {
-    PACER_LIMIT,
-    PACER_WINDOW_MS,
-    createPacer,
-    readRateLimit,
-    type Pacer,
-} from "./pacer";
+import { createPacer, readRateLimit, type Pacer } from "./pacer";
+
+const LIMIT = "x-pco-api-request-rate-limit";
+const PERIOD = "x-pco-api-request-rate-period";
+const COUNT = "x-pco-api-request-rate-count";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -44,9 +42,8 @@ function useFakeClock() {
 }
 
 describe("createPacer", () => {
-    test("allows 80 requests per 20 seconds, under PCO's 100", () => {
-        expect(PACER_LIMIT).toBe(80);
-        expect(PACER_WINDOW_MS).toBe(20_000);
+    test("until PCO says otherwise, assumes 100 requests per 20 s and paces 80 of them", () => {
+        expect(createPacer().limits()).toEqual({ limit: 100, periodMs: 20_000, budget: 80 });
     });
 
     test("lets 80 requests start at once and holds the 81st until the first is 20 s old", async () => {
@@ -202,10 +199,6 @@ describe("pcoPacer", () => {
 });
 
 describe("readRateLimit", () => {
-    const LIMIT = "x-pco-api-request-rate-limit";
-    const PERIOD = "x-pco-api-request-rate-period";
-    const COUNT = "x-pco-api-request-rate-count";
-
     test("reads PCO's lowercase rate-limit headers", () => {
         const headers = new Headers({ [LIMIT]: "100", [PERIOD]: "20", [COUNT]: "7" });
         expect(readRateLimit(headers)).toStrictEqual({ limit: 100, periodSeconds: 20, count: 7 });
@@ -252,5 +245,112 @@ describe("readRateLimit", () => {
     test("a response without the headers, or without headers at all, says nothing", () => {
         expect(readRateLimit(new Headers({ "content-type": "application/json" }))).toEqual({});
         expect(readRateLimit(undefined)).toEqual({});
+    });
+});
+
+describe("observe", () => {
+    test("adapts to a lowered limit: at 10 per 20 s it lets 8 start, then waits", async () => {
+        const { pacer, sleeps, now } = setup();
+        pacer.observe(new Headers({ [LIMIT]: "10", [PERIOD]: "20" }));
+        expect(pacer.limits()).toEqual({ limit: 10, periodMs: 20_000, budget: 8 });
+
+        await acquireMany(pacer, 8);
+        expect(sleeps).toEqual([]);
+        await pacer.acquire();
+        expect(sleeps).toEqual([20_000]);
+        expect(now()).toBe(21_000);
+    });
+
+    test("follows a raised limit and a longer period", async () => {
+        const { pacer, sleeps } = setup();
+        pacer.observe(new Headers({ [LIMIT]: "200", [PERIOD]: "60 seconds" }));
+        expect(pacer.limits()).toEqual({ limit: 200, periodMs: 60_000, budget: 160 });
+
+        await acquireMany(pacer, 161);
+        expect(sleeps).toEqual([60_000]);
+    });
+
+    test("keeps at least one paced request a period", () => {
+        const pacer = createPacer();
+        pacer.observe(new Headers({ [LIMIT]: "1" }));
+        expect(pacer.limits().budget).toBe(1);
+    });
+
+    test("learns nothing from a missing or garbage header", () => {
+        const pacer = createPacer();
+        pacer.observe(new Headers({ [LIMIT]: "10", [PERIOD]: "30" }));
+        for (const headers of [
+            undefined,
+            new Headers(),
+            new Headers({ [LIMIT]: "soon", [PERIOD]: "0", [COUNT]: "lots" }),
+        ]) {
+            pacer.observe(headers);
+            expect(pacer.limits()).toEqual({ limit: 10, periodMs: 30_000, budget: 8 });
+        }
+    });
+
+    test("a count that has reached the budget holds paced callers for a whole period", async () => {
+        const { pacer, sleeps, now } = setup();
+        pacer.observe(new Headers({ [LIMIT]: "100", [COUNT]: "79" }));
+        await pacer.acquire();
+        expect(sleeps).toEqual([]);
+
+        // PCO's window could have started just now, so it waits a whole period.
+        pacer.observe(new Headers({ [LIMIT]: "100", [COUNT]: "80" }));
+        await pacer.acquire();
+        expect(sleeps).toEqual([20_000]);
+        expect(now()).toBe(21_000);
+    });
+
+    test("judges a count against the limit in the same response", async () => {
+        const { pacer, sleeps } = setup();
+        pacer.observe(new Headers({ [LIMIT]: "10", [PERIOD]: "20", [COUNT]: "8" }));
+        await pacer.acquire();
+        expect(sleeps).toEqual([20_000]);
+    });
+});
+
+describe("pause", () => {
+    test("holds every paced caller, queued ones included, until it ends", async () => {
+        useFakeClock();
+        const pacer = createPacer();
+        await pacer.acquire();
+
+        pacer.pause(10_000);
+        const granted: number[] = [];
+        void pacer.acquire().then(() => granted.push(1));
+        void pacer.acquire().then(() => granted.push(2));
+
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(granted).toEqual([]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(granted).toEqual([1, 2]);
+    });
+
+    test("is never shortened by a shorter one", async () => {
+        const { pacer, sleeps } = setup();
+        pacer.pause(30_000);
+        pacer.pause(5_000);
+        await pacer.acquire();
+        expect(sleeps).toEqual([30_000]);
+    });
+
+    test("lengthens the wait of a caller already waiting for a token", async () => {
+        useFakeClock();
+        const pacer = createPacer();
+        pacer.observe(new Headers({ [LIMIT]: "1" }));
+        await pacer.acquire();
+        let granted = false;
+        // Its token comes back at 20 s.
+        void pacer.acquire().then(() => {
+            granted = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(15_000);
+        pacer.pause(10_000);
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(granted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(granted).toBe(true);
     });
 });
