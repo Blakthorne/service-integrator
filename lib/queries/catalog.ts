@@ -52,9 +52,19 @@ export function getCatalogTune(tuneId: number): TuneDetail | null {
     return findTune(getDb(), tuneId);
 }
 
-/** Every book with its entry count, in book order. */
+/** Every book with its entry count, in book order, in use or not: the books page lists them all. */
 export function getCatalogBooks(): BookSummary[] {
     return listBooks(getDb());
+}
+
+/**
+ * The books in use, with their entry counts, in book order: what the songs
+ * list's book filter offers. A book not in use stays browsable on the books
+ * page, but is left out of the filter, the schedule text and the hymnal
+ * notes.
+ */
+export function getActiveCatalogBooks(): BookSummary[] {
+    return listBooks(getDb(), { activeOnly: true });
 }
 
 /** The book with this code, in any case, with its entries in browse order, or null. */

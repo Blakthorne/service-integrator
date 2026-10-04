@@ -19,6 +19,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 import {
     getCatalogBook,
     getCatalogBookLabel,
+    getActiveCatalogBooks,
     getCatalogBooks,
     getCatalogCounts,
     getCatalogSong,
@@ -116,6 +117,14 @@ describe("the catalog reads", () => {
             songs: 2,
             entries: 3,
         });
+    });
+
+    test("offer the book filter the books in use only, and list every book", () => {
+        seed();
+        db.prepare("UPDATE books SET active = 0 WHERE code = 'G'").run();
+        expect(getActiveCatalogBooks().map(({ code }) => code)).toEqual(["R"]);
+        expect(getCatalogBooks().map(({ code }) => code)).toEqual(["R", "G"]);
+        expect(getCatalogBook("G")?.entries).toHaveLength(2);
     });
 
     test("give null for a song, tune or book that does not exist", () => {

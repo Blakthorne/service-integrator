@@ -64,8 +64,9 @@ export interface PlanDetail extends PlanData {
     /**
      * The catalog song each song item's Planning Center song is linked to,
      * by Planning Center song id: its title, tune and labelled entries in
-     * book order. A song that is not linked has no entry, so an item renamed
-     * in the plan keeps its numbers.
+     * book order, in the books in use only (a book that is not active
+     * prints no numbers: `findCatalogMatches`). A song that is not linked
+     * has no entry, so an item renamed in the plan keeps its numbers.
      */
     catalog: Record<string, CatalogMatch>;
     /**

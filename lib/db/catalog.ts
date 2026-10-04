@@ -346,9 +346,12 @@ export function findCatalogSongLabel(
 /**
  * The catalog songs linked to these Planning Center songs, by Planning
  * Center song id, each with its hymn's title, its tune's name and its
- * labelled entries in book order: what a plan page shows beside its items.
- * Ids no song is linked to are left out. Two queries, however many ids, and
- * none for no ids.
+ * labelled entries in book order: what a plan page shows beside its items,
+ * and what the schedule text, the hymnal notes and the dashboard print.
+ * So the entries are those of the books in use only: a book that is not
+ * active stays browsable, but its numbers are printed nowhere. Ids no song
+ * is linked to are left out. Two queries, however many ids, and none for no
+ * ids.
  */
 export function findCatalogMatches(
     db: DatabaseSync,
@@ -367,7 +370,7 @@ export function findCatalogMatches(
                  FROM entries e
                  JOIN books b ON b.id = e.book_id
                  JOIN songs s ON s.id = e.song_id
-                 WHERE ${linked}
+                 WHERE ${linked} AND b.active = 1
                  ORDER BY ${BOOK_ORDER}, ${PLACEMENT_ORDER}, ${VARIANT_ORDER}`
             )
             .all(ids)
@@ -465,13 +468,21 @@ export function findTuneLabel(db: DatabaseSync, tuneId: number): string | null {
 // Books
 // ---------------------------------------------------------------------------
 
-/** Every book with its number of entries, in book order. One query. */
-export function listBooks(db: DatabaseSync): BookSummary[] {
+/**
+ * Every book with its number of entries, in book order, or with
+ * `activeOnly` the books in use only: those the songs list's book filter
+ * offers. One query.
+ */
+export function listBooks(
+    db: DatabaseSync,
+    { activeOnly = false }: { activeOnly?: boolean } = {}
+): BookSummary[] {
     return db
         .prepare(
             `SELECT ${BOOK_COLUMNS}, count(e.id) AS entry_count
              FROM books b
              LEFT JOIN entries e ON e.book_id = b.id
+             ${activeOnly ? "WHERE b.active = 1" : ""}
              GROUP BY b.id
              ORDER BY ${BOOK_ORDER}`
         )

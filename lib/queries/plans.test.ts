@@ -28,6 +28,7 @@ import {
     stubPcoCredentials,
 } from "@/lib/pco/testing";
 import { mergeScheduleSelections } from "@/lib/scheduleSelections";
+import { buildScheduleCopyText } from "@/lib/serviceSchedule";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 
 // vi.hoisted: vi.mock factories run before the module's own declarations.
@@ -275,6 +276,48 @@ describe("getPlanDetail's catalog links", () => {
             [songs.warrenton, "WARRENTON", "exact", ["R-554"]],
         ]);
         expect(suggestions["40"]).toEqual([]);
+    });
+
+    test("leaves a book not in use out of a linked song's numbers", async () => {
+        const songs = seedCatalog();
+        db.prepare("UPDATE books SET active = 0 WHERE code = 'G'").run();
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { catalog } = await getPlanDetail(MORNING, PLAN);
+
+        expect(catalog["30"]).toMatchObject({
+            songId: songs.abide,
+            entries: [expect.objectContaining({ label: "R-517" })],
+        });
+        expect(catalog["30"].entries).toHaveLength(1);
+    });
+
+    test("leaves a book not in use out of the schedule text, and a song only in one has no numbers", async () => {
+        const songs = seedCatalog();
+        db.prepare("UPDATE books SET active = 0 WHERE code = 'R'").run();
+        db.prepare("UPDATE songs SET pco_song_id = '20' WHERE id = ?").run(songs.warrenton);
+        seedPcoSong(db, { id: "20", title: "Come, Thou Fount of Every Blessing" });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { items, catalog, plan } = await getPlanDetail(MORNING, PLAN);
+        const text = buildScheduleCopyText({
+            items: mergeScheduleSelections(items, {}, catalog),
+            catalog,
+            serviceTypeName: "Sunday Morning",
+            planDate: plan.sortDate.slice(0, 10),
+        });
+
+        // WARRENTON is only in Rejoice, which is not in use: the song keeps
+        // its title, with no numbers.
+        expect(text.split("\n")).toEqual([
+            "Sunday AM 10/4/26",
+            "",
+            "Come, Thou Fount of Every Blessing",
+            "Abide with Me (G-64)",
+            "A Song Not In The Hymnbooks",
+        ]);
     });
 
     test("follows the link and the song's title, not the item's", async () => {
@@ -644,6 +687,24 @@ describe("getPlanDetail's hymnal notes", () => {
         ]);
         // The items carry their notes for the pages too.
         expect(items.map((item) => item.notes.map(({ id }) => id))).toEqual([["9002"], [], ["9004"]]);
+    });
+
+    test("leaves a book not in use out of the notes", async () => {
+        seedAbide();
+        db.prepare("UPDATE books SET active = 0 WHERE code = 'R'").run();
+        stubFetchRoutes(routesWithNotes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { hymnNoteStatus } = await getPlanDetail(MORNING, PLAN);
+
+        expect(
+            hymnNoteStatus.kind === "ready" &&
+                hymnNoteStatus.items.map(({ itemId, action, content }) => [itemId, action, content])
+        ).toEqual([
+            ["2", "keep", null],
+            ["3", "create", "G-64"],
+            ["4", "none", null],
+        ]);
     });
 
     test("would delete a note the write log says the app created", async () => {
