@@ -18,6 +18,15 @@ interface DialogProps {
      * focus a button when it is clicked (Safari, and Firefox on a Mac).
      */
     returnFocusRef?: React.RefObject<HTMLElement | null>;
+    /**
+     * Whether the person can close it, with Escape or its close button.
+     * Defaults to true. Pass false while an action runs inside it, so that
+     * what comes back (a refusal) lands where they are looking and not in a
+     * dialog they closed; `open` still closes it. A browser may let repeated
+     * Escape presses through anyway, so that a dialog cannot trap the
+     * keyboard: this stops a stray key press, not a determined one.
+     */
+    dismissible?: boolean;
     children: React.ReactNode;
 }
 
@@ -37,6 +46,7 @@ export default function Dialog({
     title,
     description,
     returnFocusRef,
+    dismissible = true,
     children,
 }: DialogProps) {
     const dialogRef = useRef<HTMLDialogElement>(null);
@@ -85,6 +95,9 @@ export default function Dialog({
             aria-labelledby={titleId}
             aria-describedby={description ? descriptionId : undefined}
             onClose={handleClose}
+            // Escape asks the browser to close the dialog by firing `cancel`
+            // first; preventing it keeps the dialog open.
+            onCancel={dismissible ? undefined : (event) => event.preventDefault()}
             className="m-auto w-[min(32rem,calc(100%_-_2rem))] rounded-lg border border-gray-200 bg-white p-0 text-gray-900 shadow-xl backdrop:bg-black/50 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
         >
             <div className="p-5 sm:p-6">
@@ -92,28 +105,30 @@ export default function Dialog({
                     <h2 id={titleId} className="text-lg font-semibold">
                         {title}
                     </h2>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        aria-label="Close"
-                        className="-m-1 rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            aria-hidden="true"
-                            className="h-5 w-5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
+                    {dismissible && (
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            aria-label="Close"
+                            className="-m-1 rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                         >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M6 18L18 6M6 6l12 12"
-                            />
-                        </svg>
-                    </button>
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                aria-hidden="true"
+                                className="h-5 w-5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
+                            </svg>
+                        </button>
+                    )}
                 </div>
                 {description && (
                     <p

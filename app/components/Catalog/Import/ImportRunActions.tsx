@@ -27,6 +27,8 @@ interface ConfirmFormProps {
     runId: number;
     /** The refusal or failure the action last returned, if any. */
     error: string | null;
+    /** Whether the action is running: Cancel is then unavailable, so the result is seen. */
+    pending: boolean;
     onCancel: () => void;
     submitLabel: string;
     pendingLabel: string;
@@ -38,6 +40,7 @@ function ConfirmForm({
     action,
     runId,
     error,
+    pending,
     onCancel,
     submitLabel,
     pendingLabel,
@@ -58,7 +61,8 @@ function ConfirmForm({
                 <button
                     type="button"
                     onClick={onCancel}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer"
+                    disabled={pending}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                     Cancel
                 </button>
@@ -74,16 +78,25 @@ function ConfirmForm({
  * Apply and Discard for a previewed run, each confirmed in a dialog. A
  * refusal the page could not know about (the run was applied in another tab)
  * comes back from the action and shows inside the dialog, which stays open;
- * success redirects away.
+ * the action also revalidates the page, which then shows the run as it is
+ * now. Success redirects away.
+ *
+ * While an action runs its dialog cannot be closed (Cancel is disabled, and
+ * the dialog ignores Escape and hides its close button), so that whatever
+ * comes back is seen: a refusal that arrived after the dialog was closed
+ * would land in it unseen.
  *
  * When the page already knows Apply will be refused (`applyUnavailableId`),
  * the button is `aria-disabled` rather than `disabled`, like `SubmitButton`:
  * it stays focusable, is described by the text that gives the reason, and
  * does nothing when pressed.
  *
- * Pending state comes from `useFormStatus` inside each form (SubmitButton),
- * never from a transition held open across the action, which would stall
- * every navigation until it returned (convention 15).
+ * Pending state comes from `useActionState` (`isPending`, which locks the
+ * dialog) and, inside each form, `useFormStatus` (SubmitButton's label).
+ * React runs a form action inside a transition, so a navigation started
+ * while one runs commits only when it returns: the stall convention 15
+ * warns about for an action that waits on Planning Center. It is acceptable
+ * here, because these actions write to the local database in milliseconds.
  */
 export default function ImportRunActions({
     runId,
@@ -94,8 +107,14 @@ export default function ImportRunActions({
     const [open, setOpen] = useState<"apply" | "discard" | null>(null);
     const applyButtonRef = useRef<HTMLButtonElement>(null);
     const discardButtonRef = useRef<HTMLButtonElement>(null);
-    const [applyState, applyAction] = useActionState(applyImportAction, null);
-    const [discardState, discardAction] = useActionState(discardImportAction, null);
+    const [applyState, applyAction, applyPending] = useActionState(
+        applyImportAction,
+        null
+    );
+    const [discardState, discardAction, discardPending] = useActionState(
+        discardImportAction,
+        null
+    );
 
     function close() {
         setOpen(null);
@@ -136,11 +155,13 @@ export default function ImportRunActions({
                 title="Apply this import?"
                 description={`Adds ${plannedText} to the catalog, all at once. The app has no undo for it.`}
                 returnFocusRef={applyButtonRef}
+                dismissible={!applyPending}
             >
                 <ConfirmForm
                     action={applyAction}
                     runId={runId}
                     error={applyState?.error ?? null}
+                    pending={applyPending}
                     onCancel={close}
                     submitLabel="Apply import"
                     pendingLabel="Applying…"
@@ -152,11 +173,13 @@ export default function ImportRunActions({
                 title="Discard this preview?"
                 description="Nothing is added to the catalog. The run stays in the list, marked as discarded."
                 returnFocusRef={discardButtonRef}
+                dismissible={!discardPending}
             >
                 <ConfirmForm
                     action={discardAction}
                     runId={runId}
                     error={discardState?.error ?? null}
+                    pending={discardPending}
                     onCancel={close}
                     submitLabel="Discard preview"
                     pendingLabel="Discarding…"
