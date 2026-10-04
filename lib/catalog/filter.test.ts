@@ -83,14 +83,14 @@ const rejoice = row(
         ["G", 143],
     ],
     {
-        aliases: ["Rejoice – the Lord Is King!"],
+        aliases: ["Rejoice \u2013 the Lord Is King!"],
         tuneAliases: ["DARWAL"],
     }
 );
-const tisSoSweet = row("‘Tis So Sweet to Trust in Jesus", "TRUST IN JESUS", [
+const tisSoSweet = row("\u2018Tis So Sweet to Trust in Jesus", "TRUST IN JESUS", [
     ["R", 389],
 ]);
-const howGreatOurJoy = row("How Great Our Joy", "JÜNGST", [["R", 198]]);
+const howGreatOurJoy = row("How Great Our Joy", "J\u00DCNGST", [["R", 198]]);
 const thankYouLynch = row("Thank You, Lord", "LYNCH", [["R", 561]]);
 const thankYouNoTune = row("Thank You, Lord", null, [["G", 221]]);
 const thankYouOwnTune = row("Thank You, Lord", "THANK YOU, LORD", [["R", 266]]);
@@ -124,13 +124,13 @@ describe("foldForSearch", () => {
         ["Amazing Grace", "amazing grace"],
         ["  AMAZING   grace!  ", "amazing grace"],
         ["All Hail the Power of Jesus' Name", "all hail the power of jesus name"],
-        ["‘Tis So Sweet", "tis so sweet"],
-        ["O’er the Hills", "oer the hills"],
-        ["Rejoice – the Lord Is King!", "rejoice the lord is king"],
+        ["\u2018Tis So Sweet", "tis so sweet"],
+        ["O\u2019er the Hills", "oer the hills"],
+        ["Rejoice \u2013 the Lord Is King!", "rejoice the lord is king"],
         ["Come, Thou Long-Expected Jesus", "come thou long expected jesus"],
         ["Faith & Hope", "faith and hope"],
-        ["JÜNGST", "jungst"],
-        ["IL EST NÉ", "il est ne"],
+        ["J\u00DCNGST", "jungst"],
+        ["IL EST N\u00C9", "il est ne"],
         ["Psalm 23", "psalm 23"],
         ["?!", ""],
     ])("%j becomes %j", (text, expected) => {
@@ -199,14 +199,14 @@ describe("filterCatalogSongs", () => {
         rejoice.aliases.forEach((alias) => {
             expect(search(alias)).toEqual([rejoice]);
         });
-        expect(search("rejoice – the lord is king!")).toEqual([rejoice]);
+        expect(search("rejoice \u2013 the lord is king!")).toEqual([rejoice]);
     });
 
     test("finds the tune name and the tune's aliases, accents or not", () => {
         expect(search("new britain")).toEqual([amazingGrace]);
         expect(search("darwal")).toEqual([rejoice]);
         expect(search("jungst")).toEqual([howGreatOurJoy]);
-        expect(search("jüngst")).toEqual([howGreatOurJoy]);
+        expect(search("j\u00FCngst")).toEqual([howGreatOurJoy]);
     });
 
     test("finds every row with an entry of that number", () => {
@@ -264,13 +264,13 @@ describe("sortCatalogSongs", () => {
             "Alleluia (ALLELUIA)",
             "Amazing Grace (NEW BRITAIN)",
             "Doxology (OLD HUNDREDTH)",
-            "How Great Our Joy (JÜNGST)",
+            "How Great Our Joy (J\u00DCNGST)",
             "O Worship the King (LYONS)",
             "Rejoice, the Lord Is King (DARWALL)",
             "Thank You, Lord (LYNCH)",
             "Thank You, Lord (THANK YOU, LORD)",
             "Thank You, Lord",
-            "‘Tis So Sweet to Trust in Jesus (TRUST IN JESUS)",
+            "\u2018Tis So Sweet to Trust in Jesus (TRUST IN JESUS)",
             "Unplaced Hymn (SOMEWHERE)",
         ]);
     });

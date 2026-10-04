@@ -52,10 +52,10 @@ export function parseCatalogSongsQuery(
 }
 
 /** Accents a decomposed letter carries ("é" is "e" and U+0301). */
-const COMBINING_MARKS = /[̀-ͯ]/g;
+const COMBINING_MARKS = /[\u0300-\u036F]/g;
 
 /** Apostrophes, straight and curly, which join a word rather than split it ("O'er"). */
-const APOSTROPHES = /['‘’ʼ]/g;
+const APOSTROPHES = /['\u2018\u2019\u02BC]/g;
 
 /** Anything that is not a letter or a digit. */
 const NOT_LETTER_OR_DIGIT = /[^\p{L}\p{N}]+/gu;
