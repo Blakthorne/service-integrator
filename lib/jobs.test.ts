@@ -39,7 +39,7 @@ const hoursAfterT0 = (hours: number) => new Date(T0.getTime() + hours * HOUR_MS)
 /** The globalThis keys jobs.ts keeps its state under. */
 const JOB_GLOBALS = [
     "service-integrator.jobs.started.v1",
-    "service-integrator.jobs.running.v1",
+    "service-integrator.jobs.running.v2",
 ];
 
 let db: DatabaseSync;
@@ -73,10 +73,10 @@ function testJob(run: Job["run"], options: Partial<Job> = {}): Job {
 }
 
 describe("runJob", () => {
-    test("records a successful run with its message and counts", async () => {
+    test("records a successful run with its message and counts, and gives it", async () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(T0);
-        await runJob(
+        const result = await runJob(
             testJob(() => ({ message: "Synced 3 tags", counts: { tags: 3 } })),
             openDb
         );
@@ -87,6 +87,7 @@ describe("runJob", () => {
             message: "Synced 3 tags",
             counts: { tags: 3 },
         });
+        expect(result).toEqual({ run: latestSyncRun(db, "tags") });
         expect(console.log).toHaveBeenCalledWith("Job tags finished: Synced 3 tags");
     });
 
@@ -110,13 +111,14 @@ describe("runJob", () => {
         ["rejects", () => Promise.reject(new Error("boom")), "boom"],
         ["rejects with a non-Error", () => Promise.reject("plain"), "plain"],
     ])(
-        "records a failed run when the job %s, and resolves",
+        "records a failed run when the job %s, and resolves to it",
         async (_case, run, message) => {
-            await expect(runJob(testJob(run), openDb)).resolves.toBeUndefined();
+            const result = await runJob(testJob(run), openDb);
             expect(latestSyncRun(db, "tags")).toMatchObject({
                 ok: false,
                 message,
             });
+            expect(result).toEqual({ run: latestSyncRun(db, "tags") });
             expect(console.error).toHaveBeenCalledWith(
                 "Job tags failed:",
                 expect.anything()
@@ -124,15 +126,50 @@ describe("runJob", () => {
         }
     );
 
-    test("only logs when the database cannot be opened", async () => {
+    test("gives why, and logs it, when the database cannot be opened", async () => {
         const run = vi.fn();
         const broken = () => {
             throw new Error("Could not open the database");
         };
-        await expect(runJob(testJob(run), broken)).resolves.toBeUndefined();
+        await expect(runJob(testJob(run), broken)).resolves.toEqual({
+            run: null,
+            error: "Could not open the database",
+        });
         expect(run).not.toHaveBeenCalled();
         expect(console.error).toHaveBeenCalledWith(
             "Job tags could not start:",
+            expect.any(Error)
+        );
+    });
+
+    test("gives why, never an older run, when the run cannot be recorded", async () => {
+        const older = await runJob(testJob(() => ({ message: "Synced 3 tags" })), openDb);
+        expect(older.run?.ok).toBe(true);
+        db.exec(
+            "CREATE TRIGGER full BEFORE INSERT ON sync_runs BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END"
+        );
+        const run = vi.fn();
+
+        await expect(runJob(testJob(run), openDb)).resolves.toEqual({
+            run: null,
+            error: "database or disk is full",
+        });
+        expect(run).not.toHaveBeenCalled();
+        expect(console.error).toHaveBeenCalledWith(
+            "Job tags could not start:",
+            expect.any(Error)
+        );
+    });
+
+    test("gives why when the end of the run cannot be recorded", async () => {
+        db.exec(
+            "CREATE TRIGGER full BEFORE UPDATE ON sync_runs BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END"
+        );
+        await expect(
+            runJob(testJob(() => ({ message: "Synced 3 tags" })), openDb)
+        ).resolves.toEqual({ run: null, error: "database or disk is full" });
+        expect(console.error).toHaveBeenCalledWith(
+            "Job tags: could not record the failure:",
             expect.any(Error)
         );
     });
@@ -147,9 +184,10 @@ describe("runJob", () => {
         );
         const job = testJob(run);
         const first = runJob(job, openDb);
-        expect(runJob(job, openDb)).toBe(first);
+        const joined = runJob(job, openDb);
+        expect(joined).toBe(first);
         finish();
-        await first;
+        expect(await joined).toEqual({ run: latestSyncRun(db, "tags") });
         expect(run).toHaveBeenCalledOnce();
         expect(recentSyncRuns(db)).toHaveLength(1);
 

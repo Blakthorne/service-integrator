@@ -18,16 +18,18 @@ const SESSION = {
     expires: "2026-11-03T12:00:00.000Z",
 };
 
-/** A finished run of the song sync, as syncPcoSongsNow gives it. */
+/** The finished run of the song sync that syncPcoSongsNow started or joined. */
 function run(ok: boolean, message: string | null) {
     return {
-        id: 7,
-        kind: "pco-songs",
-        startedAt: "2026-10-04T12:00:00.000Z",
-        finishedAt: "2026-10-04T12:00:05.000Z",
-        ok,
-        message,
-        counts: null,
+        run: {
+            id: 7,
+            kind: "pco-songs",
+            startedAt: "2026-10-04T12:00:00.000Z",
+            finishedAt: "2026-10-04T12:00:05.000Z",
+            ok,
+            message,
+            counts: null,
+        },
     };
 }
 
@@ -87,8 +89,8 @@ describe("syncPcoSongsAction", () => {
         });
     });
 
-    test("returns a message, and logs the cause, when the database cannot be opened", async () => {
-        const cause = new Error("Could not open the database");
+    test("returns a message, and logs the cause, when the sync throws all the same", async () => {
+        const cause = new Error("Unexpected");
         syncPcoSongsNow.mockRejectedValue(cause);
 
         await expect(syncPcoSongsAction()).resolves.toEqual({
@@ -102,12 +104,13 @@ describe("syncPcoSongsAction", () => {
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
-    test("returns a message when no run was recorded", async () => {
-        syncPcoSongsNow.mockResolvedValue(null);
+    test("says nothing was changed, and revalidates nothing, when no run could be recorded", async () => {
+        syncPcoSongsNow.mockResolvedValue({ run: null, error: "database or disk is full" });
 
         await expect(syncPcoSongsAction()).resolves.toEqual({
             ok: false,
             message: FORM_FAILURE_MESSAGE,
         });
+        expect(revalidatePath).not.toHaveBeenCalled();
     });
 });

@@ -27,7 +27,7 @@ import type {
     PcoLibrarySong,
     UnlinkedPcoSong,
 } from "@/lib/domain";
-import { pcoSongsJob, runJob } from "@/lib/jobs";
+import { pcoSongsJob, runJob, type RunJobResult } from "@/lib/jobs";
 import { PcoError, getSong, parsePcoId } from "@/lib/pco";
 import { TOP_SUGGESTIONS, buildCatalogIndex, suggestLinks } from "@/lib/reconcile";
 
@@ -37,6 +37,7 @@ export type {
     LinkResult,
     UnlinkResult,
 } from "@/lib/db/links";
+export type { RunJobResult } from "@/lib/jobs";
 
 /**
  * Linking catalog songs to Planning Center songs from the app's pages: what
@@ -207,11 +208,11 @@ export function unignorePcoSong(pcoSongId: string): IgnoreResult {
 
 /**
  * "Sync now": run the song sync through `runJob`, so that a run already in
- * progress (the hourly one) is joined rather than doubled, and return its
- * run as recorded, with `ok` false and the reason when it failed. A failed
- * sync never throws; this throws only when the database cannot be opened.
+ * progress (the hourly one) is joined rather than doubled, and give that
+ * run as recorded, with `ok` false and the reason when the sync failed; or
+ * `run: null` and why, when no run could be recorded at all (the database
+ * could not be opened or written). Never an older run, and never throws.
  */
-export async function syncPcoSongsNow(): Promise<SyncRun | null> {
-    await runJob(pcoSongsJob);
-    return latestSyncRun(getDb(), "pco-songs");
+export function syncPcoSongsNow(): Promise<RunJobResult> {
+    return runJob(pcoSongsJob);
 }

@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { linkSong } from "@/lib/db/links";
 import { findPcoSong } from "@/lib/db/pcoSongs";
-import { finishSyncRun, startSyncRun } from "@/lib/db/syncRuns";
+import { finishSyncRun, latestSyncRun, startSyncRun } from "@/lib/db/syncRuns";
 import {
     openTestDb,
     seedBook,
@@ -380,16 +380,20 @@ describe("ignorePcoSong and unignorePcoSong", () => {
 });
 
 describe("syncPcoSongsNow", () => {
+    const LIBRARY = `${PCO_BASE}/songs?per_page=100`;
+
     test("runs the song sync as a job and gives its run", async () => {
         const { doxology } = seed();
         stubPcoPacer();
         stubFetchRoutes({
-            [`${PCO_BASE}/songs?per_page=100`]: listPage([
+            [LIBRARY]: listPage([
                 songResource("1001", { title: "Amazing Grace" }),
                 songResource("1016", { title: "Doxology" }),
             ]),
         });
-        await expect(syncPcoSongsNow()).resolves.toMatchObject({
+        const result = await syncPcoSongsNow();
+        expect(result).toEqual({ run: latestSyncRun(db, "pco-songs") });
+        expect(result.run).toMatchObject({
             kind: "pco-songs",
             ok: true,
             counts: { fetched: 2, added: 1, autoLinked: 1 },
@@ -400,12 +404,29 @@ describe("syncPcoSongsNow", () => {
     test("gives a failed run rather than throwing", async () => {
         stubPcoPacer();
         stubFetchRoutes({
-            [`${PCO_BASE}/songs?per_page=100`]: () => json({ errors: [] }, { status: 500 }),
+            [LIBRARY]: () => json({ errors: [] }, { status: 500 }),
         });
-        await expect(syncPcoSongsNow()).resolves.toMatchObject({
-            kind: "pco-songs",
-            ok: false,
-            message: expect.stringContaining("status: 500"),
+        await expect(syncPcoSongsNow()).resolves.toEqual({
+            run: expect.objectContaining({
+                kind: "pco-songs",
+                ok: false,
+                message: expect.stringContaining("status: 500"),
+            }),
         });
+    });
+
+    test("gives why, never the last hour's run, when no run can be recorded", async () => {
+        const id = startSyncRun(db, "pco-songs", daysAgo(1));
+        finishSyncRun(db, id, { ok: true, message: "Synced 6 songs: no changes" }, daysAgo(1));
+        db.exec(
+            "CREATE TRIGGER full BEFORE INSERT ON sync_runs BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END"
+        );
+        const fetchMock = stubFetchRoutes({});
+
+        await expect(syncPcoSongsNow()).resolves.toEqual({
+            run: null,
+            error: "database or disk is full",
+        });
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 });
