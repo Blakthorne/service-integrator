@@ -8,12 +8,17 @@ import {
     cleanText,
     draftFromPcoTitle,
     previewEntryLabel,
+    defaultLabelFormat,
+    labelFormatProblem,
+    validateBookEdit,
+    validateBookMove,
     validateEntryDelete,
     validateEntryEdit,
     validateEntryMove,
     validateHymnAlias,
     validateHymnEdit,
     validateMerge,
+    validateNewBook,
     validateNewEntry,
     validateNewSong,
     validateSongMark,
@@ -668,6 +673,87 @@ describe("validateMerge", () => {
                 source: { message: "That tune is not in the catalog." },
                 target: { message: "Choose the tune to merge it into." },
             },
+        });
+    });
+});
+
+describe("the book forms", () => {
+    test("default a numbered book's label to CODE-{n}, and an unnumbered one's to its short name", () => {
+        expect(defaultLabelFormat("CB", true, "Choruses")).toBe("CB-{n}");
+        expect(defaultLabelFormat("CB", false, "Choruses")).toBe("Choruses");
+    });
+
+    test("say what is wrong with a label format for the kind of book", () => {
+        expect(labelFormatProblem("R-{n}", true)).toBeNull();
+        expect(labelFormatProblem("Chorus Book", false)).toBeNull();
+        expect(labelFormatProblem("Rejoice", true)).toBe(
+            "A numbered book's label needs {n} where the number goes, such as R-{n}."
+        );
+        expect(labelFormatProblem("CB-{n}", false)).toBe(
+            "A book without numbers labels every entry alike, so its label has no {n}: its short name, such as Chorus Book."
+        );
+    });
+
+    test("read a new book, filling in the short name and label format left blank", () => {
+        expect(
+            validateNewBook(fields({ code: "CB", name: " Chorus  Book ", shortName: "", numbered: "no", labelFormat: "" }))
+        ).toEqual({
+            ok: true,
+            input: { code: "CB", name: "Chorus Book", shortName: "Chorus Book", numbered: false, labelFormat: "Chorus Book" },
+        });
+        expect(
+            validateNewBook(fields({ code: "hf", name: "Hymns of Faith", shortName: "Faith", numbered: "yes", labelFormat: "" }))
+        ).toEqual({
+            ok: true,
+            input: { code: "hf", name: "Hymns of Faith", shortName: "Faith", numbered: true, labelFormat: "hf-{n}" },
+        });
+        expect(
+            validateNewBook(fields({ code: "HF", name: "Hymns of Faith", numbered: "yes", labelFormat: " HF {n} " }))
+        ).toMatchObject({ ok: true, input: { labelFormat: "HF {n}" } });
+    });
+
+    test("refuse a new book's bad code, blank name, unknown kind and label format, all at once", () => {
+        expect(validateNewBook(fields({ code: "1CB", name: "", numbered: "maybe", labelFormat: "X" }))).toEqual({
+            ok: false,
+            fieldErrors: {
+                code: { message: "A code is a letter, then up to 7 letters, digits, - or _, such as CB." },
+                name: { message: "Type the book's name." },
+                numbered: { message: "Choose whether the book numbers its songs." },
+            },
+        });
+        expect(validateNewBook(fields({ code: "CB", name: "Chorus Book", numbered: "no", labelFormat: "CB-{n}" }))).toMatchObject({
+            ok: false,
+            fieldErrors: { labelFormat: { message: expect.stringContaining("has no {n}") } },
+        });
+        expect(
+            validateNewBook(fields({ code: "CB", name: "x".repeat(101), shortName: "y".repeat(41), numbered: "no" }))
+        ).toEqual({
+            ok: false,
+            fieldErrors: {
+                name: { message: "A book's name has at most 100 characters." },
+                shortName: { message: "A short name has at most 40 characters." },
+            },
+        });
+    });
+
+    test("read a book's edit, with blanks as none, and whether it is in use", () => {
+        expect(
+            validateBookEdit(fields({ bookId: "2", name: "Rejoice Hymns", shortName: " ", labelFormat: "", active: "no" }))
+        ).toEqual({
+            ok: true,
+            input: { bookId: 2, name: "Rejoice Hymns", shortName: null, labelFormat: null, active: false },
+        });
+        expect(validateBookEdit(fields({ bookId: "2", name: "R", active: "" }))).toEqual({
+            ok: false,
+            fieldErrors: { active: { message: "Choose whether the book is in use." } },
+        });
+        expect(validateBookMove(fields({ bookId: "2", direction: "up" }))).toEqual({
+            ok: true,
+            input: { bookId: 2, direction: "up" },
+        });
+        expect(validateBookMove(fields({ bookId: "two", direction: "up" }))).toMatchObject({
+            ok: false,
+            fieldErrors: { book: { message: "That book is not in the catalog." } },
         });
     });
 });

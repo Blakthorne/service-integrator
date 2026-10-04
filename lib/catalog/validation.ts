@@ -8,8 +8,8 @@ import {
 import { normalizeTitle } from "@/lib/normalizeTitle";
 import { readTuneHint, tunesNamedBy, type CatalogIndex } from "@/lib/reconcile";
 import { formatCount } from "./counts";
-import { parseCatalogId } from "./ids";
-import { formatEntryLabel } from "./labels";
+import { parseBookCode, parseCatalogId } from "./ids";
+import { formatEntryLabel, NUMBER_PLACEHOLDER } from "./labels";
 import { isSongMarkKind } from "./marks";
 
 /**
@@ -883,5 +883,175 @@ export function validateMerge(formData: FormData, kind: "hymn" | "tune"): FormCh
             target: readCatalogId(formData, "targetId", `Choose the ${kind} to merge it into.`),
         },
         ({ source, target }) => ({ sourceId: source, targetId: target })
+    );
+}
+
+// Books ------------------------------------------------------------------------
+
+/** The longest name a book takes ("Great Hymns of the Faith"). */
+export const BOOK_NAME_MAX_LENGTH = 100;
+
+/** The longest short name ("Great Hymns") or label format ("R-{n}") a book takes. */
+export const BOOK_LABEL_MAX_LENGTH = 40;
+
+/** What a yes-or-no field of the book forms posts. */
+export const BOOK_YES = "yes";
+export const BOOK_NO = "no";
+
+/**
+ * A book's label format when none is given: `CODE-{n}` for a numbered book
+ * ("CB-{n}"), and its short name for one without numbers, whose entries are
+ * all labelled alike ("Chorus Book").
+ */
+export function defaultLabelFormat(code: string, numbered: boolean, shortName: string): string {
+    return numbered ? `${code}-${NUMBER_PLACEHOLDER}` : shortName;
+}
+
+/**
+ * What is wrong with a label format for a book that is, or is not,
+ * numbered, or null when nothing is: a numbered book's must say where the
+ * number goes (`{n}`), and an unnumbered book's must not.
+ */
+export function labelFormatProblem(labelFormat: string, numbered: boolean): string | null {
+    const placeholder = labelFormat.includes(NUMBER_PLACEHOLDER);
+    if (numbered && !placeholder) {
+        return `A numbered book's label needs ${NUMBER_PLACEHOLDER} where the number goes, such as R-${NUMBER_PLACEHOLDER}.`;
+    }
+    if (!numbered && placeholder) {
+        return `A book without numbers labels every entry alike, so its label has no ${NUMBER_PLACEHOLDER}: its short name, such as Chorus Book.`;
+    }
+    return null;
+}
+
+/** A new book, as the Add book form describes it, with the defaults filled in. */
+export interface NewBookInput {
+    /** As `parseBookCode` accepts it: a letter, then up to 7 letters, digits, "_" or "-". */
+    code: string;
+    name: string;
+    shortName: string;
+    numbered: boolean;
+    labelFormat: string;
+}
+
+/** A book's name, short name, label format and whether it is active, as its Edit form gives them. */
+export interface BookEditInput {
+    bookId: number;
+    name: string;
+    /** Null when left blank: the book's name. */
+    shortName: string | null;
+    /** Null when left blank: the book's default (`defaultLabelFormat`). */
+    labelFormat: string | null;
+    active: boolean;
+}
+
+/** The fields the Add book form posts. */
+export const NEW_BOOK_FIELDS = ["code", "name", "shortName", "numbered", "labelFormat"] as const;
+
+/** The fields a book's Edit form posts. */
+export const BOOK_FIELDS = ["bookId", "name", "shortName", "labelFormat", "active"] as const;
+
+/** The parts of the book forms, each of which shows at most one error. */
+export type BookPart = "book" | "code" | "name" | "shortName" | "numbered" | "labelFormat" | "active";
+
+/** A yes-or-no field: "yes" or "no", or `message` for anything else. */
+function readYesNo(formData: FormData, name: string, message: string): PartRead<boolean> {
+    const value = readString(formData, name);
+    if (value === BOOK_YES || value === BOOK_NO) {
+        return { ok: true, value: value === BOOK_YES };
+    }
+    return { ok: false, message };
+}
+
+/** A required one-line text field: cleaned, and refused when blank or past `max` characters. */
+function readLine(formData: FormData, name: string, max: number, blank: string, what: string): PartRead<string> {
+    const text = cleanText(readString(formData, name));
+    if (text === "") {
+        return { ok: false, message: blank };
+    }
+    if (text.length > max) {
+        return { ok: false, message: `${what} has at most ${formatCount(max)} characters.` };
+    }
+    return { ok: true, value: text };
+}
+
+/**
+ * Read the Add book form: a code `parseBookCode` accepts (unique without
+ * regard to case: the database says whether it is taken), a name, a short
+ * name (the name when left blank), numbered or not, and a label format
+ * (`defaultLabelFormat` when left blank) that suits it (`labelFormatProblem`).
+ */
+export function validateNewBook(formData: FormData): FormCheck<NewBookInput, BookPart> {
+    const code = parseBookCode(readString(formData, "code"));
+    const name = readLine(formData, "name", BOOK_NAME_MAX_LENGTH, "Type the book's name.", "A book's name");
+    const shortName = readOptionalLine(formData, "shortName", BOOK_LABEL_MAX_LENGTH, "A short name");
+    const numbered = readYesNo(formData, "numbered", "Choose whether the book numbers its songs.");
+    const labelFormat = readOptionalLine(formData, "labelFormat", BOOK_LABEL_MAX_LENGTH, "A label");
+    const problem =
+        labelFormat.ok && labelFormat.value !== null && numbered.ok
+            ? labelFormatProblem(labelFormat.value, numbered.value)
+            : null;
+    return checkParts(
+        {
+            code:
+                code === null
+                    ? {
+                          ok: false,
+                          message:
+                              "A code is a letter, then up to 7 letters, digits, - or _, such as CB.",
+                      }
+                    : { ok: true, value: code },
+            name,
+            shortName,
+            numbered,
+            labelFormat: problem === null ? labelFormat : { ok: false, message: problem },
+        },
+        ({ code, name, shortName, numbered, labelFormat }) => {
+            const short = shortName ?? name;
+            return {
+                code,
+                name,
+                shortName: short,
+                numbered,
+                labelFormat: labelFormat ?? defaultLabelFormat(code, numbered, short),
+            };
+        }
+    );
+}
+
+/**
+ * Read a book's Edit form: the book, its name, its short name and label
+ * format (each null when left blank, for the defaults), and whether it is
+ * active. Whether the label format suits the book is for the database to
+ * say: the form names the book by id only.
+ */
+export function validateBookEdit(formData: FormData): FormCheck<BookEditInput, BookPart> {
+    return checkParts(
+        {
+            book: readCatalogId(formData, "bookId", "That book is not in the catalog."),
+            name: readLine(formData, "name", BOOK_NAME_MAX_LENGTH, "Type the book's name.", "A book's name"),
+            shortName: readOptionalLine(formData, "shortName", BOOK_LABEL_MAX_LENGTH, "A short name"),
+            labelFormat: readOptionalLine(formData, "labelFormat", BOOK_LABEL_MAX_LENGTH, "A label"),
+            active: readYesNo(formData, "active", "Choose whether the book is in use."),
+        },
+        ({ book, name, shortName, labelFormat, active }) => ({
+            bookId: book,
+            name,
+            shortName,
+            labelFormat,
+            active,
+        })
+    );
+}
+
+/** Read a book's Move up or Move down form: the book and the direction. */
+export function validateBookMove(
+    formData: FormData
+): FormCheck<{ bookId: number; direction: MoveDirection }, "book" | "direction"> {
+    return checkParts(
+        {
+            book: readCatalogId(formData, "bookId", "That book is not in the catalog."),
+            direction: readDirection(formData),
+        },
+        ({ book, direction }) => ({ bookId: book, direction })
     );
 }

@@ -3,16 +3,25 @@ import type { HymnOption, TuneOption } from "@/lib/catalog/pickers";
 import {
     EMPTY_NEW_SONG,
     draftFromPcoTitle,
+    type BookEditInput,
     type EntryEditInput,
     type HymnAliasInput,
     type HymnEditInput,
     type MoveDirection,
+    type NewBookInput,
     type NewEntryInput,
     type NewSongDraft,
     type TuneAliasInput,
     type TuneEditInput,
 } from "@/lib/catalog/validation";
 import { getDb } from "@/lib/db";
+import {
+    addBook,
+    editBook,
+    moveBook,
+    type BookEditResult,
+    type BookMoveResult,
+} from "@/lib/db/books";
 import { listBooks, listCatalogSongs, listTunes } from "@/lib/db/catalog";
 import {
     addEntry,
@@ -75,6 +84,12 @@ export type {
     TuneEditResult,
 } from "@/lib/db/catalogEdit";
 export type { MergeApplyResult, MergePlanResult } from "@/lib/db/catalogMerge";
+export type {
+    BookEditResult,
+    BookMoveResult,
+    BookProblem,
+    BookProblemReason,
+} from "@/lib/db/books";
 export type {
     MergePreview,
     MergeRefusal,
@@ -350,4 +365,31 @@ export function previewCatalogTuneMerge(sourceId: number, targetId: number): Mer
 /** Merge tune `sourceId` into tune `targetId`, as `mergeCatalogHymns` merges hymns. */
 export function mergeCatalogTunes(sourceId: number, targetId: number): MergeApplyResult {
     return applyTuneMerge(getDb(), sourceId, targetId);
+}
+
+// ---------------------------------------------------------------------------
+// Books (the books page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a book, numbered or not, last in the order and in use (`addBook`).
+ * Refused for a code another book has in any case, or a label format that
+ * does not suit the book.
+ */
+export function addCatalogBook(input: NewBookInput): BookEditResult {
+    return addBook(getDb(), input);
+}
+
+/**
+ * Change a book's name, short name, label format and whether it is in use
+ * (`editBook`). A book not in use stays browsable, but its entries are left
+ * out of the schedule text, the hymnal notes and the book filter.
+ */
+export function editCatalogBook(input: BookEditInput): BookEditResult {
+    return editBook(getDb(), input);
+}
+
+/** Move a book one place up or down the order books are listed in (`moveBook`). */
+export function moveCatalogBook(bookId: number, direction: MoveDirection): BookMoveResult {
+    return moveBook(getDb(), bookId, direction);
 }

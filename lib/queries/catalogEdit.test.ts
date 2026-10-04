@@ -29,11 +29,13 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 }));
 
 import {
+    addCatalogBook,
     addCatalogEntry,
     addCatalogHymnAlias,
     addCatalogTuneAlias,
     createSong,
     deleteCatalogEntry,
+    editCatalogBook,
     editCatalogEntry,
     editCatalogHymn,
     editCatalogTune,
@@ -44,6 +46,7 @@ import {
     getTuneOptions,
     mergeCatalogHymns,
     mergeCatalogTunes,
+    moveCatalogBook,
     moveCatalogEntry,
     previewCatalogHymnMerge,
     previewCatalogTuneMerge,
@@ -450,5 +453,33 @@ describe("the merges, end to end", () => {
             preview: { moves: [{ songId: songs.amazingGrace }], aliasesAdded: ["NEW BRITAIN"] },
         });
         expect(getTuneOptions().map(({ name }) => name)).toEqual(["ABBA, FATHER", "PRITCHARD"]);
+    });
+});
+
+describe("the books, end to end", () => {
+    test("adds a book without numbers, edits it, reorders it, and refuses a code taken", () => {
+        seed();
+        const added = addCatalogBook({
+            code: "CB",
+            name: "Chorus Book",
+            shortName: "Chorus Book",
+            numbered: false,
+            labelFormat: "Chorus Book",
+        });
+        expect(added).toMatchObject({ ok: true, code: "CB" });
+        const bookId = added.ok ? added.bookId : 0;
+        expect(
+            addCatalogBook({ code: "r", name: "Another", shortName: "Another", numbered: true, labelFormat: "r-{n}" })
+        ).toMatchObject({ ok: false, problems: [{ reason: "code-taken" }] });
+
+        expect(
+            editCatalogBook({ bookId, name: "Chorus Book", shortName: "Choruses", labelFormat: null, active: true })
+        ).toEqual({ ok: true, bookId, code: "CB" });
+        expect(moveCatalogBook(bookId, "up")).toEqual({ ok: true, changed: true, sortOrder: 3 });
+        expect(getNewSongBooks().map(({ name }) => name)).toEqual([
+            "Rejoice Hymns",
+            "Great Hymns of the Faith",
+            "Chorus Book",
+        ]);
     });
 });
