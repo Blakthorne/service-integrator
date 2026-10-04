@@ -1,5 +1,6 @@
 import "server-only";
 import type { DatabaseSync } from "node:sqlite";
+import { errorMessage } from "./errors";
 import { MIGRATIONS, type Migration } from "./migrations";
 import { withTransaction } from "./transaction";
 
@@ -24,10 +25,6 @@ export function appliedMigrations(db: DatabaseSync): AppliedMigration[] {
         .prepare("SELECT id, applied_at FROM schema_migrations ORDER BY id")
         .all()
         .map((row) => ({ id: String(row.id), appliedAt: String(row.applied_at) }));
-}
-
-function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
 }
 
 /** Apply one migration with its schema_migrations row. False if another connection got there first. */
