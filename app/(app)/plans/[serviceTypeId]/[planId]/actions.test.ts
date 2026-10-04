@@ -1,16 +1,23 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // vi.hoisted is required: vi.mock is hoisted above const declarations.
-const { auth, revalidatePath, linkCatalogSong } = vi.hoisted(() => ({
+const { auth, revalidatePath, linkCatalogSong, saveSelection } = vi.hoisted(() => ({
     auth: vi.fn(),
     revalidatePath: vi.fn(),
     linkCatalogSong: vi.fn(),
+    saveSelection: vi.fn(),
 }));
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ linkCatalogSong }));
+// The real module's messages, with only the write mocked.
+vi.mock("@/lib/queries/selections", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/queries/selections")>()),
+    saveScheduleSelection: saveSelection,
+}));
 
-import { linkPcoSong } from "./actions";
+import { SELECTION_NOT_SAVED_MESSAGE } from "@/lib/queries/selections";
+import { linkPcoSong, saveScheduleSelection } from "./actions";
 
 const SESSION = {
     user: { email: "someone@example.com" },
@@ -21,6 +28,7 @@ const ST = "1405391";
 const PLAN = "81234567";
 const PCO_SONG = "26000001";
 const SONG = "42";
+const ITEM = "91000001";
 
 /** A refusal as linkCatalogSong returns it. */
 const SONG_LINKED = {
@@ -31,11 +39,12 @@ const SONG_LINKED = {
 };
 
 beforeEach(() => {
-    for (const mock of [auth, revalidatePath, linkCatalogSong]) {
+    for (const mock of [auth, revalidatePath, linkCatalogSong, saveSelection]) {
         mock.mockReset();
     }
     auth.mockResolvedValue(SESSION);
     linkCatalogSong.mockResolvedValue({ ok: true, changed: true });
+    saveSelection.mockReturnValue({ ok: true });
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -141,5 +150,86 @@ describe("linkPcoSong", () => {
             cause
         );
         expect(revalidatePath).not.toHaveBeenCalled();
+    });
+});
+
+/** The save action called with its three ids, any of which `overrides` replaces, and a choice. */
+function save(
+    overrides: Partial<Record<"serviceTypeId" | "planId" | "itemId", unknown>> = {},
+    option: unknown = "numbers",
+    customText?: unknown
+) {
+    const ids = { serviceTypeId: ST, planId: PLAN, itemId: ITEM, ...overrides };
+    // An action's arguments come from the network, so they may be anything.
+    return saveScheduleSelection(
+        ids.serviceTypeId as string,
+        ids.planId as string,
+        ids.itemId as string,
+        option as "numbers",
+        customText as string | undefined
+    );
+}
+
+describe("saveScheduleSelection", () => {
+    test("throws without a session, before it saves anything", async () => {
+        auth.mockResolvedValue(null);
+
+        await expect(save()).rejects.toThrow("Not signed in");
+        expect(saveSelection).not.toHaveBeenCalled();
+    });
+
+    test("saves the choice for the plan's item, and revalidates nothing", async () => {
+        await expect(save({}, "blank")).resolves.toEqual({ ok: true });
+
+        expect(auth).toHaveBeenCalledTimes(1);
+        expect(saveSelection).toHaveBeenCalledTimes(1);
+        expect(saveSelection).toHaveBeenCalledWith(PLAN, ITEM, "blank", undefined);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("passes Custom's text on as it was typed", async () => {
+        await expect(save({}, "custom", "  last verse only ")).resolves.toEqual({ ok: true });
+
+        expect(saveSelection).toHaveBeenCalledWith(PLAN, ITEM, "custom", "  last verse only ");
+    });
+
+    test.each([
+        ["service type", "serviceTypeId"],
+        ["plan", "planId"],
+        ["item", "itemId"],
+    ] as const)("refuses a %s id that is not one, without saving anything", async (_name, field) => {
+        for (const value of ["", "abc", "0", "01", "-1", " 1", "../1", "1/2", 42, null, undefined, ["1"]]) {
+            await expect(save({ [field]: value })).resolves.toEqual({
+                ok: false,
+                message: SELECTION_NOT_SAVED_MESSAGE,
+            });
+        }
+        expect(saveSelection).not.toHaveBeenCalled();
+    });
+
+    test("returns a refusal of the option or the text as it is", async () => {
+        const refusal = { ok: false, message: "Custom text is at most 500 characters." };
+        saveSelection.mockReturnValue(refusal);
+
+        await expect(save({}, "custom", "x".repeat(501))).resolves.toEqual(refusal);
+        // The query checks the option and the text, so they reach it as sent.
+        await save({}, "verse 2", { text: "x" });
+        expect(saveSelection).toHaveBeenLastCalledWith(PLAN, ITEM, "verse 2", { text: "x" });
+    });
+
+    test("returns a message, and logs the cause, when the database cannot be written", async () => {
+        const cause = new Error("database is locked");
+        saveSelection.mockImplementation(() => {
+            throw cause;
+        });
+
+        await expect(save()).resolves.toEqual({
+            ok: false,
+            message: "The database could not be written.",
+        });
+        expect(console.error).toHaveBeenCalledWith(
+            `Failed to save the Schedule tab's choice for plan ${ST}/${PLAN} item ${ITEM}:`,
+            cause
+        );
     });
 });
