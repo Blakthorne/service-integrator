@@ -29,7 +29,7 @@ export const NUMBER_SEPARATOR_FIELD = "numberSeparator" satisfies SettingKey;
 export const CATEGORY_NAME_FIELD = "hymnNoteCategoryName" satisfies SettingKey;
 export const INCLUDES_TUNE_FIELD = "hymnNoteIncludesTune" satisfies SettingKey;
 
-/** What a yes-or-no field posts: a checkbox is posted through a hidden field, which a form reset leaves alone. */
+/** What a yes-or-no field posts: a checkbox is posted through a hidden field, since an unchecked box posts nothing. */
 export const YES = "yes";
 export const NO = "no";
 

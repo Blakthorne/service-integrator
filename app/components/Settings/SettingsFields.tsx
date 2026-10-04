@@ -28,10 +28,10 @@ interface SettingsTextFieldProps {
 
 /**
  * A labelled text field of a Settings form, whose value lives in the form's
- * state so that it stays controlled (React resets a form after its action,
- * and a controlled field keeps what was typed). Its hint, preview and error
- * all describe it, and an error marks it invalid. The value is never
- * trimmed here: a separator's spaces are part of it.
+ * state (`useSettingsForm`), so the preview under it follows what is typed.
+ * Its hint, preview and error all describe it, and an error marks it
+ * invalid. The value is never trimmed here: a separator's spaces are part
+ * of it.
  */
 export function SettingsTextField({
     id,
