@@ -98,7 +98,8 @@ export interface PlanDetail extends PlanData {
     selectionsError: string | null;
     /**
      * The settings this plan's text follows, resolved for its service type:
-     * the schedule header label, the number separator and the CCLI number.
+     * the schedule header label, the number separator, the CCLI number, and
+     * the credit roles and phrases. The copyright text takes it as it is.
      */
     scheduleSettings: PlanTextSettings;
     /**

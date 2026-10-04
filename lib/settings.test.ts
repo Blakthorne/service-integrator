@@ -516,6 +516,8 @@ describe("planTextSettings", () => {
             headerLabel: "Sunday AM",
             numberSeparator: " / ",
             ccliLicenseNumber: "1564484",
+            creditRoles: DEFAULT_SETTINGS.creditRoles,
+            creditPhrases: DEFAULT_SETTINGS.creditPhrases,
         });
         expect(
             planTextSettings(
@@ -527,6 +529,24 @@ describe("planTextSettings", () => {
                 },
                 MIDWEEK
             )
-        ).toEqual({ headerLabel: "Wednesday PM", numberSeparator: ", ", ccliLicenseNumber: "7654321" });
+        ).toEqual({
+            headerLabel: "Wednesday PM",
+            numberSeparator: ", ",
+            ccliLicenseNumber: "7654321",
+            creditRoles: DEFAULT_SETTINGS.creditRoles,
+            creditPhrases: DEFAULT_SETTINGS.creditPhrases,
+        });
+    });
+
+    test("carries the credit roles and phrases", () => {
+        const settings = {
+            ...DEFAULT_SETTINGS,
+            creditRoles: ["Text", "Tune"],
+            creditPhrases: { Text: "Text by", Tune: "Tune by" },
+        };
+        expect(planTextSettings(settings, MORNING)).toMatchObject({
+            creditRoles: ["Text", "Tune"],
+            creditPhrases: { Text: "Text by", Tune: "Tune by" },
+        });
     });
 });

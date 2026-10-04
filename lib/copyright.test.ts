@@ -7,7 +7,7 @@ import {
     type CopyrightSong,
 } from "./copyright";
 import { parseCredits } from "./credits";
-import { DEFAULT_SETTINGS } from "./settings";
+import { DEFAULT_SETTINGS, planTextSettings } from "./settings";
 
 // Characterization tests: they pin what the code did when it was moved out of
 // the components, quirks included. A test marked QUIRK documents behavior that
@@ -482,5 +482,34 @@ describe("the credit line comes from the song's credits and the settings", () =>
             '"Parsed" Music by X.',
         ]);
         expect(getItemCopyrightInfo(songItem(parsed, 2))?.credits).toEqual(parsed.credits);
+    });
+});
+
+describe("a plan's text settings are copyright settings", () => {
+    const MORNING = { id: "1405391", name: "Sunday Morning" };
+    const ourHelp = song({ title: "O God, Our Help", author: "Words: Isaac Watts; Music: William Croft" });
+
+    test("with the defaults, every block is what it was without settings", () => {
+        const settings = planTextSettings(DEFAULT_SETTINGS, MORNING);
+        for (const block of [song(), ourHelp, song({ author: "A, B, C" }), song({ author: null })]) {
+            expect(formatCopyrightText(block, settings)).toBe(formatCopyrightText(block));
+        }
+    });
+
+    test("their CCLI number, credit roles and phrases reach every block of Copy All", () => {
+        const settings = planTextSettings(
+            {
+                ...DEFAULT_SETTINGS,
+                ccliLicenseNumber: "7654321",
+                creditRoles: ["Words", "Music"],
+                creditPhrases: { Words: "Text by", Music: "Tune by" },
+            },
+            MORNING
+        );
+        expect(buildCopyrightCopyAllText([songItem(ourHelp, 1)], settings)).toBe(
+            '"O God, Our Help" Text by Isaac Watts. Tune by William Croft.\n' +
+                "© 2001 Y.\n" +
+                "Used by permission. CCLI Streaming License 7654321."
+        );
     });
 });

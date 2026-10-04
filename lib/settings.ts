@@ -630,7 +630,12 @@ export type CreditSettings = Pick<AppSettings, "creditRoles" | "creditPhrases">;
 /** What a plan's email follows of the settings. */
 export type EmailSettings = Pick<AppSettings, "emailRecipients" | "emailSubjectTemplate">;
 
-/** The settings a plan's pages follow, resolved for the plan's service type. */
+/**
+ * The settings a plan's pages follow, resolved for the plan's service type.
+ * It is also what the copyright text reads (`CopyrightSettings`), so a
+ * plan's text settings can be passed as they are to `formatCopyrightText`
+ * and `buildCopyrightCopyAllText`.
+ */
 export interface PlanTextSettings {
     /** The schedule text's header label, or null for no header. */
     headerLabel: string | null;
@@ -638,6 +643,10 @@ export interface PlanTextSettings {
     numberSeparator: string;
     /** The CCLI license number for the copyright blocks. */
     ccliLicenseNumber: string;
+    /** The credit roles the copyright blocks read each song's author with. */
+    creditRoles: readonly string[];
+    /** What the copyright blocks print before each role's names. */
+    creditPhrases: CreditPhrases;
 }
 
 /** The settings a plan of `serviceType` follows (see `PlanTextSettings`). */
@@ -649,5 +658,7 @@ export function planTextSettings(
         headerLabel: scheduleHeaderLabel(settings.scheduleHeaderLabels, serviceType),
         numberSeparator: settings.numberSeparator,
         ccliLicenseNumber: settings.ccliLicenseNumber,
+        creditRoles: settings.creditRoles,
+        creditPhrases: settings.creditPhrases,
     };
 }

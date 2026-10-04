@@ -524,8 +524,24 @@ describe("getPlanDetail's settings", () => {
             headerLabel: "Sunday AM",
             numberSeparator: " / ",
             ccliLicenseNumber: "1564484",
+            creditRoles: DEFAULT_SETTINGS.creditRoles,
+            creditPhrases: DEFAULT_SETTINGS.creditPhrases,
         });
         expect(settingsError).toBeNull();
+    });
+
+    test("the saved credit roles and phrases", async () => {
+        seedSetting(db, "creditRoles", ["Text", "Tune"]);
+        seedSetting(db, "creditPhrases", { Text: "Text by", Tune: "Tune by" });
+        stubFetchRoutes(planDetailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const { scheduleSettings } = await getPlanDetail(MORNING, PLAN);
+
+        expect(scheduleSettings).toMatchObject({
+            creditRoles: ["Text", "Tune"],
+            creditPhrases: { Text: "Text by", Tune: "Tune by" },
+        });
     });
 
     test("what is saved, with the header label of this plan's service type", async () => {
@@ -541,6 +557,8 @@ describe("getPlanDetail's settings", () => {
             headerLabel: "Morning Worship",
             numberSeparator: ", ",
             ccliLicenseNumber: "7654321",
+            creditRoles: DEFAULT_SETTINGS.creditRoles,
+            creditPhrases: DEFAULT_SETTINGS.creditPhrases,
         });
     });
 
@@ -558,6 +576,8 @@ describe("getPlanDetail's settings", () => {
             headerLabel: "Sunday AM",
             numberSeparator: DEFAULT_SETTINGS.numberSeparator,
             ccliLicenseNumber: DEFAULT_SETTINGS.ccliLicenseNumber,
+            creditRoles: DEFAULT_SETTINGS.creditRoles,
+            creditPhrases: DEFAULT_SETTINGS.creditPhrases,
         });
         expect(settingsError).toBe("Could not open the database at /srv/data/x: denied");
     });
