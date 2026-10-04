@@ -1,6 +1,6 @@
 # Architecture
 
-How Service Integrator is put together, and how to add to it. Read this before adding a feature, and follow its [conventions](#conventions) and [recipes](#recipes). The plan that produced this structure (decisions, Planning Center spike facts, implementation notes) is `docs/superpowers/plans/2026-10-03-multi-page-routing.md`; the song catalog plan, which adds the [database](#database), is `docs/superpowers/plans/2026-10-04-song-catalog.md`.
+How Service Integrator is put together, and how to add to it. Read this before adding a feature, and follow its [conventions](#conventions) and [recipes](#recipes). The plan that produced this structure (decisions, Planning Center spike facts, implementation notes) is `docs/superpowers/plans/2026-10-03-multi-page-routing.md`; the song catalog plan, which adds the [database](#database) and [writes to Planning Center](#writes-to-planning-center), is `docs/superpowers/plans/2026-10-04-song-catalog.md`.
 
 ## Overview
 
@@ -115,21 +115,22 @@ client components (interaction only) ── URL state via useUrlState
 
 | File | What it does |
 |---|---|
-| `index.ts` | The barrel. Import `@/lib/pco`, never `@/lib/pco/<file>`: `vi.mock("@/lib/pco")` only applies to barrel imports. |
-| `client.ts` | `pcoFetch(path, kind)`, `pcoFetchAll(path, kind, { maxPages })`, `PcoError(status, path)`, `PcoUrlError`, `pcoAuthHeaders()`. |
+| `index.ts` | The barrel. Import `@/lib/pco`, never `@/lib/pco/<file>`: `vi.mock("@/lib/pco")` only applies to barrel imports. It leaves out the write plumbing (`pcoMutate`, `jsonApi`, `toOne`, `toMany`), because only `lib/pco` writes to PCO. |
+| `client.ts` | `pcoFetch(path, kind, { paced })`, `pcoFetchAll(path, kind, { maxPages, paced })`, `pcoMutate(method, path, body, { paced })`, `jsonApi`, `toOne`, `toMany`, `PcoError(status, path)`, `PcoValidationError`, `PcoUrlError`, `pcoAuthHeaders()`. |
+| `pacer.ts` | `pcoPacer()`: the process-wide pacer that paced requests wait on and that every response teaches PCO's current rate limit. `createPacer({ now, sleep })` builds one for tests. |
 | `cachePolicy.ts` | `PCO_CACHE_POLICY`: the fetch options for each `PcoResourceKind` (`serviceTypes`, `plans`, `planItems`, `songs`). All `no-store` today. |
 | `ids.ts` | `parsePcoId(raw)` returns a branded `PcoId` or `null` (`/^[1-9][0-9]{0,19}$/`); `assertPcoId` throws `InvalidPcoIdError`. |
 | `resources.ts` | The raw JSON:API shapes as PCO sends them. Types only. |
 | `mappers.ts` | `toServiceType`, `toPlan`, `toPlanItem`, `toSong` and `joinItemsToSongs`: raw resources to the domain types. |
 | `serviceTypes.ts`, `plans.ts`, `planItems.ts`, `songs.ts` | The getters. |
 | `next.ts` | `orNotFound(promise)`: a 404 `PcoError` or an invalid ID becomes `notFound()`; anything else is rethrown. Server pages and layouts only. |
-| `testing.ts` | Test-only builders and fetch stubs. |
+| `testing.ts` | Test-only builders, fetch stubs keyed by URL or `"METHOD url"`, `calledUrls`, `calledRequests` and `stubPcoPacer`. |
 
 What `client.ts` guarantees:
 
 - **Only the Services API is reachable.** `path` is relative to `/services/v2`. The URL is normalized, then must have the PCO origin, a `/services/v2/` path with no `%` in it, and no userinfo. The same check runs on every `links.next`, and requests use `redirect: "error"`, so the token never goes anywhere else. An ID from a URL is never interpolated unchecked: getters call `assertPcoId` first.
 - **`pcoFetchAll` never truncates silently.** It follows `links.next` in order, appends each page's `data`, dedupes `included` by type and id, and throws when a page beyond `maxPages` exists (default 50 at `per_page=100`; plans use 20, songs 100). PCO's default page is 25 and its maximum is 100, so list paths ask for `per_page=100`.
-- **Failures are cheap and clear.** A 429 is retried once, and only when `Retry-After` is whole seconds and at most 5. Unread error bodies are cancelled. Response headers are read only on failure, so test doubles can be a bare `{ ok, json }`.
+- **Failures are cheap and clear.** An unpaced 429 is retried once, and only when `Retry-After` is whole seconds and at most 5; paced requests wait longer (see [Writes to Planning Center](#writes-to-planning-center)). A 422 is a `PcoValidationError`, whose body is read for PCO's reasons; every other error body is cancelled unread. Headers are read with optional chaining (every response's rate-limit headers go to the pacer), so test doubles can still be a bare `{ ok, json }`.
 
 Getters are wrapped in React `cache()` (calls with the same arguments are deduped within a request), take **primitive** arguments with no defaults (the cache key is argument identity), and call `assertPcoId` on every ID before building a path.
 
@@ -219,6 +220,42 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 - **The backup job** is checked hourly and a minute after boot, and runs when the newest backup file is a day old, so restarts (every deploy is one) never stretch the gap much past a day. Settings shows its last run.
 - **Add a job** with one entry in `JOBS`, such as `{ kind: "pco-songs", everyMs: HOUR_MS, atBoot: true, run: (db) => syncPcoSongs(db) }`; a new kind joins `SYNC_RUN_KINDS` (no migration). A "Sync now" button is a server action that checks the session and calls `runJob(job)`.
 
+## Writes to Planning Center
+
+Only modules inside `lib/pco/` write to PCO (convention 18). The barrel exports `PcoValidationError` but not `pcoMutate`, `jsonApi`, `toOne` or `toMany`, and `lib/pco/index.test.ts` checks that they stay out. Nothing writes yet: phase 3 adds `lib/pco/writes.ts`, the single home of writes. Each of its functions does its fresh read first, writes, and returns what changed, and the caller (a `lib/queries` function) logs a `write_log` row.
+
+**`pcoMutate(method, path, body?, { paced })`** (`client.ts`) sends a `POST`, `PATCH` or `DELETE` through the same request path as `pcoFetch`: the URL guard runs before anything is sent, a redirect makes fetch reject, and each attempt has its own 15 s timeout. A write is always `cache: "no-store"`, whatever `PCO_CACHE_POLICY` says, and sends its body as JSON (`Content-Type: application/json`). It resolves to the JSON response, or `null` for `204 No Content` or an empty body, so a caller typed `pcoMutate<PcoSingleResponse<…>>` still handles `null`. A 429 is retried as below; PCO answers 429 before processing a request, so a retried POST cannot apply twice. A request that times out is never retried, which matters for a write: PCO may have applied it. Build the path from IDs that passed `assertPcoId`, as getters do.
+
+**Bodies.** `jsonApi(type, attributes, relationships?)` builds `{ data: { type, attributes, relationships? } }`. `toOne(type, id)` builds a to-one relationship, `{ data: { type, id } }`, and `toMany(type, ids)` a to-many one, `{ data: [{ type, id }, …] }` (an empty list is allowed). Both run every ID through `assertPcoId`, and relationship IDs are typed `PcoId`, so a relationship built by hand from an unchecked string does not compile:
+
+```ts
+// Replaces all of the song's tags; PCO answers 204, so this resolves to null.
+await pcoMutate(
+    "POST",
+    `/songs/${assertPcoId(songId)}/assign_tags`,
+    jsonApi("TagAssignment", {}, { tags: toMany("Tag", tagIds) })
+);
+```
+
+**Validation errors.** A 422 throws `PcoValidationError`, a `PcoError` with status 422 whose `details` are the `errors[].detail` strings of PCO's body: the reasons to show the user. The body is read defensively, so one that is not JSON, or not that shape, gives no details rather than a parse error. The details also appear in the message, JSON-quoted so they cannot forge log lines. Reads share the path, so a GET answered 422 throws the same error; every other non-2xx status is a plain `PcoError`. No error message or property carries the Authorization header (a test checks).
+
+**The pacer** (`pacer.ts`). PCO grants a budget of requests per period and changes it whenever it likes (users report silent drops to 10 per 20 s after a burst at one endpoint), so the pacer learns it and nothing hard-codes it:
+
+- **Every response teaches it**, paced or not, failed ones included. `observe()` adopts `x-pco-api-request-rate-limit` and `x-pco-api-request-rate-period`, each a whole number alone or followed by words (PCO sends `20`; its docs show `20 seconds`). A missing or garbled header, or one out of range (a limit or period of 0, a period over an hour), teaches nothing and never counts as zero. Until a header arrives it assumes 100 per 20 s.
+- **Paced requests get 80% of the advertised limit**, at least one a period, and page loads keep the rest. It is a token bucket in which every token comes back a period after it was taken, so no window, fixed or sliding, holds more paced starts than the budget. Turns are granted in call order.
+- **A busy window holds paced work.** Once a response's `x-pco-api-request-rate-count` reaches the budget, paced callers wait a whole period, since PCO does not say when its window started. Background syncs can afford the slack.
+- **A 429 holds every paced caller**, not just the one that got it, until its `Retry-After` (a whole period without one), and at most 60 s. `Retry-After` wins over the 429's own count, which is past the limit by definition. A page load's 429 holds paced work too.
+- **One per process.** It lives on globalThis under `Symbol.for("service-integrator.pcoPacer.v2")`: `instrumentation.ts`, server components and server actions each bundle `lib/pco` (convention 15), and a bucket per copy would let through a multiple of the rate. Its clock is monotonic, so a wall-clock change cannot stall a sync. `limits()` reports `{ limit, periodMs, budget }`.
+
+**`paced: true`** is the switch, on `pcoFetch`, `pcoFetchAll` and `pcoMutate`, and is off by default. A paced call waits for a turn before every request it sends, including each page `pcoFetchAll` follows and each retry, and its timeout starts only once the turn comes; a URL the guard refuses takes no turn. Sync jobs and other background work pass it. Page loads and server actions that someone is waiting on leave it off: they would queue behind a sync, they are few, and the fifth of the limit left over is theirs.
+
+**429s.**
+
+| | Unpaced (page loads, actions) | Paced (sync jobs) |
+|---|---|---|
+| Retries | one, only when `Retry-After` is whole seconds and at most 5 | up to 3, each after `Retry-After` of any length, or a whole period without one |
+| Gives up | otherwise at once, with `PcoError` 429 | with `PcoError` 429 when the retries run out or the wait is over 60 s |
+
 ## State
 
 **`PlanProvider`** (`app/components/PlanItems/PlanProvider.tsx`) is rendered by the `[planId]` layout with the `detail` from `getPlanDetail`.
@@ -253,7 +290,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 10. **Dates.** A calendar date from PCO is formatted from its `YYYY-MM-DD` part with UTC math (`lib/format.ts`), so the text is the same on the server and in every time zone; the date part of `sort_date` is the org-local date. A true instant such as `computedAt` renders through `<LocalTime iso>`, in the viewer's time zone. It uses `useSyncExternalStore` because React 19 keeps the server's text after a suppressed hydration mismatch.
 11. **No prerendering.** Keep `force-dynamic` on the `(app)` layout, and never call `connection()` inside `lib/pco`.
 12. **Metadata never throws.** `generateMetadata` re-runs on every navigation, refresh and production prefetch, and a throw breaks the page. Keep it cheap and total: use `getPlanLabels()` (cached for 5 minutes, never throws, falls back to "Plan") and look up only keys that passed `parsePcoId`.
-13. **Prefetch.** Rows that link to data-heavy routes use `prefetch={false}`. In production `<Link>` prefetches the rows on screen, so 25 rows would each trigger a metadata lookup and PCO calls. All users share one PCO budget of 100 requests per 20 seconds. `PlanItemsTable` rows are the exception and prefetch on purpose: an item page reads the plan the `[planId]` layout already fetched, and its metadata only reads labels `getPlanLabels()` has cached.
+13. **Prefetch.** Rows that link to data-heavy routes use `prefetch={false}`. In production `<Link>` prefetches the rows on screen, so 25 rows would each trigger a metadata lookup and PCO calls. All users share one PCO budget, advertised as 100 requests per 20 seconds and lowered by PCO at times. `PlanItemsTable` rows are the exception and prefetch on purpose: an item page reads the plan the `[planId]` layout already fetched, and its metadata only reads labels `getPlanLabels()` has cached.
 14. **Error retry.** `ErrorState` owns the retry: pass it the boundary's `reset` and it runs `startTransition(() => { router.refresh(); reset(); })`. `reset()` alone re-renders with what the client already has, so a failed server render would not run again. Use `onRetry` for a failure outside a boundary. Client code never calls `notFound()`; it renders an inline `EmptyState`.
 15. **Server actions.**
     - An action is a public POST endpoint. Call `auth()` and throw without a session, as `refreshUnusedHymns` does; the middleware alone is not enough.
@@ -262,6 +299,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
     - A failed refresh keeps the previous data: `TtlCache.refresh` replaces the stored value only when the load succeeds.
 16. **Non-ASCII in source.** Write non-ASCII characters in regex character classes and matching or normalization keys as `\u` escapes (`/[\u2018\u2019]/`), in tests too. Literal curly quotes were turned into straight quotes, and `normalizeTitle` silently stopped handling them while the test meant to cover it used straight quotes as well. Literal typographic characters in UI strings (·, ©, …) are fine.
 17. **Database.** Only `getDb()` opens the database (tests use `openTestDb()`), and pages reach it only through `lib/queries/*`. SQL lives in `lib/db/<area>.ts`, in named functions that take `db` first, tested on `:memory:`. A write of more than one statement runs in `withTransaction` with a synchronous function. Migrations are append-only: never edit, reorder or remove a committed one; change the schema with a new migration. Use only the `node:sqlite` API of Node 22.13. See [Database](#database).
+18. **Writes to Planning Center.** Only modules inside `lib/pco/` send a POST, PATCH or DELETE, and only through `pcoMutate` with a body from `jsonApi`. The barrel does not export them, so app code writes through `lib/queries`, which calls `lib/pco/writes.ts` from phase 3. Sync jobs pass `paced: true` on every PCO call; page loads and actions someone is waiting on never do. Never hard-code PCO's rate limits: the pacer learns them from every response. See [Writes to Planning Center](#writes-to-planning-center).
 
 ## Recipes
 
@@ -380,8 +418,10 @@ Example: a team list for a service type.
 - **The stubbed-fetch pattern** (`lib/pco/testing.ts`).
   - Call `stubPcoCredentials()` in `beforeEach`, and in `afterEach` call `vi.restoreAllMocks()`, `vi.unstubAllGlobals()` and `vi.unstubAllEnvs()`.
   - `stubFetchRoutes({ [url]: body })` replaces global `fetch` with a table of full URLs, and a URL missing from the table fails the test. Each call returns a **fresh** `Response` (`json(body)`), because a body can be read only once.
-  - `listPage(data, { next, included, total })` builds a paged JSON:API list, and `serviceTypeResource`, `planResource`, `itemResource` and `songResource` build raw resources. `calledUrls(fetchMock)` returns the URLs requested, in order.
-  - Use fake timers for the 429 retry. Test a query module against the stubbed fetch, or mock the barrel with `vi.hoisted` plus `vi.mock("@/lib/pco", …)`; queries import only from the barrel, so the mock applies. For module-level caches, load a fresh copy per test with `vi.resetModules()` and `import(…)`.
+  - A bare URL key answers GET only, so a stray write fails the test. Key a write as `` [`POST ${url}`] ``. The method is matched as sent: fetch upper-cases POST and DELETE but not PATCH, and PCO rejects `patch`. A route that is a function receives the request init and builds the `Response`, such as `() => new Response(null, { status: 204 })`.
+  - `listPage(data, { next, included, total })` builds a paged JSON:API list, and `serviceTypeResource`, `planResource`, `itemResource` and `songResource` build raw resources. `calledUrls(fetchMock)` returns the URLs requested, in order, and `calledRequests(fetchMock)` returns `{ method, url, body }` for each call, with the body parsed from JSON.
+  - Use fake timers for 429 retries. Test a query module against the stubbed fetch, or mock the barrel with `vi.hoisted` plus `vi.mock("@/lib/pco", …)`; queries import only from the barrel, so the mock applies. For module-level caches, load a fresh copy per test with `vi.resetModules()` and `import(…)`.
+  - **The pacer.** Every response feeds the shared pacer, so a test of paced code calls `stubPcoPacer()` first. It swaps in a fresh pacer until `vi.unstubAllGlobals()`, and that pacer runs on `Date.now`, so `vi.useFakeTimers()` drives it. Spy on its `acquire` to see the turns, or send rate-limit headers and 429s and advance the clock. Test the pacer itself through `createPacer({ now, sleep })` with a hand-driven clock.
 - **The database.** Test `lib/db` functions on `openTestDb()`, a migrated in-memory database, and `lib/queries` modules with only `getDb` mocked to return one (see [Database](#database)). Tests that touch files (`getDb`, backups) use a `mkdtempSync` folder and `vi.stubEnv` for `DATABASE_PATH` and `DATABASE_BACKUP_DIR`. CI runs the tests on Node 22, so run `npx vitest run lib/db` under Node 22 too when you change `lib/db`.
 - **The `server-only` alias.** The real package throws outside a React Server environment, so `vitest.config.mts` aliases `/^server-only$/` to `test/stubs/server-only.ts` (`export {}`), and server modules can be imported in tests. Do not use `resolve.conditions: ["react-server"]` instead: it switches `react` to its server build in every test. `esbuild.jsx: "automatic"` compiles TSX.
 - **Gates.** Run all four before every commit:
