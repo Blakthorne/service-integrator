@@ -116,11 +116,12 @@ interface CreatePcoSongFormProps {
  * that needs fixing (`checkNewPcoSongFields`), then asks to confirm in a
  * dialog that shows exactly what Planning Center will get. Create song
  * calls `createInPlanningCenterAction` from its click, with its pending
- * state in `useState` (convention 15); the dialog cannot be closed while it
- * runs. A refusal or a failure closes the dialog, so focus is back on the
- * button, and shows above it in an alert keyed per attempt, marking the
- * part it is about. Once the song exists, `onCreated` hands over to the
- * card.
+ * state in `useState` (convention 15); the dialog cannot be dismissed while
+ * it runs, though the browser may still close it (Chromium lets a third
+ * Escape through), and then the create goes on. A refusal or a failure
+ * closes the dialog, so focus is back on the button, and shows above it in
+ * an alert keyed per attempt, marking the part it is about. Once the song
+ * exists, `onCreated` hands over to the card.
  */
 export default function CreatePcoSongForm({ songId, title, settings, onCreated }: CreatePcoSongFormProps) {
     const roles = settings.creditRoles;
@@ -299,11 +300,10 @@ export default function CreatePcoSongForm({ songId, title, settings, onCreated }
             </form>
             <Dialog
                 open={confirming !== null}
-                onClose={() => {
-                    if (!creating.current) {
-                        setConfirming(null);
-                    }
-                }}
+                // The dialog has closed, however it closed (see `ui/Dialog`), so
+                // the state always follows. A create still running goes on, and
+                // its outcome shows on the card, not in the dialog.
+                onClose={() => setConfirming(null)}
                 title="Create this song in Planning Center?"
                 description="Planning Center gets the song below, and this catalog song is linked to it. The app cannot delete it again."
                 returnFocusRef={buttonRef}

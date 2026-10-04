@@ -131,7 +131,10 @@ interface AddToPlanActionProps {
  * dialog is in `useState`, never in a transition or a form action
  * (convention 15). An answer nobody waits for any more (the dialog closed,
  * or asked again) is dropped. While the song is being added the dialog
- * cannot be closed, so its outcome is seen.
+ * cannot be dismissed. The browser may still close it (Chromium lets a
+ * third Escape through): the add then goes on, Add to a plan… opens the
+ * dialog on it again rather than read the plans afresh, and its outcome
+ * opens the dialog itself, so it is seen.
  *
  * Focus: the close button has it while the plans are read; then the plan
  * chosen; on the confirmation, its question, so it is read out; Add to
@@ -208,18 +211,26 @@ export default function AddToPlanAction({ pcoSongId, songLabel, pcoTitle }: AddT
                 ? { step: "added", plan, added: result }
                 : { step: "confirm", choices, plan, failure: { message: result.message }, adding: false }
         );
+        // Open again if the browser closed the dialog while the song was added.
+        setOpen(true);
     }
 
     function openDialog() {
         setOpen(true);
-        void loadPlans();
+        // The browser closed the dialog on an add: show it again, and read
+        // the plans afresh only once the add is done.
+        if (!(state.step === "confirm" && state.adding)) {
+            void loadPlans();
+        }
     }
 
+    // The dialog has closed, however it closed (see `ui/Dialog`), so the state
+    // always follows. Plans still being read are dropped; an add goes on, and
+    // opens the dialog again with its outcome.
     function close() {
-        if (state.step === "confirm" && state.adding) {
-            return;
+        if (!(state.step === "confirm" && state.adding)) {
+            requestRef.current += 1;
         }
-        requestRef.current += 1;
         setOpen(false);
     }
 

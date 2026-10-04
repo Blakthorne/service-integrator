@@ -395,8 +395,11 @@ interface EmailSummaryActionProps {
  * transition or a form action, which would hold every navigation until it
  * answered (convention 15). A preview whose dialog was closed, or opened
  * again, before it answered is ignored. While the email goes the dialog
- * cannot be closed, so its outcome is seen, and a second click on Send does
- * nothing: an email is not taken back.
+ * cannot be dismissed, and a second click on Send does nothing: an email is
+ * not taken back. The browser may still close the dialog (Chromium lets a
+ * third Escape through): the send then goes on, Email this plan opens the
+ * dialog on it again rather than prepare another email, and its outcome
+ * opens the dialog itself, so it is seen.
  *
  * Focus: the dialog's close button has it while the preview is read; then
  * the headline or the message takes it, so it is read out; Send keeps it
@@ -458,19 +461,27 @@ export default function EmailSummaryAction({ serviceTypeId, planId }: EmailSumma
         }
         if (request === requestRef.current) {
             setState({ phase: "result", result });
+            // Open again if the browser closed the dialog while the email went.
+            setOpen(true);
         }
     }
 
     function openDialog() {
         setOpen(true);
-        void preview();
+        // The browser closed the dialog on a send: show it again, and prepare
+        // no other email until the send is done.
+        if (!sendingRef.current) {
+            void preview();
+        }
     }
 
+    // The dialog has closed, however it closed (see `ui/Dialog`), so the state
+    // always follows. A preview still being prepared is dropped; a send goes
+    // on, and opens the dialog again with its outcome.
     function close() {
-        if (sendingRef.current) {
-            return;
+        if (!sendingRef.current) {
+            requestRef.current += 1;
         }
-        requestRef.current += 1;
         setOpen(false);
     }
 
