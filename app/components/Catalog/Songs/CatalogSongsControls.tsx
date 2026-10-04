@@ -63,7 +63,7 @@ export default function CatalogSongsControls({
                 value={query}
                 onChange={onQueryChange}
                 label="Search songs"
-                placeholder="Title, tune or number"
+                hint="By title, tune or number, such as 396 or R-396."
             />
             <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
                 {books.length > 0 && (

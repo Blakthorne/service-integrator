@@ -9,7 +9,12 @@ interface SearchBoxProps {
     onChange: (value: string) => void;
     /** The field's visible label, such as "Search songs". */
     label: string;
-    placeholder?: string;
+    /**
+     * What can be searched, such as "By title, tune or number". It shows
+     * under the field, where it stays legible and in view while typing (a
+     * placeholder would be faint and vanish), and is read with the field.
+     */
+    hint: string;
 }
 
 /**
@@ -26,9 +31,10 @@ export default function SearchBox({
     value,
     onChange,
     label,
-    placeholder,
+    hint,
 }: SearchBoxProps) {
     const id = useId();
+    const hintId = useId();
     const [draft, setDraft] = useState(value);
     const [followed, setFollowed] = useState(value);
     if (value !== followed) {
@@ -52,11 +58,14 @@ export default function SearchBox({
                     setDraft(event.target.value);
                     onChange(event.target.value);
                 }}
-                placeholder={placeholder}
+                aria-describedby={hintId}
                 autoComplete="off"
                 spellCheck={false}
-                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-base sm:text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-base sm:text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <p id={hintId} className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                {hint}
+            </p>
         </div>
     );
 }

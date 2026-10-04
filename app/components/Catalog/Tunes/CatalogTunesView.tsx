@@ -55,7 +55,7 @@ export default function CatalogTunesView({ tunes }: CatalogTunesViewProps) {
                     value={searchParams.get("q") ?? ""}
                     onChange={handleQueryChange}
                     label="Search tunes"
-                    placeholder="Name"
+                    hint="By name, or by one of a tune's other names."
                 />
                 <p
                     aria-live="polite"
