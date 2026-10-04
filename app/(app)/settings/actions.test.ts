@@ -13,7 +13,7 @@ vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ syncPcoSongsNow }));
 vi.mock("@/lib/queries/settings", () => ({ getSettings, saveSettings }));
 
-import { FORM_FAILURE_MESSAGE, IDLE_FORM } from "@/lib/forms";
+import { FORM_FAILURE_MESSAGE } from "@/lib/forms";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 import {
     saveCopyrightAction,
@@ -160,7 +160,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
     test("throws without a session, before it reads or saves anything", async () => {
         auth.mockResolvedValue(null);
 
-        await expect(action(IDLE_FORM, formWith(fields))).rejects.toThrow("Not signed in");
+        await expect(action(formWith(fields))).rejects.toThrow("Not signed in");
         expect(getSettings).not.toHaveBeenCalled();
         expect(saveSettings).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
@@ -169,7 +169,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
     test("saves, revalidates Settings, the plan pages and the dashboard, and says it is saved", async () => {
         saveSettings.mockReturnValue({ ok: true, saved: ["x"] });
 
-        const state = await action(IDLE_FORM, formWith(fields));
+        const state = await action(formWith(fields));
 
         expect(state).toMatchObject({ status: "success", message: "Saved." });
         expect(saveSettings).toHaveBeenCalledTimes(1);
@@ -182,7 +182,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
             throw cause;
         });
 
-        await expect(action(IDLE_FORM, formWith(fields))).resolves.toEqual({
+        await expect(action(formWith(fields))).resolves.toEqual({
             status: "error",
             message: FORM_FAILURE_MESSAGE,
             fieldErrors: {},
@@ -202,7 +202,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
             },
         });
 
-        const state = await action(IDLE_FORM, formWith(fields));
+        const state = await action(formWith(fields));
 
         expect(state.status).toBe("error");
         if (state.status === "error") {
@@ -225,10 +225,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
 
 describe("saveCopyrightAction", () => {
     test("saves the number trimmed, and gives the form what is saved", async () => {
-        const state = await saveCopyrightAction(
-            IDLE_FORM,
-            formWith({ ccliLicenseNumber: "  7654321 " })
-        );
+        const state = await saveCopyrightAction(formWith({ ccliLicenseNumber: "  7654321 " }));
 
         expect(saveSettings).toHaveBeenCalledWith({ ccliLicenseNumber: "7654321" });
         expect(state).toEqual({
@@ -246,7 +243,7 @@ describe("saveCopyrightAction", () => {
             "A CCLI license number is digits only, at most 20 of them, such as 1564484.",
         ],
     ])("refuses a number that is %s, on its field, and saves nothing", async (_name, posted, message) => {
-        const state = await saveCopyrightAction(IDLE_FORM, formWith({ ccliLicenseNumber: posted }));
+        const state = await saveCopyrightAction(formWith({ ccliLicenseNumber: posted }));
 
         expect(state).toEqual({
             status: "error",
@@ -271,7 +268,6 @@ describe("saveScheduleTextAction", () => {
 
     test("saves the labels and the separator as typed, keeping the labels the form did not list", async () => {
         const state = await saveScheduleTextAction(
-            IDLE_FORM,
             formWith({
                 "headerLabel-1405391": "  Sunday Morning ",
                 "headerLabel-1486055": "Evening",
@@ -299,7 +295,7 @@ describe("saveScheduleTextAction", () => {
     });
 
     test("keeps the spaces of the separator", async () => {
-        await saveScheduleTextAction(IDLE_FORM, formWith({ numberSeparator: " / " }));
+        await saveScheduleTextAction(formWith({ numberSeparator: " / " }));
 
         expect(saveSettings).toHaveBeenCalledWith({
             scheduleHeaderLabels: SAVED_LABELS,
@@ -309,7 +305,6 @@ describe("saveScheduleTextAction", () => {
 
     test("drops a blank label, so its service type gets its default", async () => {
         await saveScheduleTextAction(
-            IDLE_FORM,
             formWith({ "headerLabel-1405391": "  ", numberSeparator: " / " })
         );
 
@@ -321,7 +316,6 @@ describe("saveScheduleTextAction", () => {
 
     test("marks every field that is wrong at once, and saves nothing", async () => {
         const state = await saveScheduleTextAction(
-            IDLE_FORM,
             formWith({
                 "headerLabel-1405391": "x".repeat(41),
                 "headerLabel-1486055": "Fine",
@@ -344,7 +338,6 @@ describe("saveScheduleTextAction", () => {
 
     test("refuses a field that does not name a service type's id, as a tampered form", async () => {
         const state = await saveScheduleTextAction(
-            IDLE_FORM,
             formWith({ "headerLabel-abc": "Sunday", numberSeparator: " / " })
         );
 
@@ -361,9 +354,7 @@ describe("saveScheduleTextAction", () => {
             error: "Could not open the database at /srv/data/x: denied",
         });
 
-        await expect(
-            saveScheduleTextAction(IDLE_FORM, formWith({ numberSeparator: " / " }))
-        ).resolves.toEqual({
+        await expect(saveScheduleTextAction(formWith({ numberSeparator: " / " }))).resolves.toEqual({
             status: "error",
             message: FORM_FAILURE_MESSAGE,
             fieldErrors: {},
@@ -377,7 +368,6 @@ describe("saveScheduleTextAction", () => {
 describe("saveHymnalNotesAction", () => {
     test("saves the category trimmed and the tune as a yes or no", async () => {
         const state = await saveHymnalNotesAction(
-            IDLE_FORM,
             formWith({ hymnNoteCategoryName: " Hymn Numbers ", hymnNoteIncludesTune: "yes" })
         );
 
@@ -394,7 +384,6 @@ describe("saveHymnalNotesAction", () => {
 
     test("refuses a blank category, on its field, and saves nothing", async () => {
         const state = await saveHymnalNotesAction(
-            IDLE_FORM,
             formWith({ hymnNoteCategoryName: "   ", hymnNoteIncludesTune: "no" })
         );
 
@@ -413,7 +402,6 @@ describe("saveHymnalNotesAction", () => {
 
     test("refuses a tune that is neither yes nor no", async () => {
         const state = await saveHymnalNotesAction(
-            IDLE_FORM,
             formWith({ hymnNoteCategoryName: "Hymnal", hymnNoteIncludesTune: "maybe" })
         );
 

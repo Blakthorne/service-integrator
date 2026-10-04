@@ -68,9 +68,24 @@ export async function syncPcoSongsAction(): Promise<SyncNowResult> {
 }
 
 /**
- * Where a Settings form stands, as its action returns it to
- * `useActionState`: the fields are named as `lib/settingsForms.ts` names
- * them, and "success" carries what each field holds once it is saved.
+ * Where a Settings form stands, as its action returns it: the fields are
+ * named as `lib/settingsForms.ts` names them, and "success" carries what
+ * each field holds once it is saved.
+ *
+ * Unlike the catalog's forms, these are not `useActionState` form actions:
+ * each form's `onSubmit` calls its action and keeps the state and the
+ * pending flag in `useState` (see `useSettingsForm`). The actions write only
+ * to the local database and take milliseconds, but a save revalidates the
+ * pages, and any `revalidatePath` makes the response re-render the page that
+ * called, which here reads Planning Center for the service types and their
+ * categories. A form action's transition is not over until that render is,
+ * so "Saving..." stayed up for as long as Planning Center took (8.4 s with a
+ * Planning Center that takes 4 s per read; twice its 15 s timeout when it
+ * hangs), and "Saved." with it. Called from a handler, the action's promise
+ * resolves when the action returns, "Saved." appears at once, and the page's
+ * Planning Center cards update in the background when their reads are back
+ * (convention 15: an action whose page waits on Planning Center is called
+ * from an event handler).
  */
 export type SettingsFormState = FormState;
 
@@ -162,15 +177,8 @@ function saveRead(read: SettingsFormRead): SettingsFormState {
     return formSuccess(SAVED_MESSAGE, read.shown);
 }
 
-/**
- * The Copyright card's action: save the CCLI license number. Like the other
- * Settings forms it writes only to the local database, so it takes
- * milliseconds and may be a form action (convention 15).
- */
-export async function saveCopyrightAction(
-    _state: SettingsFormState,
-    formData: FormData
-): Promise<SettingsFormState> {
+/** The Copyright card's action: save the CCLI license number. */
+export async function saveCopyrightAction(formData: FormData): Promise<SettingsFormState> {
     await requireSession();
     return saveRead(readCopyrightForm(formData));
 }
@@ -183,10 +191,7 @@ export async function saveCopyrightAction(
  * needs the saved ones: when they cannot be read, nothing is saved rather
  * than lose them (`getSettings` has logged why).
  */
-export async function saveScheduleTextAction(
-    _state: SettingsFormState,
-    formData: FormData
-): Promise<SettingsFormState> {
+export async function saveScheduleTextAction(formData: FormData): Promise<SettingsFormState> {
     await requireSession();
     const { settings, error } = getSettings();
     if (error !== null) {
@@ -196,10 +201,7 @@ export async function saveScheduleTextAction(
 }
 
 /** The Hymnal notes card's action: save the item note category's name and whether a note names the tune. */
-export async function saveHymnalNotesAction(
-    _state: SettingsFormState,
-    formData: FormData
-): Promise<SettingsFormState> {
+export async function saveHymnalNotesAction(formData: FormData): Promise<SettingsFormState> {
     await requireSession();
     return saveRead(readHymnalNotesForm(formData));
 }
