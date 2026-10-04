@@ -25,6 +25,7 @@ import {
     type HymnNoteRow,
 } from "@/lib/hymnNoteText";
 import { routes } from "@/lib/routes";
+import { DialogAnswer, DialogButtons, LINK_CLASS } from "./PlanDialogParts";
 
 /** A preview that found the category: each song item's diff. */
 type ReadyStatus = Extract<HymnNoteStatus, { kind: "ready" }>;
@@ -73,10 +74,6 @@ const TAG_CLASSES: Readonly<Record<HymnNoteLineKind, string>> = {
     "no-note":
         "bg-gray-50 text-gray-700 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700",
 };
-
-/** A link in running text: underlined, since its colour alone is under 3:1 against the text's. */
-const LINK_CLASS =
-    "text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300";
 
 /** One line of a row: its tag, then the note's words, old to new for a change, and why. */
 function NoteLine({ line }: { line: HymnNoteLine }) {
@@ -141,11 +138,6 @@ function MissingCategoryHelp() {
             </Link>
         </p>
     );
-}
-
-/** The buttons along the bottom of the dialog. */
-function Buttons({ children }: { children: React.ReactNode }) {
-    return <div className="mt-5 flex flex-wrap justify-end gap-3">{children}</div>;
 }
 
 interface SyncHymnNotesActionProps {
@@ -313,11 +305,11 @@ function SyncDialogBody({ state, attempt, answerRef, onClose, onPreview, onSync 
     switch (state.phase) {
         case "previewing":
             return (
-                <Buttons>
+                <DialogButtons>
                     <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Cancel
                     </button>
-                </Buttons>
+                </DialogButtons>
             );
         case "preview":
             if (state.result.ok && state.result.status.kind === "ready") {
@@ -363,39 +355,6 @@ function SyncDialogBody({ state, attempt, answerRef, onClose, onPreview, onSync 
 }
 
 /**
- * A message that takes focus when it arrives. A failure is an alert, keyed
- * per attempt, and red unless `quiet`: the results' summary, which says what
- * was written too, stays black, and its failed rows' tags are red.
- */
-function Answer({
-    answerRef,
-    alert,
-    quiet = false,
-    attempt,
-    children,
-}: {
-    answerRef: React.RefObject<HTMLParagraphElement | null>;
-    alert?: boolean;
-    quiet?: boolean;
-    attempt?: number;
-    children: React.ReactNode;
-}) {
-    return (
-        <p
-            key={alert ? attempt : undefined}
-            ref={answerRef}
-            tabIndex={-1}
-            role={alert ? "alert" : undefined}
-            className={`text-sm focus:outline-none ${
-                alert && !quiet ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"
-            }`}
-        >
-            {children}
-        </p>
-    );
-}
-
-/**
  * A preview that found the category: the summary, a row per song item, and
  * Confirm when there is anything to write; with `syncing`, Confirm says so
  * and Cancel waits.
@@ -416,9 +375,9 @@ function ReadyPreview({
     const changes = writesToMake(status.items);
     return (
         <>
-            <Answer answerRef={answerRef}>{previewSummary(status.items)}</Answer>
+            <DialogAnswer answerRef={answerRef}>{previewSummary(status.items)}</DialogAnswer>
             <NoteRows rows={previewRows(status.items)} label="What a sync would do, song by song" />
-            <Buttons>
+            <DialogButtons>
                 {changes > 0 ? (
                     <>
                         <button
@@ -448,7 +407,7 @@ function ReadyPreview({
                         Close
                     </button>
                 )}
-            </Buttons>
+            </DialogButtons>
         </>
     );
 }
@@ -473,13 +432,13 @@ function PreviewProblem({
     if (result.ok && result.status.kind === "no-category") {
         return (
             <>
-                <Answer answerRef={answerRef}>{result.status.message}</Answer>
+                <DialogAnswer answerRef={answerRef}>{result.status.message}</DialogAnswer>
                 <MissingCategoryHelp />
-                <Buttons>
+                <DialogButtons>
                     <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Close
                     </button>
-                </Buttons>
+                </DialogButtons>
             </>
         );
     }
@@ -494,10 +453,10 @@ function PreviewProblem({
     }
     return (
         <>
-            <Answer answerRef={answerRef} alert attempt={attempt}>
+            <DialogAnswer answerRef={answerRef} alert attempt={attempt}>
                 {message}
-            </Answer>
-            <Buttons>
+            </DialogAnswer>
+            <DialogButtons>
                 <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                     Close
                 </button>
@@ -508,7 +467,7 @@ function PreviewProblem({
                 >
                     Try again
                 </button>
-            </Buttons>
+            </DialogButtons>
         </>
     );
 }
@@ -536,16 +495,16 @@ function ResultsBody({
         const unwritten = result.counts.changed + (result.counts.notAttempted ?? 0);
         return (
             <>
-                <Answer
+                <DialogAnswer
                     answerRef={answerRef}
                     alert={result.counts.failed > 0 || unwritten > 0}
                     quiet
                     attempt={attempt}
                 >
                     {resultSummary(result.counts)}
-                </Answer>
+                </DialogAnswer>
                 <NoteRows rows={resultRows(result.items)} label="What the sync did, song by song" />
-                <Buttons>
+                <DialogButtons>
                     <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Done
                     </button>
@@ -558,17 +517,17 @@ function ResultsBody({
                             Preview again
                         </button>
                     )}
-                </Buttons>
+                </DialogButtons>
             </>
         );
     }
     return (
         <>
-            <Answer answerRef={answerRef} alert attempt={attempt}>
+            <DialogAnswer answerRef={answerRef} alert attempt={attempt}>
                 {result.message}
-            </Answer>
+            </DialogAnswer>
             {result.kind === "no-category" && <MissingCategoryHelp />}
-            <Buttons>
+            <DialogButtons>
                 <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                     Close
                 </button>
@@ -579,7 +538,7 @@ function ResultsBody({
                 >
                     Preview again
                 </button>
-            </Buttons>
+            </DialogButtons>
         </>
     );
 }
