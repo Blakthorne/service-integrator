@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { PACER_LIMIT, PACER_WINDOW_MS, createPacer, type Pacer } from "./pacer";
+import {
+    PACER_LIMIT,
+    PACER_WINDOW_MS,
+    createPacer,
+    readRateLimit,
+    type Pacer,
+} from "./pacer";
 
 afterEach(() => {
     vi.useRealTimers();
@@ -192,5 +198,59 @@ describe("pcoPacer", () => {
         pcoPacer();
         pcoPacer();
         expect(slots()).toHaveLength(1);
+    });
+});
+
+describe("readRateLimit", () => {
+    const LIMIT = "x-pco-api-request-rate-limit";
+    const PERIOD = "x-pco-api-request-rate-period";
+    const COUNT = "x-pco-api-request-rate-count";
+
+    test("reads PCO's lowercase rate-limit headers", () => {
+        const headers = new Headers({ [LIMIT]: "100", [PERIOD]: "20", [COUNT]: "7" });
+        expect(readRateLimit(headers)).toStrictEqual({ limit: 100, periodSeconds: 20, count: 7 });
+    });
+
+    test("finds them whatever their case", () => {
+        const headers = new Headers({ "X-PCO-API-Request-Rate-Limit": "10" });
+        expect(readRateLimit(headers).limit).toBe(10);
+    });
+
+    test.each(["20", "20 seconds", " 20 "])("reads a period of %j as 20 seconds", (value) => {
+        expect(readRateLimit(new Headers({ [PERIOD]: value })).periodSeconds).toBe(20);
+    });
+
+    test("reads a count past the limit, as a 429 carries", () => {
+        const headers = new Headers({ [LIMIT]: "100", [COUNT]: "118" });
+        expect(readRateLimit(headers)).toMatchObject({ limit: 100, count: 118 });
+    });
+
+    test.each([
+        "",
+        "soon",
+        "twenty",
+        "1e3",
+        "20s",
+        "1,000",
+        "-20",
+        "0x14",
+        "Infinity",
+        "99999999999999999999",
+    ])("treats %j as no information, never as zero", (value) => {
+        const headers = new Headers({ [LIMIT]: value, [PERIOD]: value, [COUNT]: value });
+        expect(readRateLimit(headers)).toEqual({});
+    });
+
+    test("a limit or period of 0, or a period over an hour, is no information; a count of 0 is", () => {
+        expect(readRateLimit(new Headers({ [LIMIT]: "0", [PERIOD]: "0", [COUNT]: "0" }))).toEqual({
+            count: 0,
+        });
+        expect(readRateLimit(new Headers({ [PERIOD]: "3601" }))).toEqual({});
+        expect(readRateLimit(new Headers({ [PERIOD]: "3600" }))).toEqual({ periodSeconds: 3600 });
+    });
+
+    test("a response without the headers, or without headers at all, says nothing", () => {
+        expect(readRateLimit(new Headers({ "content-type": "application/json" }))).toEqual({});
+        expect(readRateLimit(undefined)).toEqual({});
     });
 });

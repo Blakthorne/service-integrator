@@ -8,6 +8,49 @@ import "server-only";
 export const PACER_LIMIT = 80;
 export const PACER_WINDOW_MS = 20_000;
 
+/** What one PCO response's headers say about the rate limit. */
+export interface RateLimitInfo {
+    /** Requests allowed per period: x-pco-api-request-rate-limit. */
+    limit?: number;
+    /** The period in seconds: x-pco-api-request-rate-period. */
+    periodSeconds?: number;
+    /** Requests so far in the current period: x-pco-api-request-rate-count. */
+    count?: number;
+}
+
+/** A period longer than this is taken for a corrupt header, not believed. */
+const MAX_PERIOD_SECONDS = 3600;
+
+/** A whole number, alone or followed by words: "20", "20 seconds". */
+const WHOLE_NUMBER = /^\s*(\d+)(?:\s|$)/;
+
+/** The header `name` as a whole number in [min, max], or undefined. */
+function wholeNumber(
+    headers: Pick<Headers, "get"> | undefined,
+    name: string,
+    min: number,
+    max = Number.MAX_SAFE_INTEGER
+): number | undefined {
+    // Optional chaining: bare test doubles ({ ok, json }) have no headers.
+    const match = WHOLE_NUMBER.exec(headers?.get(name) ?? "");
+    const value = match ? Number(match[1]) : NaN;
+    return value >= min && value <= max ? value : undefined;
+}
+
+/**
+ * Read PCO's rate-limit headers from a response (PCO sends a bare "20" for
+ * the period; its docs show "20 seconds"). A header that is missing, not a
+ * whole number, or out of range (a limit or period of 0, a period over an
+ * hour) is left out: no information, never a zero.
+ */
+export function readRateLimit(headers: Pick<Headers, "get"> | undefined): RateLimitInfo {
+    return {
+        limit: wholeNumber(headers, "x-pco-api-request-rate-limit", 1),
+        periodSeconds: wholeNumber(headers, "x-pco-api-request-rate-period", 1, MAX_PERIOD_SECONDS),
+        count: wholeNumber(headers, "x-pco-api-request-rate-count", 0),
+    };
+}
+
 /** Rations the requests of sync jobs to Planning Center. */
 export interface Pacer {
     /**
