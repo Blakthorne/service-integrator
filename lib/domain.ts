@@ -472,3 +472,36 @@ export interface MirroredPcoSong extends PcoLibrarySong {
      */
     autoLinkBlockedAt: string | null;
 }
+
+/**
+ * Why a catalog song is suggested for a Planning Center song, strongest
+ * first. The Planning Center title is the hymn's title ("exact") or one of
+ * its aliases ("alias"); or it is the hymn's title or alias with the song's
+ * tune named in a trailing parenthetical ("tune-hint", as in "Abba, Father
+ * (PRITCHARD)"); or it is nearly the hymn's title or an alias, or is one with
+ * a parenthetical that names no tune of that song ("near"). The first three
+ * are strong: a sync may link on one of them without asking.
+ */
+export type LinkReason = "exact" | "alias" | "tune-hint" | "near";
+
+/** A catalog song as a plan page shows it for an item whose Planning Center song links to it. */
+export interface CatalogMatch {
+    /** The catalog song's id. */
+    songId: number;
+    /** Its hymn's title. */
+    title: string;
+    /** Its tune's name; null when the tune is unknown. */
+    tuneName: string | null;
+    /** Its entries, labelled, in book order, then by number or position. */
+    entries: LabelledEntry[];
+}
+
+/** A catalog song suggested as the link for a Planning Center song. */
+export interface LinkSuggestion extends CatalogMatch {
+    reason: LinkReason;
+    /**
+     * The Planning Center song this catalog song is already linked to, or
+     * null. Linking it to another one is refused until that link is undone.
+     */
+    pcoSongId: string | null;
+}

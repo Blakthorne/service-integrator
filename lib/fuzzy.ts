@@ -4,7 +4,10 @@
  * title spelt two ways. Pure and safe on both sides.
  */
 
-const NEAR_MATCH_MAX_DISTANCE = 2;
+/** Two titles are a near match when at most this many edits apart… */
+export const NEAR_MATCH_MAX_DISTANCE = 2;
+
+/** …and both are at least this long. */
 const NEAR_MATCH_MIN_LENGTH = 6;
 
 /** Classic two-row Levenshtein edit distance. */
