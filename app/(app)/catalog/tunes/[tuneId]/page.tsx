@@ -26,7 +26,9 @@ export async function generateMetadata({
  * A tune: its name, meter and other names, and its songs (one per hymn sung
  * to it), each linking to the song's page with its entry labels. An ID that
  * is not a catalog ID, or that no tune has, ends in `not-found.tsx`. It
- * reads only the local database, so it has no `loading.tsx`.
+ * reads only the local database, so it has no `loading.tsx`. The tune's
+ * card edits it, its other names, and merges it into another tune, through
+ * `actions.ts`.
  */
 export default async function CatalogTunePage({ params }: CatalogTunePageProps) {
     const tuneId = parseCatalogId((await params).tuneId) ?? notFound();
@@ -44,7 +46,17 @@ export default async function CatalogTunePage({ params }: CatalogTunePageProps) 
                 ]}
             />
             <div className="space-y-6">
-                <TuneDetailsCard tune={tune} />
+                {/* Only what the card shows: it is a client component, and the songs are the table's. */}
+                <TuneDetailsCard
+                    key={tune.id}
+                    tune={{
+                        id: tune.id,
+                        name: tune.name,
+                        meter: tune.meter,
+                        notes: tune.notes,
+                        aliases: tune.aliases,
+                    }}
+                />
                 <CatalogCard
                     title="Songs"
                     headingId="songs-heading"
