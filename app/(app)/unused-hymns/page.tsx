@@ -6,6 +6,6 @@ import { routes } from "@/lib/routes";
  * `?used=never`. Links and bookmarks to the old page go there with a
  * permanent (308) redirect.
  */
-export default function UnusedHymnsPage() {
+export default function RedirectToNeverScheduled() {
     permanentRedirect(routes.catalogFiltered({ used: "never" }));
 }
