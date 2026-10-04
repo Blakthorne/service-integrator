@@ -11,6 +11,7 @@ import {
     type SyncRunCounts,
     type SyncRunKind,
 } from "@/lib/db/syncRuns";
+import { describePcoSongsSync, syncPcoSongs } from "@/lib/queries/sync";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -68,10 +69,25 @@ export const backupJob: Job = {
 };
 
 /**
- * The jobs `startJobs()` schedules. A new job is one entry here, such as an
- * hourly sync: `{ kind: "pco-songs", everyMs: HOUR_MS, atBoot: true, run }`.
+ * The Planning Center song sync, hourly and soon after boot: mirror the song
+ * library and make the auto-links it allows (see `syncPcoSongs`). "Sync now"
+ * runs it on demand through `runJob`.
  */
-export const JOBS: readonly Job[] = [backupJob];
+export const pcoSongsJob: Job = {
+    kind: "pco-songs",
+    everyMs: HOUR_MS,
+    atBoot: true,
+    run: async (db) => {
+        const counts = await syncPcoSongs(db);
+        return { message: describePcoSongsSync(counts), counts };
+    },
+};
+
+/**
+ * The jobs `startJobs()` schedules. A new job is one entry here, as the
+ * song sync is.
+ */
+export const JOBS: readonly Job[] = [backupJob, pcoSongsJob];
 
 /**
  * The runs in progress, by kind. They live on globalThis because a run

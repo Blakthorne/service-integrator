@@ -11,11 +11,21 @@ import {
     recentSyncRuns,
     startSyncRun,
 } from "@/lib/db/syncRuns";
-import { openTestDb } from "@/lib/db/testing";
+import { openTestDb, seedHymn, seedSong } from "@/lib/db/testing";
+import {
+    PCO_BASE,
+    json,
+    listPage,
+    songResource,
+    stubFetchRoutes,
+    stubPcoCredentials,
+    stubPcoPacer,
+} from "@/lib/pco/testing";
 import {
     BOOT_DELAY_MS,
     JOBS,
     backupJob,
+    pcoSongsJob,
     runIfDue,
     runJob,
     startJobs,
@@ -52,6 +62,7 @@ afterEach(() => {
     }
     db.close();
     rmSync(dir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
 });
@@ -235,6 +246,48 @@ describe("backupJob", () => {
         const id = startSyncRun(db, "backup", hoursAfterT0(1));
         finishSyncRun(db, id, { ok: false, message: "could not prune" }, hoursAfterT0(1));
         expect(backupJob.isDue?.(db, hoursAfterT0(2))).toBe(true);
+    });
+});
+
+describe("pcoSongsJob", () => {
+    const LIBRARY = `${PCO_BASE}/songs?per_page=100`;
+
+    test("is scheduled: run every hour and soon after boot", () => {
+        expect(JOBS).toContain(pcoSongsJob);
+        expect(pcoSongsJob).toMatchObject({
+            kind: "pco-songs",
+            everyMs: HOUR_MS,
+            atBoot: true,
+        });
+        expect(pcoSongsJob.isDue).toBeUndefined();
+    });
+
+    test("syncs the Planning Center songs and records what it did", async () => {
+        stubPcoCredentials();
+        stubPcoPacer();
+        stubFetchRoutes({
+            [LIBRARY]: listPage([songResource("1001", { title: "Amazing Grace" })]),
+        });
+        seedSong(db, { hymnId: seedHymn(db, { title: "Amazing Grace" }) });
+
+        await runJob(pcoSongsJob, openDb);
+        expect(latestSyncRun(db, "pco-songs")).toMatchObject({
+            ok: true,
+            message: "Synced 1 song: 1 added, 1 auto-linked",
+            counts: { fetched: 1, added: 1, updated: 0, removed: 0, autoLinked: 1 },
+        });
+    });
+
+    test("records a sync that failed", async () => {
+        stubPcoCredentials();
+        stubPcoPacer();
+        stubFetchRoutes({ [LIBRARY]: () => json({ errors: [] }, { status: 500 }) });
+
+        await runJob(pcoSongsJob, openDb);
+        expect(latestSyncRun(db, "pco-songs")).toMatchObject({
+            ok: false,
+            message: expect.stringContaining("status: 500"),
+        });
     });
 });
 
