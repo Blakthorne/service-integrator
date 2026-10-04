@@ -266,4 +266,65 @@ Decisions the orchestrator made where the plan was silent or inconsistent. They 
 
 ## Spike findings
 
-_Pending: filled in by the phase 0 spike._
+Phase 0 spike, 2026-10-03, API version 2018-11-01. It made 55 read-only requests, and one live write run (93 requests) against throwaway resources only: a dateless plan in Sunday Evening and two songs, all deleted afterwards and verified gone (404). Later phases build on these facts.
+
+**The organization**
+- **Service types:** `1405391` Sunday Morning (121 plans) and `1486055` Sunday Evening (95 plans). Only the next Sunday exists as a future plan. The token's user is an administrator.
+- **Item note categories:** only the four defaults (Audio/Visual, Band, Person, Vocals), with different ids in each service type.
+  - **There is no "Hymnal" category, and the API cannot create one.** The user creates it in the PCO web app, in both service types, before phase 3's note sync is used. The app finds it by name in each service type.
+- **Songs and tags:**
+  - 397 songs. Each has at least one arrangement; PCO creates a "Default Arrangement" with every new song.
+  - One song tag group, "Type" (Chorus, Hymn, Instrumental, Invitation, Special; several may be chosen). "Speed" and "Style" are arrangement tag groups.
+  - The API cannot create tags or tag groups.
+- **Query options:** every list response's `meta` lists `can_order_by`, `can_query_by`, `can_include` and `can_filter`. Check there before relying on a parameter.
+
+**Reads**
+- **Plan items:** `include=item_notes,song` works. An ItemNote has `category_name`, `content` and an `item_note_category` relationship.
+- **Song tags:** `include=tags` on `/songs` is silently ignored. Read song tags with `GET /songs?where[song_tag_ids]=<tagId>`, one request per song tag, or with `GET /songs/{id}/tags`.
+  - Use tag ids only from a fresh `tag_groups` read: PCO may ignore an unknown id and return every song.
+- **`last_scheduled_at`:** counts upcoming plans in either service type; a dateless plan does not count.
+- **`song_schedules`:** with no filter it returns upcoming schedules only.
+  - Past schedules need `filter=after&after=<date>`, or `filter=most_recent&amount=N` (past only).
+  - A SongSchedule's id is the plan item's id.
+- **Plans:** support `where[updated_at][gt|gte]`, `order=-updated_at`, and the filters `future`, `past`, `after`, `before` and `no_dates`.
+- **Rate limits:** every response carries lowercase `x-pco-api-request-rate-limit` (100), `-period` (20, a bare number) and `-count` headers. PCO may change the limits at any time and says never to hard-code them; the pacer adapts to them (see `docs/architecture.md`).
+
+**Writes (observed live)**
+- **Songs.**
+  - `POST /songs` returns 201, and PCO adds a "Default Arrangement" (with no keys).
+  - `PATCH` needs neither `data.id` nor `type`.
+  - Assignable attributes are `title`, `admin`, `author`, `copyright`, `ccli_number`, `hidden` and `themes`. Any other attribute, such as `notes`, gets a 422 "Forbidden Attribute".
+  - **A `ccli_number` on create makes PCO overwrite `title`, `author`, `copyright`, `admin` and `themes` with CCLI's data.** CCLI 22025 turned the test song into "Amazing Grace" with CCLI's credits.
+  - `DELETE /songs/{id}` returns 204 even while a plan uses the song, and that plan's items silently become plain items. **The app never deletes a PCO song.**
+- **Plan items.**
+  - `POST …/items` with only `song_id` returns 201, but the item is titled "New Item" and has **no arrangement**. Send `title` and `arrangement_id` (the song's default arrangement) explicitly. The relationship form works too.
+  - `item_type` can only be set to `"header"`.
+  - `sequence: n` on create inserts the item there and shifts the rest down.
+  - `POST …/item_reorder` with `{ data: { type: "PlanItemReorder", attributes: { sequence: [ids] } } }` returns 204. A partial list moves those ids to the front, in the order given.
+  - `DELETE` returns 204.
+- **Item notes.**
+  - Create with `item_note_category_id` (an integer or a string) or with the `item_note_category` relationship; returns 201.
+  - `PATCH` of `content` returns 200. The category cannot change (422 "Forbidden Attribute"). `DELETE` returns 204.
+  - **One item can hold several notes in the same category**, so an upsert looks for the existing note by category before it creates one.
+  - A missing category gives a 422: `{ title: "Validation Error", detail: "must exist", source: { parameter: "category" } }`.
+- **Tags.** `POST /songs/{id}/assign_tags` returns 204 and **replaces** all of the song's tags; an empty list clears them. An arrangement tag id is accepted and silently ignored.
+- **`updated_at`.** Creating, reordering and deleting items, and changing notes, through the API did **not** change the plan's or the item's `updated_at`. Edits in the PCO web app appear to bump it, but that evidence is only circumstantial.
+- **422 bodies** have the shape `{ errors: [{ status, title, detail, source?: { parameter }, meta? }] }`.
+
+**What changes in the plan**
+1. **Pacer** (done in phase 0): it adapts to the rate-limit headers instead of a fixed 80 requests per 20 s.
+2. **Phase 3 hymnal notes.**
+   - Resolve the "Hymnal" category by name in each service type. If it is missing, the sync skips that service type with a clear message (risk 2).
+   - An upsert finds our note on the item by category, then PATCHes its `content` or creates it. It never changes a note's category.
+3. **Phase 4.**
+   - `addSongToPlan` sends the song's `title` and its default arrangement's `arrangement_id`.
+   - `createSongInPlanningCenter` never sends `ccli_number` on create. A CCLI number is set afterwards with a PATCH; the song is then read again, and any credits PCO changed are written back unless the user chose to take CCLI's.
+   - `assignTags` reads, merges and writes, and sends only ids from tag groups with `tags_for: "song"`.
+   - The tag mirror reads `tag_groups?include=tags`, plus one `songs?where[song_tag_ids]=` request per song tag.
+4. **"Used" and "last sung".** `last_scheduled_at` includes upcoming plans, so it means "scheduled", not "sung". Phase 2's "used" may rely on it. Phase 6's "not sung since" uses past plans only.
+5. **Phase 6 history.** A plan's `updated_at` does not move when the API edits its items. The incremental sync therefore refetches items for:
+   - plans whose `updated_at` changed;
+   - every upcoming plan, and every plan from the last 8 weeks;
+   - every plan, in a weekly full pass.
+
+   `songs/{id}/song_schedules?filter=after&after=<date>` returns one song's whole history in one request.
