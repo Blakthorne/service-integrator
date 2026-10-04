@@ -34,10 +34,12 @@ jobs:
             - name: Install dependencies
               run: npm ci
 
+            - name: Run unit tests
+              run: npm test
+
             - name: Build app
-              # Only NEXT_PUBLIC_* vars are needed at build time.
-              env:
-                  NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
+              # No env vars are needed at build time: the runtime configuration
+              # comes from the server's .env.production (written below).
               run: npm run build
 
             - name: Create deployment package
@@ -199,15 +201,14 @@ jobs:
                   AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
                   ALLOWED_EMAIL_1: ${{ secrets.ALLOWED_EMAIL_1 }}
                   ALLOWED_EMAIL_2: ${{ secrets.ALLOWED_EMAIL_2 }}
+                  ALLOWED_EMAIL_3: ${{ secrets.ALLOWED_EMAIL_3 }}
                   PLANNING_CENTER_ID: ${{ secrets.PLANNING_CENTER_ID }}
                   PLANNING_CENTER_TOKEN: ${{ secrets.PLANNING_CENTER_TOKEN }}
-                  NEXT_PUBLIC_BASE_URL: ${{ secrets.NEXT_PUBLIC_BASE_URL }}
               run: |
-                  printf 'AUTH_SECRET=%s\nAUTH_URL=%s\nAUTH_GOOGLE_ID=%s\nAUTH_GOOGLE_SECRET=%s\nALLOWED_EMAIL_1=%s\nALLOWED_EMAIL_2=%s\nPLANNING_CENTER_ID=%s\nPLANNING_CENTER_TOKEN=%s\nNEXT_PUBLIC_BASE_URL=%s\n' \
+                  printf 'AUTH_SECRET=%s\nAUTH_URL=%s\nAUTH_GOOGLE_ID=%s\nAUTH_GOOGLE_SECRET=%s\nALLOWED_EMAIL_1=%s\nALLOWED_EMAIL_2=%s\nALLOWED_EMAIL_3=%s\nPLANNING_CENTER_ID=%s\nPLANNING_CENTER_TOKEN=%s\n' \
                     "$AUTH_SECRET" "$AUTH_URL" "$AUTH_GOOGLE_ID" "$AUTH_GOOGLE_SECRET" \
-                    "$ALLOWED_EMAIL_1" "$ALLOWED_EMAIL_2" \
+                    "$ALLOWED_EMAIL_1" "$ALLOWED_EMAIL_2" "$ALLOWED_EMAIL_3" \
                     "$PLANNING_CENTER_ID" "$PLANNING_CENTER_TOKEN" \
-                    "$NEXT_PUBLIC_BASE_URL" \
                   | ssh -F ~/.ssh/config-ci \
                       -p "$DEPLOY_PORT" \
                       "$DEPLOY_USER@$DEPLOY_HOST" \

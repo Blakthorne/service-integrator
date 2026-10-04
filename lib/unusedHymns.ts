@@ -211,3 +211,21 @@ export function computeUnusedHymns(
         },
     };
 }
+
+/**
+ * Whichever of two results was computed later, by `meta.computedAt`: the
+ * candidate if it is strictly later, otherwise `current`. A missing candidate,
+ * a tie and an unparseable timestamp all keep `current`.
+ */
+export function newerResult(
+    current: UnusedHymnsResult,
+    candidate: UnusedHymnsResult | null
+): UnusedHymnsResult {
+    if (
+        candidate !== null &&
+        Date.parse(candidate.meta.computedAt) > Date.parse(current.meta.computedAt)
+    ) {
+        return candidate;
+    }
+    return current;
+}

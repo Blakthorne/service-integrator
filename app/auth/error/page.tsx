@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { routes } from "@/lib/routes";
 
 export default async function AuthError({
     searchParams,
@@ -22,7 +23,7 @@ export default async function AuthError({
                 </div>
                 <div className="mt-8 text-center">
                     <Link
-                        href="/"
+                        href={routes.plans()}
                         className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
                     >
                         Return to Home

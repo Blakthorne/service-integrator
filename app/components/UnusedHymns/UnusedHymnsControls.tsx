@@ -1,5 +1,7 @@
 "use client";
 
+import LocalTime from "@/app/components/ui/LocalTime";
+
 export type BookFilter = "all" | "rejoice" | "great";
 export type SortKey = "title" | "number";
 
@@ -9,6 +11,8 @@ interface UnusedHymnsControlsProps {
     summary: string;
     computedAt: string | null;
     refreshing: boolean;
+    /** Set when the last refresh failed. The results shown are then the previous ones. */
+    refreshError: string | null;
     onBookChange: (book: BookFilter) => void;
     onSortChange: (sort: SortKey) => void;
     onRefresh: () => void;
@@ -70,17 +74,11 @@ export default function UnusedHymnsControls({
     summary,
     computedAt,
     refreshing,
+    refreshError,
     onBookChange,
     onSortChange,
     onRefresh,
 }: UnusedHymnsControlsProps) {
-    const asOf = computedAt
-        ? new Date(computedAt).toLocaleString("en-US", {
-              dateStyle: "medium",
-              timeStyle: "short",
-          })
-        : null;
-
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 mb-6 space-y-4">
             <div className="flex flex-wrap items-center gap-4">
@@ -112,9 +110,9 @@ export default function UnusedHymnsControls({
                     {summary}
                 </p>
                 <div className="flex items-center gap-3">
-                    {asOf && (
+                    {computedAt && (
                         <span className="text-xs text-gray-500 dark:text-gray-400">
-                            As of {asOf}
+                            As of <LocalTime iso={computedAt} />
                         </span>
                     )}
                     <button
@@ -127,6 +125,11 @@ export default function UnusedHymnsControls({
                     </button>
                 </div>
             </div>
+            {refreshError && (
+                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                    {refreshError}
+                </p>
+            )}
         </div>
     );
 }

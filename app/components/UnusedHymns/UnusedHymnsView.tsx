@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { HymnEntry, ReviewEntry, UnusedHymnsResult } from "@/lib/unusedHymns";
+import { useState } from "react";
+import { refreshUnusedHymns } from "@/app/(app)/unused-hymns/actions";
+import { useUrlState } from "@/app/hooks/useUrlState";
+import {
+    newerResult,
+    type HymnEntry,
+    type ReviewEntry,
+    type UnusedHymnsResult,
+} from "@/lib/unusedHymns";
+import { parseEnum, parsePage } from "@/lib/urlState";
 import UnusedHymnsControls, {
     type BookFilter,
     type SortKey,
@@ -11,13 +18,8 @@ import UnusedHymnsTable from "./UnusedHymnsTable";
 
 const ITEMS_PER_PAGE = 25;
 
-function parseBook(value: string | null): BookFilter {
-    return value === "rejoice" || value === "great" ? value : "all";
-}
-
-function parseSort(value: string | null): SortKey {
-    return value === "number" ? "number" : "title";
-}
+const BOOK_FILTERS: readonly BookFilter[] = ["all", "rejoice", "great"];
+const SORT_KEYS: readonly SortKey[] = ["title", "number"];
 
 function inBook<T extends HymnEntry>(entry: T, book: BookFilter): boolean {
     if (book === "rejoice") return entry.rejoiceNumber !== null;
@@ -71,120 +73,76 @@ function buildSummary(
     return `${unusedCount} hymnbook entries never used`;
 }
 
-export default function UnusedHymnsView() {
-    const router = useRouter();
-    const pathname = usePathname();
-    const searchParams = useSearchParams();
+interface UnusedHymnsViewProps {
+    /**
+     * The result the server rendered the page with. It is not copied into
+     * state: the page is not remounted when the viewer navigates to it again,
+     * and the server then passes a newer result (its cache recomputes hourly).
+     * A result the viewer refreshed is shown instead only while it is newer.
+     */
+    initialResult: UnusedHymnsResult;
+}
 
-    const book = parseBook(searchParams.get("book"));
-    const sort = parseSort(searchParams.get("sort"));
+/**
+ * The controls and table of the unused hymns page. Filtering, sorting and
+ * paging happen here, in the browser, on the result the server loaded. The
+ * hymnbook (`?book=`), sort order (`?sort=`) and page (`?page=`) live in the
+ * URL, so a view can be linked to, and changing them does not re-render the
+ * page on the server.
+ */
+export default function UnusedHymnsView({
+    initialResult,
+}: UnusedHymnsViewProps) {
+    const { searchParams, setSearchParams } = useUrlState();
 
-    const [result, setResult] = useState<UnusedHymnsResult | null>(null);
-    const [loading, setLoading] = useState(true);
+    const book = parseEnum(searchParams.get("book"), BOOK_FILTERS, "all");
+    const sort = parseEnum(searchParams.get("sort"), SORT_KEYS, "title");
+
+    const [refreshed, setRefreshed] = useState<UnusedHymnsResult | null>(null);
+    const result = newerResult(initialResult, refreshed);
     const [refreshing, setRefreshing] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [page, setPage] = useState(1);
+    const [refreshError, setRefreshError] = useState<string | null>(null);
 
-    const mountedRef = useRef(true);
-    const controllerRef = useRef<AbortController | null>(null);
+    function handleBookChange(next: BookFilter) {
+        setSearchParams({ book: next, page: null }, { history: "replace" });
+    }
 
-    const runLoad = useCallback((refresh: boolean) => {
-        controllerRef.current?.abort();
-        const controller = new AbortController();
-        controllerRef.current = controller;
-        if (refresh) {
-            setRefreshing(true);
-        } else {
-            setLoading(true);
-        }
+    function handleSortChange(next: SortKey) {
+        setSearchParams({ sort: next, page: null }, { history: "replace" });
+    }
 
-        const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-        const url = `${baseUrl}/api/unused-hymns${refresh ? "?refresh=1" : ""}`;
-
-        fetch(url, { signal: controller.signal })
-            .then(async (response) => {
-                if (!response.ok) {
-                    throw new Error(
-                        `Failed to load unused hymns: ${response.status}`
-                    );
-                }
-                return (await response.json()) as UnusedHymnsResult;
-            })
-            .then((data) => {
-                if (!mountedRef.current) return;
-                setResult(data);
-                setError(null);
-                setPage(1);
-            })
-            .catch((err: unknown) => {
-                if ((err as Error).name === "AbortError") return;
-                if (!mountedRef.current) return;
-                console.error("Error loading unused hymns:", err);
-                setError(
-                    refresh
-                        ? "Failed to refresh unused hymns"
-                        : "Failed to load unused hymns"
-                );
-            })
-            .finally(() => {
-                if (!mountedRef.current) return;
-                if (refresh) {
-                    setRefreshing(false);
-                } else {
-                    setLoading(false);
-                }
-            });
-    }, []);
-
-    useEffect(() => {
-        mountedRef.current = true;
-        runLoad(false);
-        return () => {
-            mountedRef.current = false;
-            controllerRef.current?.abort();
-        };
-    }, [runLoad]);
-
-    const handleRefresh = useCallback(() => {
-        runLoad(true);
-    }, [runLoad]);
-
-    const updateParam = useCallback(
-        (key: string, value: string) => {
-            const params = new URLSearchParams(searchParams.toString());
-            params.set(key, value);
-            router.replace(`${pathname}?${params.toString()}`);
-            setPage(1);
-        },
-        [pathname, router, searchParams]
-    );
-
-    if (loading) {
-        return (
-            <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                <p className="text-gray-600 dark:text-gray-300">
-                    Loading unused hymns…
-                </p>
-            </div>
+    function handlePageChange(next: number) {
+        // "push", so Back returns to the previous page of results.
+        setSearchParams(
+            { page: next === 1 ? null : String(next) },
+            { history: "push" }
         );
     }
 
-    if (error || !result) {
-        return (
-            <div className="text-center py-12">
-                <p className="text-red-600 dark:text-red-400 mb-4">
-                    {error ?? "No data"}
-                </p>
-                <button
-                    onClick={() => runLoad(false)}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                    Try Again
-                </button>
-            </div>
-        );
+    // The pending state is plain state, not useTransition: React batches all
+    // transitions, so one held open across the action would stall every
+    // navigation (a <Link> click, Back) until the refresh returned.
+    async function handleRefresh() {
+        // Back to page 1 now, before the await, and no URL writes after it.
+        // Next updates window.location only when a navigation commits, and a
+        // replaceState while one is pending discards it, so a write after the
+        // await could lose a click on a link, or overwrite a ?page= the viewer
+        // pushed meanwhile. parsePage clamps the page to the new result.
+        setSearchParams({ page: null }, { history: "replace" });
+        setRefreshing(true);
+        setRefreshError(null);
+        let next: UnusedHymnsResult;
+        try {
+            next = await refreshUnusedHymns();
+        } catch (error) {
+            // Keep showing the current results; Refresh is the retry.
+            console.error("Error refreshing unused hymns:", error);
+            setRefreshError("Failed to refresh unused hymns");
+            return;
+        } finally {
+            setRefreshing(false);
+        }
+        setRefreshed(next);
     }
 
     const filteredUnused: HymnEntry[] = result.unused.filter((entry) =>
@@ -196,8 +154,8 @@ export default function UnusedHymnsView() {
     );
 
     const totalPages = Math.max(1, Math.ceil(sortedUnused.length / ITEMS_PER_PAGE));
-    const safePage = Math.min(page, totalPages);
-    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    const page = parsePage(searchParams.get("page"), totalPages);
+    const start = (page - 1) * ITEMS_PER_PAGE;
     const pageRows = sortedUnused.slice(start, start + ITEMS_PER_PAGE);
 
     return (
@@ -208,17 +166,18 @@ export default function UnusedHymnsView() {
                 summary={buildSummary(book, sortedUnused.length, result.meta.totals)}
                 computedAt={result.meta.computedAt}
                 refreshing={refreshing}
-                onBookChange={(next) => updateParam("book", next)}
-                onSortChange={(next) => updateParam("sort", next)}
+                refreshError={refreshError}
+                onBookChange={handleBookChange}
+                onSortChange={handleSortChange}
                 onRefresh={handleRefresh}
             />
             <UnusedHymnsTable
                 rows={pageRows}
                 review={filteredReview}
                 book={book}
-                currentPage={safePage}
+                currentPage={page}
                 totalPages={totalPages}
-                onPageChange={setPage}
+                onPageChange={handlePageChange}
             />
         </div>
     );

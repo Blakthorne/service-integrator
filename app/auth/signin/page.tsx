@@ -1,12 +1,28 @@
 import { auth, signIn } from "@/auth";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
+import { routes } from "@/lib/routes";
+import { safeCallbackUrl } from "@/lib/safeCallbackUrl";
 
-export default async function SignIn() {
+export default async function SignIn({
+    searchParams,
+}: {
+    searchParams: Promise<{ callbackUrl?: string | string[] }>;
+}) {
+    const { callbackUrl } = await searchParams;
+    // Where to go after signing in: the page the visitor asked for, if it is a
+    // safe path on this site, otherwise the plans list.
+    const target: string =
+        safeCallbackUrl(
+            Array.isArray(callbackUrl) ? callbackUrl[0] : callbackUrl
+        ) ?? routes.plans();
+
     const session = await auth();
 
-    // Redirect to home if already signed in
+    // Redirect to the requested page (or the plans list) if already signed in
     if (session?.user) {
-        redirect("/");
+        // A runtime path cannot be checked against the route table.
+        redirect(target as Route);
     }
 
     return (
@@ -36,7 +52,7 @@ export default async function SignIn() {
                                 action={async () => {
                                     "use server";
                                     await signIn("google", {
-                                        redirectTo: "/",
+                                        redirectTo: target,
                                     });
                                 }}
                             >

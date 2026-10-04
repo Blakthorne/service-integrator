@@ -15,8 +15,34 @@ describe("normalizeTitle", () => {
         expect(normalizeTitle("Come, Thou Fount.")).toBe("come, thou fount");
     });
 
-    test("straightens smart apostrophes and quotes", () => {
+    test.each([
+        ["left single quotation mark U+2018", "\u2018"],
+        ["right single quotation mark U+2019", "\u2019"],
+        ["modifier letter apostrophe U+02BC", "\u02BC"],
+        ["prime U+2032", "\u2032"],
+    ])("straightens a %s into an apostrophe", (_name, mark) => {
+        expect(normalizeTitle(`In Jordan${mark}s Stream`)).toBe(
+            "in jordan's stream"
+        );
+    });
+
+    test.each([
+        ["left double quotation mark U+201C", "\u201C"],
+        ["right double quotation mark U+201D", "\u201D"],
+        ["double prime U+2033", "\u2033"],
+    ])("straightens a %s into a double quote", (_name, mark) => {
+        expect(normalizeTitle(`Say ${mark}Amen${mark}`)).toBe('say "amen"');
+    });
+
+    test("leaves straight quotes as they are", () => {
         expect(normalizeTitle("Jesus' Name")).toBe("jesus' name");
+        expect(normalizeTitle('Say "Amen"')).toBe('say "amen"');
+    });
+
+    test("a curly and a straight spelling of a catalog title normalize alike", () => {
+        expect(normalizeTitle("The Strife Is O\u2019er")).toBe(
+            normalizeTitle("The Strife Is O'er")
+        );
     });
 
     test("expands ampersand to 'and'", () => {
