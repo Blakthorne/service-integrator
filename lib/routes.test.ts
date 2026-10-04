@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
     NAV_ITEMS,
+    NAV_UTILITY_ITEMS,
     PLAN_TABS,
     navAriaCurrent,
     pcoWebUrls,
@@ -12,6 +13,7 @@ describe("routes", () => {
         expect(routes.home()).toBe("/");
         expect(routes.plans()).toBe("/plans");
         expect(routes.unusedHymns()).toBe("/unused-hymns");
+        expect(routes.settings()).toBe("/settings");
     });
 
     test("plan builders put the ids in order", () => {
@@ -32,6 +34,7 @@ describe("routes", () => {
             routes.planSchedule("1", "2"),
             routes.planItem("1", "2", "3"),
             routes.unusedHymns(),
+            routes.settings(),
         ];
         for (const href of all) {
             expect(href).toMatch(/^\/[^?#]*$/);
@@ -67,6 +70,7 @@ describe("NAV_ITEMS", () => {
         ["/unused-hymns", false, true],
         ["/unused-hymns/anything", false, true],
         ["/unused-hymnsx", false, false],
+        ["/settings", false, false],
         ["/auth/signin", false, false],
         ["/something-else", false, false],
         ["", false, false],
@@ -126,6 +130,39 @@ describe("navAriaCurrent", () => {
     test("never marks two items as the current page at once", () => {
         for (const [pathname] of cases) {
             const pages = NAV_ITEMS.filter(
+                (item) => navAriaCurrent(item, pathname) === "page"
+            );
+            expect(pages.length).toBeLessThanOrEqual(1);
+        }
+    });
+});
+
+describe("NAV_UTILITY_ITEMS", () => {
+    const [settings] = NAV_UTILITY_ITEMS;
+
+    test("lists Settings, as a gear", () => {
+        expect(NAV_UTILITY_ITEMS.map((item) => item.label)).toEqual(["Settings"]);
+        expect(settings.icon).toBe("gear");
+        expect(settings.href).toBe(routes.settings());
+    });
+
+    test.each<[string, boolean, "page" | "true" | undefined]>([
+        ["/settings", true, "page"],
+        ["/settings/", true, "true"],
+        ["/settings/anything", true, "true"],
+        ["/settingsx", false, undefined],
+        ["/", false, undefined],
+        ["/plans", false, undefined],
+        ["/unused-hymns", false, undefined],
+    ])("%j: Settings active=%s, aria-current=%s", (pathname, active, current) => {
+        expect(settings.isActive(pathname)).toBe(active);
+        expect(navAriaCurrent(settings, pathname)).toBe(current);
+    });
+
+    test("never marks it and a section link as the current page at once", () => {
+        const items = [...NAV_ITEMS, ...NAV_UTILITY_ITEMS];
+        for (const pathname of ["/", "/plans", "/unused-hymns", "/settings"]) {
+            const pages = items.filter(
                 (item) => navAriaCurrent(item, pathname) === "page"
             );
             expect(pages.length).toBeLessThanOrEqual(1);

@@ -23,6 +23,7 @@ export const routes = {
     planItem: (serviceTypeId: string, planId: string, itemId: string) =>
         `/plans/${serviceTypeId}/${planId}/items/${itemId}` as const,
     unusedHymns: () => "/unused-hymns" as const,
+    settings: () => "/settings" as const,
 };
 
 /** An entry of the top navigation bar. */
@@ -50,6 +51,24 @@ export const NAV_ITEMS: readonly NavItem[] = [
         href: routes.unusedHymns(),
         label: "Unused Hymns",
         isActive: (pathname) => isAtOrBelow(pathname, routes.unusedHymns()),
+    },
+];
+
+/** The icons a utility link can show; `Navigation/NavUtilityLinks.tsx` draws each. */
+export type NavIcon = "gear";
+
+/** An icon link at the right of the top bar. Its `label` is its accessible name and tooltip. */
+export interface NavUtilityItem extends NavItem {
+    icon: NavIcon;
+}
+
+/** The icon links beside Sign Out, in display order. */
+export const NAV_UTILITY_ITEMS: readonly NavUtilityItem[] = [
+    {
+        href: routes.settings(),
+        label: "Settings",
+        icon: "gear",
+        isActive: (pathname) => isAtOrBelow(pathname, routes.settings()),
     },
 ];
 
