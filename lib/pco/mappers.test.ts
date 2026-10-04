@@ -12,6 +12,7 @@ import {
     toPcoTagGroups,
     toServiceType,
     toSong,
+    toSongArrangement,
 } from "./mappers";
 import type { PcoItemNoteResource, PcoSongResource } from "./resources";
 import {
@@ -20,6 +21,7 @@ import {
     itemResource,
     noteLinks,
     planResource,
+    arrangementResource,
     serviceTypeResource,
     songResource,
     tagGroupResource,
@@ -524,5 +526,29 @@ describe("toPcoTagGroups", () => {
             [tagResource("72", { name: "Hymn" }), tagResource("71", { name: "HYMN" })]
         );
         expect(group.tags.map(({ id }) => id)).toEqual(["71", "72"]);
+    });
+});
+
+describe("toSongArrangement", () => {
+    test("maps the id, name and creation time; archived when archived_at is set", () => {
+        expect(toSongArrangement(arrangementResource("5001"))).toStrictEqual({
+            id: "5001",
+            name: "Default Arrangement",
+            archived: false,
+            createdAt: "2019-01-01T00:00:00Z",
+        });
+        expect(
+            toSongArrangement(arrangementResource("5002", { archived_at: "2024-01-01T00:00:00Z" })).archived
+        ).toBe(true);
+    });
+
+    test("turns attributes missing from the JSON into an empty name, not archived and no time", () => {
+        const bare = { type: "Arrangement" as const, id: "5003", attributes: {} as never };
+        expect(toSongArrangement(bare)).toStrictEqual({
+            id: "5003",
+            name: "",
+            archived: false,
+            createdAt: null,
+        });
     });
 });

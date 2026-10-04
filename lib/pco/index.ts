@@ -25,6 +25,7 @@ export {
     getNextPlan,
     getPlan,
     getPlansForServiceType,
+    getUpcomingPlans,
     type AllPlans,
 } from "./plans";
 export {
@@ -33,7 +34,7 @@ export {
     getPlanItems,
     type PlanItems,
 } from "./planItems";
-export { fetchSongLibrary, getSong } from "./songs";
+export { fetchSong, fetchSongLibrary, getSong, getSongArrangements } from "./songs";
 export {
     fetchSongIdsWithTag,
     fetchSongTagGroups,
@@ -41,8 +42,16 @@ export {
     type SongTag,
 } from "./tags";
 export {
+    assignSongTags,
     createItemNote,
+    createSong,
+    createSongItem,
     deleteItemNote,
     updateItemNote,
+    updateSong,
+    type AssignedSongTags,
     type DeletedItemNote,
+    type NewPcoSong,
+    type NewSongItem,
+    type PcoSongChanges,
 } from "./writes";

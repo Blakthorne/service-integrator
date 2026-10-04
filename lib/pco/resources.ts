@@ -247,3 +247,18 @@ export interface PcoTagGroupResource {
         tags?: PcoToManyRelationship<"Tag">;
     };
 }
+
+export interface PcoArrangementAttributes {
+    name: string;
+    /** Set when the arrangement has been archived. */
+    archived_at?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+}
+
+/** `GET /services/v2/songs/{song}/arrangements` */
+export interface PcoArrangementResource {
+    type: "Arrangement";
+    id: string;
+    attributes: PcoArrangementAttributes;
+}

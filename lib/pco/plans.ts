@@ -14,6 +14,9 @@ import { getServiceTypes } from "./serviceTypes";
 /** Up to 2,000 plans per service type; beyond that the fetch fails loudly. */
 const MAX_PLAN_PAGES = 20;
 
+/** Up to 500 upcoming plans per service type; the spike found just next Sunday's. */
+const MAX_UPCOMING_PLAN_PAGES = 5;
+
 /**
  * All of a service type's plans, newest first, paging 100 at a time through
  * links.next. Throws InvalidPcoIdError, PcoError, or an error if the type
@@ -106,4 +109,23 @@ export const getNextPlan = cache(async (serviceTypeId: string): Promise<Plan | n
         }
     }
     return next;
+});
+
+/**
+ * A service type's upcoming plans: those Planning Center counts as future
+ * (`filter=future`, which keeps all of today's plans for the whole day, as
+ * the spike found), earliest first by `sort_date` (asked for, and sorted
+ * here too, so the order stands whatever order the pages come in). Every
+ * page. Throws InvalidPcoIdError or PcoError.
+ */
+export const getUpcomingPlans = cache(async (serviceTypeId: string): Promise<Plan[]> => {
+    const id = assertPcoId(serviceTypeId);
+    const { data } = await pcoFetchAll<PcoPlanResource>(
+        `/service_types/${id}/plans?filter=future&order=sort_date&per_page=100`,
+        "plans",
+        { maxPages: MAX_UPCOMING_PLAN_PAGES }
+    );
+    return data
+        .map((plan) => toPlan(plan, id))
+        .sort((a, b) => (a.sortDate < b.sortDate ? -1 : a.sortDate > b.sortDate ? 1 : 0));
 });

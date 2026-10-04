@@ -57,6 +57,21 @@ export interface Song {
     themes: string | null;
 }
 
+/**
+ * One of a Planning Center song's arrangements, which hold its keys, chord
+ * charts and sequence. Every song has at least one: Planning Center makes a
+ * "Default Arrangement" with each new song, and a song item names the
+ * arrangement it uses.
+ */
+export interface SongArrangement {
+    id: string;
+    name: string;
+    /** Archived in Planning Center, so not one to put in a plan. */
+    archived: boolean;
+    /** When it was created; null when Planning Center did not say. */
+    createdAt: string | null;
+}
+
 /** One item of a plan: a song, header, media or other element. */
 export interface PlanItem {
     id: string;

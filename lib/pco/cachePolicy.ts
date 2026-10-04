@@ -7,6 +7,7 @@ export type PcoResourceKind =
     | "planItems"
     | "itemNoteCategories"
     | "songs"
+    | "arrangements"
     | "tags";
 
 /**
@@ -20,5 +21,6 @@ export const PCO_CACHE_POLICY: Readonly<Record<PcoResourceKind, RequestInit>> = 
     planItems: { cache: "no-store" },
     itemNoteCategories: { cache: "no-store" },
     songs: { cache: "no-store" },
+    arrangements: { cache: "no-store" },
     tags: { cache: "no-store" },
 };

@@ -18,7 +18,15 @@ describe("the barrel", () => {
 
     test("exports the writes of lib/pco/writes.ts, through which app code writes", () => {
         const exported = Object.keys(barrel);
-        for (const name of ["createItemNote", "updateItemNote", "deleteItemNote"]) {
+        for (const name of [
+            "createItemNote",
+            "updateItemNote",
+            "deleteItemNote",
+            "createSong",
+            "updateSong",
+            "createSongItem",
+            "assignSongTags",
+        ]) {
             expect(exported).toContain(name);
         }
     });

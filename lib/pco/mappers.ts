@@ -9,8 +9,10 @@ import type {
     PlanItem,
     ServiceType,
     Song,
+    SongArrangement,
 } from "../domain";
 import type {
+    PcoArrangementResource,
     PcoItemNoteCategoryResource,
     PcoItemNoteResource,
     PcoItemResource,
@@ -133,6 +135,21 @@ export function toPcoLibrarySong(resource: PcoSongResource): PcoLibrarySong {
         lastScheduledAt: attributes.last_scheduled_at ?? null,
         createdAt: attributes.created_at ?? null,
         updatedAt: attributes.updated_at ?? null,
+    };
+}
+
+/**
+ * Map a raw arrangement to the domain shape: archived when Planning Center
+ * gives it an `archived_at`; a missing name becomes "" and a missing
+ * creation time null.
+ */
+export function toSongArrangement(resource: PcoArrangementResource): SongArrangement {
+    const attributes = resource.attributes;
+    return {
+        id: resource.id,
+        name: attributes.name ?? "",
+        archived: Boolean(attributes.archived_at),
+        createdAt: attributes.created_at ?? null,
     };
 }
 

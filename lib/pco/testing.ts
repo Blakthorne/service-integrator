@@ -5,6 +5,7 @@
 import { vi } from "vitest";
 import { PACER_GLOBAL, createPacer, type Pacer } from "./pacer";
 import type {
+    PcoArrangementResource,
     PcoItemNoteCategoryResource,
     PcoItemNoteResource,
     PcoItemResource,
@@ -327,5 +328,23 @@ export function tagGroupResource(
             ...attributes,
         },
         relationships: { tags: { data: tagIds.map((tagId) => ({ type: "Tag" as const, id: tagId })) } },
+    };
+}
+
+/** An arrangement, by default the "Default Arrangement" Planning Center makes with a song. */
+export function arrangementResource(
+    id: string,
+    attributes: Partial<PcoArrangementResource["attributes"]> = {}
+): PcoArrangementResource {
+    return {
+        type: "Arrangement",
+        id,
+        attributes: {
+            name: "Default Arrangement",
+            archived_at: null,
+            created_at: "2019-01-01T00:00:00Z",
+            updated_at: "2019-01-01T00:00:00Z",
+            ...attributes,
+        },
     };
 }
