@@ -130,7 +130,7 @@ describe("syncPcoSongsAction", () => {
 const SETTINGS_PAGES = [["/settings"], ["/plans", "layout"], ["/"]];
 
 /** The message above the Save button when a field needs fixing. */
-const FIX_FIELDS = "Nothing was saved. Fix what is marked below, then try again.";
+const FIX_FIELDS = "Nothing was saved. Fix the fields that have an error message, then try again.";
 
 /** A form as the browser posts it. */
 function formWith(fields: Record<string, string>): FormData {
@@ -206,13 +206,18 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
 
         expect(state.status).toBe("error");
         if (state.status === "error") {
-            expect(state.message).toContain("Nothing was saved: fix the settings marked below.");
-            expect(state.message).toContain("The header labels must be a label for each service type.");
-            expect(state.values).toEqual(fields);
-            // Only a setting that is a field of this form is marked.
-            expect(Object.keys(state.fieldErrors)).toEqual(
-                "numberSeparator" in fields ? ["numberSeparator"] : []
+            // Only a setting that is a field of this form is marked; the reason of
+            // any other is added to the message, so none is lost.
+            const marked = "numberSeparator" in fields;
+            expect(Object.keys(state.fieldErrors)).toEqual(marked ? ["numberSeparator"] : []);
+            expect(state.message).toBe(
+                [
+                    marked ? FIX_FIELDS : "Nothing was saved.",
+                    ...(marked ? [] : ["The number separator must be text."]),
+                    "The header labels must be a label for each service type.",
+                ].join(" ")
             );
+            expect(state.values).toEqual(fields);
         }
         expect(revalidatePath).not.toHaveBeenCalled();
     });

@@ -74,8 +74,16 @@ export async function syncPcoSongsAction(): Promise<SyncNowResult> {
  */
 export type SettingsFormState = FormState;
 
-/** What a form says above its Save button when a field needs fixing. */
-const FIX_FIELDS_MESSAGE = "Nothing was saved. Fix what is marked below, then try again.";
+/**
+ * What a form says above its Save button when a field needs fixing. It does
+ * not say where the fields are, or what colour they are marked in: the
+ * message sits below them, and a person who cannot see colour must find them.
+ */
+const FIX_FIELDS_MESSAGE =
+    "Nothing was saved. Fix the fields that have an error message, then try again.";
+
+/** What a form says when it refuses with reasons that are not about any one field. */
+const NOTHING_SAVED_MESSAGE = "Nothing was saved.";
 
 /** What a form says when it is saved. */
 const SAVED_MESSAGE = "Saved.";
@@ -106,8 +114,8 @@ function revalidateSettingsPages(): void {
 /**
  * A refusal from `saveSettings`, as the form shows it. The readers check
  * every value with the registry's own parsers first, so this is only a
- * guard: a setting whose key is a field of the form is marked there, and
- * any other reason is added to the message, so none is lost.
+ * guard: a setting whose key is a field of the form is marked on that field,
+ * and any other reason is added to the message, so none is lost.
  */
 function refusal(
     result: Extract<SaveSettingsResult, { ok: false }>,
@@ -122,7 +130,8 @@ function refusal(
             elsewhere.push(message);
         }
     }
-    return formError([result.message, ...elsewhere].join(" "), { fieldErrors, values: posted });
+    const message = Object.keys(fieldErrors).length > 0 ? FIX_FIELDS_MESSAGE : NOTHING_SAVED_MESSAGE;
+    return formError([message, ...elsewhere].join(" "), { fieldErrors, values: posted });
 }
 
 /**
