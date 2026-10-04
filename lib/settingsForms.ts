@@ -51,6 +51,8 @@ export type SettingsFormRead =
            * the value as parsed (a trimmed number; "yes" or "no").
            */
           shown: FormValues;
+          /** What was posted, as text by field name, untrimmed. */
+          posted: FormValues;
       }
     | {
           ok: false;
@@ -90,7 +92,7 @@ function take<K extends SettingKey>(into: Collected, key: K, field: string, raw:
 function finish(into: Collected, posted: FormValues): SettingsFormRead {
     return Object.keys(into.fieldErrors).length > 0
         ? { ok: false, fieldErrors: into.fieldErrors, posted }
-        : { ok: true, values: into.values, shown: into.shown };
+        : { ok: true, values: into.values, shown: into.shown, posted };
 }
 
 /** The Copyright form: the CCLI license number, trimmed by its parser. */

@@ -65,6 +65,7 @@ describe("readCopyrightForm", () => {
             ok: true,
             values: { ccliLicenseNumber: "7654321" },
             shown: { ccliLicenseNumber: "7654321" },
+            posted: { ccliLicenseNumber: " 7654321 " },
         });
     });
 
@@ -117,6 +118,11 @@ describe("readScheduleTextForm", () => {
                 numberSeparator: " | ",
             },
             shown: {
+                "headerLabel-1405391": "Sunday Morning",
+                "headerLabel-1486055": "PM",
+                numberSeparator: " | ",
+            },
+            posted: {
                 "headerLabel-1405391": "Sunday Morning",
                 "headerLabel-1486055": "PM",
                 numberSeparator: " | ",
@@ -174,6 +180,7 @@ describe("readScheduleTextForm", () => {
             ok: true,
             values: { scheduleHeaderLabels: stored, numberSeparator: " / " },
             shown: { numberSeparator: " / " },
+            posted: { numberSeparator: " / " },
         });
     });
 
@@ -273,6 +280,7 @@ describe("readHymnalNotesForm", () => {
             ok: true,
             values: { hymnNoteCategoryName: "Hymn Numbers", hymnNoteIncludesTune: true },
             shown: { hymnNoteCategoryName: "Hymn Numbers", hymnNoteIncludesTune: "yes" },
+            posted: { hymnNoteCategoryName: "  Hymn Numbers ", hymnNoteIncludesTune: "yes" },
         });
         expect(
             readHymnalNotesForm(
