@@ -6,6 +6,7 @@ import { backupDatabase, isBackupDue } from "@/lib/db/backup";
 import { errorMessage } from "@/lib/db/errors";
 import {
     finishSyncRun,
+    latestSyncRun,
     startSyncRun,
     type SyncRunCounts,
     type SyncRunKind,
@@ -46,13 +47,17 @@ export interface Job {
 /**
  * The daily backup. It is checked hourly and soon after boot, and runs when
  * the newest backup is a day old, so restarts (every deploy) never stretch the
- * gap between backups much past a day.
+ * gap between backups much past a day. It also runs when the last backup run
+ * did not succeed: it failed, or a restart interrupted it (`boot()` finishes
+ * such a run as failed), even if that run had already written its file.
  */
 export const backupJob: Job = {
     kind: "backup",
     everyMs: HOUR_MS,
     atBoot: true,
-    isDue: (_db, now) => isBackupDue(backupDirectory(), now),
+    isDue: (db, now) =>
+        latestSyncRun(db, "backup")?.ok === false ||
+        isBackupDue(backupDirectory(), now),
     run: (db) => {
         const { file, pruned } = backupDatabase(db, { dir: backupDirectory() });
         return {

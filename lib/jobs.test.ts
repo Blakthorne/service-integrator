@@ -4,7 +4,13 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { backupFileName } from "@/lib/db/backup";
-import { latestSyncRun, recentSyncRuns } from "@/lib/db/syncRuns";
+import {
+    finishInterruptedRuns,
+    finishSyncRun,
+    latestSyncRun,
+    recentSyncRuns,
+    startSyncRun,
+} from "@/lib/db/syncRuns";
 import { openTestDb } from "@/lib/db/testing";
 import {
     BOOT_DELAY_MS,
@@ -209,6 +215,26 @@ describe("backupJob", () => {
         await runJob(backupJob, openDb);
         expect(backupJob.isDue?.(db, hoursAfterT0(23))).toBe(false);
         expect(backupJob.isDue?.(db, hoursAfterT0(24))).toBe(true);
+    });
+
+    test("is due again when the last backup run was interrupted, despite a fresh file", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(T0);
+        await runJob(backupJob, openDb);
+        // A run that wrote its file, but whose server stopped before it finished.
+        startSyncRun(db, "backup", hoursAfterT0(1));
+        expect(backupJob.isDue?.(db, hoursAfterT0(2))).toBe(false);
+        finishInterruptedRuns(db, hoursAfterT0(2));
+        expect(backupJob.isDue?.(db, hoursAfterT0(2))).toBe(true);
+    });
+
+    test("is due again when the last backup run failed", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(T0);
+        await runJob(backupJob, openDb);
+        const id = startSyncRun(db, "backup", hoursAfterT0(1));
+        finishSyncRun(db, id, { ok: false, message: "could not prune" }, hoursAfterT0(1));
+        expect(backupJob.isDue?.(db, hoursAfterT0(2))).toBe(true);
     });
 });
 
