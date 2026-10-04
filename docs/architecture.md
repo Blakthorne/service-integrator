@@ -4,25 +4,27 @@ How Service Integrator is put together, and how to add to it. Read this before a
 
 ## Overview
 
-A Next.js 15 App Router app (React 19, strict TypeScript, Tailwind 4, Auth.js v5, Vitest) that reads Planning Center Online (PCO) Services data and generates song copyright text and service-schedule text. It runs as one long-running `next start` process under PM2, deployed by GitHub Actions on every push to `main`, so in-memory caches are per process and shared by all requests. It keeps its own data in a local SQLite file (see [Database](#database)), which that process opens at boot. The song catalog lives there (see [The song catalog](#the-song-catalog)): books, hymns, tunes, songs and their entries, seeded once from `hymns.json`. Plan pages and Unused Hymns still read `hymns.json` itself until phase 2 of the catalog plan.
+A Next.js 15 App Router app (React 19, strict TypeScript, Tailwind 4, Auth.js v5, Vitest) that reads Planning Center Online (PCO) Services data and generates song copyright text and service-schedule text. It runs as one long-running `next start` process under PM2, deployed by GitHub Actions on every push to `main`, so in-memory caches are per process and shared by all requests. It keeps its own data in a local SQLite file (see [Database](#database)), which that process opens at boot. The song catalog lives there (see [The song catalog](#the-song-catalog)): books, hymns, tunes, songs and their entries, seeded once from `hymns.json`. So does a mirror of the Planning Center song library, refreshed every hour, through which each catalog song links to the Planning Center song it is (see [Planning Center links](#planning-center-links)); plan pages take a song's numbers from that link.
 
 | URL | Page | Data |
 |---|---|---|
 | `/` | 307 redirect to `/plans` | none |
 | `/plans` | every plan grouped by date, 25 dates a page (`?page=`) | `getPlansByDate()`, in the page |
 | `/plans/{serviceTypeId}/{planId}` | one plan: header, items table, Copyright Information tab | `getPlanDetail()`, once, in the `[planId]` layout |
-| `/plans/{st}/{plan}/schedule` | the plan's Service Schedule tab | the same data, through `usePlan()` |
+| `/plans/{st}/{plan}/schedule` | the plan's Service Schedule tab: a card per song with its numbers from its catalog link, or suggestions to link it | the same data, through `usePlan()`; Link is a server action |
 | `/plans/{st}/{plan}/items/{itemId}` | one item's song details | the same data, through `usePlan()` |
-| `/catalog` | every catalog song, searched, filtered by book, sorted and paged in the browser (`?q=`, `?book=`, `?sort=`, `?page=`) | `getCatalogSongs()` and `getCatalogBooks()`, in the page |
-| `/catalog/songs/{songId}` | one song: its entries, its hymn and its tune, with their other songs | `getCatalogSong()` and `getCatalogBooks()`, in the page |
+| `/catalog` | every catalog song, searched, filtered by book, by Planning Center link and by use, sorted and paged in the browser (`?q=`, `?book=`, `?linked=`, `?used=`, `?sort=`, `?page=`), with Export CSV | `getCatalogSongs()` and `getCatalogBooks()`, in the page; the CSV is made in the browser |
+| `/catalog/songs/new` | the new-song form; `?pcoSongId=` prefills it from a Planning Center song and links that song, `?returnTo=` is where it goes back to | `getNewSongFormData()`, in the page; Add song is a server action |
+| `/catalog/songs/{songId}` | one song: its entries, its hymn and its tune, with their other songs, and its Planning Center link with Unlink | `getCatalogSong()`, `getCatalogBooks()` and `getMirroredPcoSong()`, in the page; Unlink is a server action |
 | `/catalog/tunes` | every tune with how many songs use it (`?q=`, `?page=`) | `getCatalogTunes()`, in the page |
 | `/catalog/tunes/{tuneId}` | one tune and its songs | `getCatalogTune()`, in the page |
 | `/catalog/books` | every book with its entry count | `getCatalogBooks()`, in the page |
 | `/catalog/books/{bookCode}` | one book's entries in browse order, with Go to number | `getCatalogBook()`, in the page |
 | `/catalog/import` | the import runs, and Preview seed from hymns.json | `getCatalogImportRuns()` and `getCatalogCounts()`, in the page; the preview is a server action |
 | `/catalog/import/{runId}` | one run's report, with Apply and Discard, each confirmed in a dialog | `getCatalogImportRun()`, in the page; Apply and Discard are server actions |
-| `/unused-hymns` | hymnbook entries never scheduled (`?book=`, `?sort=`, `?page=`) | `getUnusedHymns()`, in the page; Refresh is a server action |
-| `/settings` | the database: whether it opens, its file, migrations and last backup | `getDatabaseStatus()`, in the page (local database only) |
+| `/catalog/reconcile` | the Planning Center songs not in the catalog, each with its suggestions, a search over every catalog song, New catalog song and Ignore (`?q=` searches them); the recent auto-links, with Undo; the ignored songs; the last sync, with Sync now | `getReconcileData()`, in the page; every change is a server action |
+| `/unused-hymns` | 308 redirect to `/catalog?used=never`, the songs never scheduled | none |
+| `/settings` | the database (whether it opens, its file, migrations and last backup) and the Planning Center song sync, with Sync now | `getDatabaseStatus()` and `getLastPcoSongsSync()`, in the page (local database only); Sync now is a server action |
 | `/auth/signin`, `/auth/error` | public sign-in pages | none |
 
 ### Request flow
@@ -64,6 +66,7 @@ app/
         not-found.tsx           ┘
         [planId]/
           layout.tsx            server: parsePcoId → getPlanDetail → <PlanProvider>; generateMetadata via getPlanLabels
+          actions.ts            "use server": linkPcoSong, the Schedule tab's one-click Link
           error.tsx             errors in the (overview) layout and in item pages, below the provider
           (overview)/
             layout.tsx          PlanHeader + PlanItemsTable + PlanTabNav, with the active tab below
@@ -74,12 +77,15 @@ app/
             page.tsx            server: parsePcoId → notFound(); the client PlanItemDetail reads the provider
             not-found.tsx
     catalog/
-      layout.tsx                CatalogSectionNav (Songs · Tunes · Books · Import) above every catalog page;
-                                fetches nothing, and leaves the width to each page
+      layout.tsx                CatalogSectionNav (Songs · Tunes · Books · Reconcile · Import) above every catalog
+                                page; fetches nothing, and leaves the width to each page
       (list)/page.tsx · loading.tsx
                                 the songs list at /catalog: getCatalogSongs() → <Suspense><CatalogSongsView/></Suspense>
+      songs/new/                page.tsx (parsePcoId, safeCallbackUrl → getNewSongFormData → SongForm)
+                                · actions.ts ("use server": createSongAction)
       songs/[songId]/
-        page.tsx                parseCatalogId → getCatalogSong → SongDetailView; metadata via getCatalogSongLabel
+        page.tsx                parseCatalogId → getCatalogSong, getMirroredPcoSong → SongDetailView;
+                                metadata via getCatalogSongLabel
         not-found.tsx
       tunes/(list)/page.tsx · loading.tsx
                                 getCatalogTunes() → <Suspense><CatalogTunesView/></Suspense>
@@ -94,29 +100,41 @@ app/
                                 · not-found.tsx
       import/actions.ts         "use server": previewSeedImportAction, applyImportAction, discardImportAction,
                                 each checking the session
-    unused-hymns/
-      page.tsx · loading.tsx    server-rendered initial data; book, sort and page live in the URL
-      actions.ts                "use server": refreshUnusedHymns, which checks the session
-    settings/page.tsx           server: getDatabaseStatus() → PageHeader + DatabaseCard. No loading or error file:
-                                it reads only the local database, and the query never throws
+      reconcile/                page.tsx · loading.tsx: getReconcileData() → ReconcileView, RecentAutoLinks,
+                                IgnoredSongs. actions.ts ("use server"): linkSongAction, undoAutoLinkAction,
+                                ignorePcoSongAction, unignorePcoSongAction and the song page's unlinkSongAction:
+                                every change to a link made from a catalog page
+    unused-hymns/page.tsx       permanentRedirect (308) to routes.catalogFiltered({ used: "never" })
+    settings/
+      page.tsx                  server: getDatabaseStatus(), getLastPcoSongsSync() → PageHeader + DatabaseCard +
+                                PcoSyncCard. No loading or error file: it reads only the local database, and
+                                neither query throws
+      actions.ts                "use server": syncPcoSongsAction, Sync now (Settings and Reconcile)
   components/
     ui/                         shared chrome: PageHeader, Breadcrumbs, LoadingState, ErrorState, EmptyState,
                                 CopyButton, LocalTime, Pagination, Segmented, Dialog, SubmitButton
     Navigation.tsx              the top bar; Navigation/NavLinks.tsx renders NAV_ITEMS, and
                                 Navigation/NavUtilityLinks.tsx the icon links beside Sign Out (NAV_UTILITY_ITEMS)
-    Settings/DatabaseCard.tsx   the Settings page's database status
+    Settings/                   DatabaseCard and PcoSyncCard; SyncRunStatus and SyncNowButton, which Reconcile
+                                shows too
     Plans/PlansList.tsx         the paged list of plans
     PlanItems/                  PlanProvider (+ usePlan), PlanHeader, PlanItemsTable, PlanTabNav, PlanItemDetail,
-                                the tab connectors (CopyrightTab, ScheduleTab) and their views
+                                the tab connectors (CopyrightTab, ScheduleTab) and their views; the Schedule tab's
+                                ScheduleSongCard, EntryNumbers, LinkToCatalogInline and ScheduleChoices
     Catalog/                    CatalogSectionNav, and what the catalog pages share: CatalogCard, EntryLabels,
-                                SearchBox
-      Songs/                    CatalogSongsView, CatalogSongsControls, SongsTable (a tune's page uses it too)
-      Song/                     SongDetailView and its cards: EntriesCard, HymnCard, TuneCard, RelatedSongs
+                                SearchBox, OptionPicker
+      Songs/                    CatalogSongsView, CatalogSongsControls, SongsTable (a tune's page uses it too),
+                                downloadCsv
+      Song/                     SongDetailView and its cards: EntriesCard, HymnCard, TuneCard, RelatedSongs,
+                                PcoLinkCard
+      SongForm/                 SongForm and its parts: PcoSongNotice, HymnFields, TuneFields, EntryFields,
+                                ChoiceFromList, Fields
+      Reconcile/                ReconcileView, UnlinkedSongRow, SongPicker, LinkForm, RecentAutoLinks, IgnoredSongs,
+                                RowNoticeText, useRowNotice, PcoSongWebLink
       Tunes/                    CatalogTunesView, TunesTable, TuneDetailsCard
       Books/                    BooksList, BookEntriesTable, GoToNumber
       Import/                   PreviewSeedForm, ImportRunsList, SeedReport, ImportRunActions, ImportNotice,
                                 ImportStatusBadge
-    UnusedHymns/                UnusedHymnsView, UnusedHymnsControls, UnusedHymnsTable
     SongDetails.tsx, SongCopyright.tsx
   hooks/useUrlState.ts
 ```
@@ -129,7 +147,7 @@ app/
   - `(list)` keeps the list's `loading.tsx` from also wrapping `[serviceTypeId]/…`.
   - `(overview)` gives the header, items table and tab nav to the two tabs and not to the item pages beside them. It also makes `PlanTabNav` work: `useSelectedLayoutSegment()` returns `null` or `"schedule"` in `(overview)/layout.tsx`, but `"(overview)"` one level up, so that layout has to render the nav.
   - `(overview)/error.tsx` is a boundary *inside* that layout, so a failing tab leaves the header and tab nav on screen; errors in the layout itself fall through to `[planId]/error.tsx`.
-  - The catalog's lists sit in `(list)` groups as well: `catalog/(list)/`, `tunes/(list)/`, `books/(list)/` and `import/(list)/`. A `loading.tsx` wraps everything below its folder, so without them the songs list's loading state would also cover every song, tune, book and import page. Those pages read only the local database and have no `loading.tsx`, so a link to one keeps the previous page on screen until it is ready (about 100 ms in a production build) instead of flashing a spinner.
+  - The catalog's lists sit in `(list)` groups as well: `catalog/(list)/`, `tunes/(list)/`, `books/(list)/` and `import/(list)/`. A `loading.tsx` wraps everything below its folder, so without them the songs list's loading state would also cover every song, tune, book and import page. Those pages read only the local database and have no `loading.tsx`, so a link to one keeps the previous page on screen until it is ready (about 100 ms in a production build) instead of flashing a spinner. The new-song form has none either: it reads the database, and Planning Center only for a song the mirror lacks. Reconcile has its own `loading.tsx` beside its page (nothing is below it, so it needs no group): it builds every unlinked song's suggestions.
   - Because of `catalog/(list)/`, `useSelectedLayoutSegment()` in the catalog layout returns `"(list)"` at `/catalog`, not null. `CatalogSectionNav` finds its section with `catalogSectionFor(catalogLayoutSegment(useSelectedLayoutSegments()))`; `catalogLayoutSegment` (`lib/catalog/sections.ts`) skips route groups.
 - **The catalog layout fetches nothing**, so each catalog page's `not-found.tsx` sits beside its page and a 404 renders under the section nav. A catalog read that throws (a database that cannot be opened) falls through to `app/(app)/error.tsx`.
 - **Layouts do not re-run on `<Link>` navigation.** The server renders only the segments that change, so switching tabs, or opening an item and coming back, never repeats the `[planId]` layout's PCO fetch. Another plan remounts `PlanProvider` (its key includes the plan). `router.refresh()` does re-run the layout.
@@ -143,15 +161,16 @@ Beyond the page chrome (`PageHeader`, `Breadcrumbs`, `LoadingState`, `ErrorState
 
 - `Segmented`: a row of toggle buttons (`aria-pressed`) in a labelled group, exactly one chosen, for a filter or a sort order (the songs list's book filter and sort). An option may show a short label with its full name as `title`. On a phone, a row too wide for its container scrolls sideways.
 - `Dialog`: a modal on the browser's own `<dialog>` (`showModal()`), for confirming an action (Apply, Discard). It is controlled through `open` and `onClose`. The browser makes the page behind it inert and closes it on Escape; focus starts on its close button and returns to `returnFocusRef`, the button that opened it. Its content stays rendered while it is closed, so a form inside keeps its state.
-- `SubmitButton`: the submit button of a form whose `action` is a function, which suits only an action that takes milliseconds, such as a write to the local database (convention 15). It reads `useFormStatus`, so render it inside its form. While the action runs it shows its pending label and is `aria-disabled` rather than `disabled`, so a keyboard user keeps focus when the action comes back with a refusal.
+- `SubmitButton`: the submit button of a form whose `action` is a function, which suits only an action that takes milliseconds, such as a write to the local database (convention 15). It reads `useFormStatus`, so render it inside its form. While the action runs it shows its pending label and is `aria-disabled` rather than `disabled`, so a keyboard user keeps focus when the action comes back with a refusal. `variant` is "primary" (the default), "danger" (Discard, Unlink) or "secondary", a quieter button beside a primary one (Reconcile's Ignore beside Link).
 
-The catalog's pages share three pieces in `app/components/Catalog/`:
+The catalog's pages share four pieces in `app/components/Catalog/`:
 
 - `CatalogCard`: a titled card for a detail page, `flush` when its body is a table, with `CardField` for its labelled values.
 - `EntryLabels`: a song's entry labels, each with its variant note beside it.
 - `SearchBox`: the search field of a list whose search lives in the URL. It shows what is typed at once, from local state, because `useUrlState`'s writes reach `useSearchParams()` in a transition and an input fed straight from the URL drops keystrokes. When the URL's search changes without typing (Back, a link to the bare list), it shows the URL's.
+- `OptionPicker`: a search field over a long list of options with the best few matches under it (`lib/catalog/pickers.ts` searches and ranks them in the browser), and a line, read out as it changes, that says how many match. Each match's row is what the caller renders: a button that chooses it (the new-song form's hymn and tune, through `SongForm/ChoiceFromList`) or a Link form (Reconcile's "Choose another song"). Enter never submits the form around it.
 
-**The top bar at 320 px.** Below `sm` the bar must hold the section links, the gear and Sign Out in a 320 px phone: it uses `<main>`'s narrow gutter, the links have less padding, and Unused Hymns shows "Unused" (`PHONE_LABELS` in `NavLinks.tsx`), keeping its full name as the accessible name and tooltip. The app name appears only from `md`, where there is room for it.
+**The top bar at 320 px.** Below `sm` the bar must hold the section links (Plans · Catalog), the gear and Sign Out in a 320 px phone: it uses `<main>`'s narrow gutter and the links have less padding. The app name appears only from `md`, where there is room for it.
 
 ## Data layer
 
@@ -164,8 +183,8 @@ client components (interaction only) ── URL state via useUrlState
 
 **Server versus pure modules.**
 
-- **Server-only** modules start with `import "server-only"`, so importing one into a client component fails the build: `lib/pco/*` (except `resources.ts`, which is types only, and the test helpers in `testing.ts`), `lib/queries/*`, `lib/db/*` (except the SQL text in `migrations/`, `errors.ts` and the test helper `testing.ts`), `lib/jobs.ts`, `lib/boot.ts`, and `lib/hymnCatalog.ts`, which wraps `hymns.json` so its ~150 KB never reaches a client bundle.
-- **Pure** modules are safe on both sides and unit-tested: `lib/domain.ts` (types), `copyright.ts`, `serviceSchedule.ts`, `hymnMatch.ts`, `plansByDate.ts`, `format.ts`, `normalizeTitle.ts`, `unusedHymns.ts`, `scheduleSelections.ts`, `ttlCache.ts`, `routes.ts`, `urlState.ts` and `safeCallbackUrl.ts`, and every module in `lib/catalog/` and `lib/import/` (see [The song catalog](#the-song-catalog)). They take what they need as arguments (`matchHymns` gets its index, `buildScheduleCopyText` gets the plan's date string, `planHymnsJsonImport` gets the records of `hymns.json`) and import nothing server-only.
+- **Server-only** modules start with `import "server-only"`, so importing one into a client component fails the build: `lib/pco/*` (except `resources.ts`, which is types only, and the test helpers in `testing.ts`), `lib/queries/*`, `lib/db/*` (except the SQL text in `migrations/`, `errors.ts` and the test helper `testing.ts`), `lib/jobs.ts`, `lib/boot.ts`, and `lib/import/hymnsJsonFile.ts`, the only module that imports `hymns.json` (for the seed import), so its ~150 KB never reaches a client bundle.
+- **Pure** modules are safe on both sides and unit-tested: `lib/domain.ts` (types), `copyright.ts`, `serviceSchedule.ts`, `scheduleSelections.ts`, `scheduleCards.ts`, `reconcile.ts`, `fuzzy.ts`, `forms.ts`, `csv.ts`, `plansByDate.ts`, `format.ts`, `normalizeTitle.ts`, `ttlCache.ts`, `routes.ts`, `urlState.ts` and `safeCallbackUrl.ts`, and every module in `lib/catalog/` and `lib/import/` but `hymnsJsonFile.ts` (see [The song catalog](#the-song-catalog)). They take what they need as arguments (`suggestLinks` gets its catalog index, `buildScheduleCopyText` gets the plan's date string, `planHymnsJsonImport` gets the records of `hymns.json`) and import nothing server-only.
 - A client component may `import type` from a server module (the import is erased), never a value.
 
 **`lib/pco/`: transport, mapping, getters.**
@@ -179,7 +198,7 @@ client components (interaction only) ── URL state via useUrlState
 | `ids.ts` | `parsePcoId(raw)` returns a branded `PcoId` or `null` (`/^[1-9][0-9]{0,19}$/`); `assertPcoId` throws `InvalidPcoIdError`. |
 | `resources.ts` | The raw JSON:API shapes as PCO sends them. Types only. |
 | `mappers.ts` | `toServiceType`, `toPlan`, `toPlanItem`, `toSong` and `joinItemsToSongs`: raw resources to the domain types. |
-| `serviceTypes.ts`, `plans.ts`, `planItems.ts`, `songs.ts` | The getters. |
+| `serviceTypes.ts`, `plans.ts`, `planItems.ts`, `songs.ts` | The getters. `songs.ts` has `fetchSongLibrary()`, the whole library for the song sync (paced, never cached, and refused when it got fewer songs than PCO counted), and `getSong(id)`, one song for a link made before the sync has it. |
 | `next.ts` | `orNotFound(promise)`: a 404 `PcoError` or an invalid ID becomes `notFound()`; anything else is rethrown. Server pages and layouts only. |
 | `testing.ts` | Test-only builders, fetch stubs keyed by URL or `"METHOD url"`, `calledUrls`, `calledRequests` and `stubPcoPacer`. |
 
@@ -193,50 +212,62 @@ Getters are wrapped in React `cache()` (calls with the same arguments are dedupe
 
 **`lib/queries/`: what pages import.**
 
-- `plans.ts` has `getPlansByDate()` (`{ dates, plansByDate, failedServiceTypeIds }`: a service type whose plans fail to load is skipped, logged and reported, and the list shows a quiet warning), `getPlanDetail(st, plan)` (`{ plan, serviceType, items, hymns }`, loaded in parallel) and `getPlanLabels(st, plan)`, the cheap, never-throwing label lookup for `generateMetadata`.
-- `unusedHymns.ts` has `getUnusedHymns({ refresh })`.
-- `system.ts` has `getDatabaseStatus()`: `{ ok: true, path, appliedMigrations, latestMigration, lastBackup, backupDir }`, or `{ ok: false, error }` (logged). It never throws, so Settings shows a broken database instead of failing.
+- `plans.ts` has `getPlansByDate()` (`{ dates, plansByDate, failedServiceTypeIds }`: a service type whose plans fail to load is skipped, logged and reported, and the list shows a quiet warning), `getPlanDetail(st, plan)` (`{ plan, serviceType, items, catalog, suggestions, catalogError }`: the plan, service type and items loaded in parallel, then their songs' catalog links; see [Planning Center links](#planning-center-links)) and `getPlanLabels(st, plan)`, the cheap, never-throwing label lookup for `generateMetadata`, which reads only Planning Center.
+- `system.ts` has `getDatabaseStatus()`: `{ ok: true, path, appliedMigrations, latestMigration, lastBackup, backupDir }`, or `{ ok: false, error }` (logged). It never throws, so Settings shows a broken database instead of failing. `getLastPcoSongsSync()` gives the song sync's latest run the same way: `{ ok: true, lastRun }`, or `{ ok: false }` (logged).
 - `catalog.ts` has the catalog's reads, all synchronous like the database: `getCatalogSongs()`, `getCatalogSong(id)`, `getCatalogTunes()`, `getCatalogTune(id)`, `getCatalogBooks()`, `getCatalogBook(code)` and `getCatalogCounts()`. A detail read takes an ID or code its parser already checked (convention 19) and returns null when there is no such row, for the page's `notFound()`. Any read throws when the database cannot be opened, for the error boundary. `getCatalogSongLabel`, `getCatalogTuneLabel` and `getCatalogBookLabel` are the never-throwing labels for `generateMetadata` (convention 12): built on `labelOr`, they take the raw param, parse it themselves and fall back to "Song", "Tune" or "Book".
 - `catalogImport.ts` has the seed import's: `previewSeedImport()`, `getCatalogImportRuns()`, `getCatalogImportRun(id)` (the run, and why Apply would be refused now), `applyCatalogImport(id)` and `discardCatalogImport(id)`, which return a refusal for the form rather than throw, and `getCatalogImportRunLabel`.
+- `sync.ts` has `syncPcoSongs(db)`, the work of the song sync, and `describePcoSongsSync(counts)`, its run's message.
+- `reconcile.ts` has linking from the app's pages: `getReconcileData()`, `mirrorPcoSong(id)`, `linkCatalogSong(songId, pcoSongId)`, `undoAutoLink`, `ignorePcoSong`, `unignorePcoSong` and `syncPcoSongsNow()`.
+- `catalogEdit.ts` has the catalog's forms: `getNewSongFormData(pcoSongId)`, `getNewSongBooks()`, `createSong(input)`, and for the song page `getMirroredPcoSong(id)` and `unlinkCatalogSong(songId, pcoSongId)`.
 
-**Domain and hymns.**
+**Domain and links.**
 
-- `lib/domain.ts` is the one home of `ServiceType`, `Plan`, `PlanSummary`, `Song` (nullable fields), `PlanItem`, `PlanItemWithSong`, `HymnVersion`, `HymnData` and `ScheduleSelection`. Raw PCO shapes stay in `lib/pco/resources.ts`.
-- `joinItemsToSongs` gives a song item its song by the PCO song ID on the item, and falls back to an exact title match only when the item has no ID (or its song was not included), so an item renamed in the plan keeps its song.
-- `buildHymnIndex(catalog)` groups the hymnbook catalog (`hymns.json`, through `lib/hymnCatalog.ts`) by `normalizeTitle`, and `matchHymns(index, titles)` lists, for each title, the records that match it exactly (ignoring case) first and the other normalized matches after, each in catalog order. It echoes the requested title.
+- `lib/domain.ts` is the one home of `ServiceType`, `Plan`, `PlanSummary`, `Song` (nullable fields), `PlanItem`, `PlanItemWithSong` and `ScheduleSelection`, of the catalog's types (under "Catalog"), and of the links' (under "Planning Center links": `PcoLibrarySong`, `MirroredPcoSong`, `LinkReason`, `CatalogMatch`, `LinkSuggestion`, `UnlinkedPcoSong`, `AutoLinkedSong`, `CatalogSongOption`). Raw PCO shapes stay in `lib/pco/resources.ts`. A form's own types live beside its validators (`lib/catalog/validation.ts`) and a picker's beside its search (`lib/catalog/pickers.ts`).
+- `joinItemsToSongs` gives a song item its song by the PCO song ID on the item, and falls back to an exact title match only when the item has no ID (or its song was not included), so an item renamed in the plan keeps its song. Its numbers then come from that song's catalog link, never from the item's title.
 
-**Where caching would be turned on.** Nothing is cached across requests today except two in-memory results. There are three levels:
+**Where caching would be turned on.** Nothing is cached across requests today except one in-memory result. There are three levels:
 
 - *Per request:* React `cache()` in the getters, already on.
 - *HTTP, per PCO resource kind:* `PCO_CACHE_POLICY` in `lib/pco/cachePolicy.ts` is the single switch. Replace a kind's `{ cache: "no-store" }` with, for example, `{ next: { revalidate: 300 } }`. Under `force-dynamic` Next 15.5 forces `revalidate: 0` only onto fetches that name no cache option (`node_modules/next/dist/server/lib/patch-fetch.js`), so an explicit entry is honoured. Confirm it in a production build (`npm run build && npm start`) before relying on it, and remember the cache is shared by every user.
-- *In process, for a computed result:* `createTtlCache` (`lib/ttlCache.ts`). `get(key, load)` serves a fresh value, shares one load between concurrent calls and never caches a failure. `refresh(key, load)` replaces the value only when the load succeeds. `invalidate` and `clear` drop entries. It backs `getPlanLabels` (5 minutes) and `getUnusedHymns` (1 hour). It is per process, so a multi-instance or serverless host has one cache per instance. A cache that a server action touches must live on `globalThis` (convention 15).
+- *In process, for a computed result:* `createTtlCache` (`lib/ttlCache.ts`). `get(key, load)` serves a fresh value, shares one load between concurrent calls and never caches a failure. `refresh(key, load)` replaces the value only when the load succeeds. `invalidate` and `clear` drop entries. It backs `getPlanLabels` (5 minutes). It is per process, so a multi-instance or serverless host has one cache per instance. A cache that a server action touches must live on `globalThis` (convention 15).
 
 ### The song catalog
 
-The app's own hymnal index, in the database (migration `0002_catalog`). A **hymn** is the words and a **tune** the melody. A **song** is one hymn to one tune, the unit a Planning Center song will link to (phase 2). An **entry** places a song in a **book**: by number (`R-396`), by position in an unnumbered book, or at a location (`G-Front Cover`), with an optional variant note ("Descant - last stanza only") shown beside its label, never in it. Hymns and tunes keep their other spellings as aliases. The types are in `lib/domain.ts`, under "Catalog".
+The app's own hymnal index, in the database (migration `0002_catalog`). A **hymn** is the words and a **tune** the melody. A **song** is one hymn to one tune, the unit a Planning Center song links to (see [Planning Center links](#planning-center-links)). An **entry** places a song in a **book**: by number (`R-396`), by position in an unnumbered book, or at a location (`G-Front Cover`), with an optional variant note ("Descant - last stanza only") shown beside its label, never in it. Hymns and tunes keep their other spellings as aliases. The types are in `lib/domain.ts`, under "Catalog".
 
 ```text
 lib/catalog/              pure and tested, safe on both sides
   ids.ts                  parseCatalogId, parseBookCode (convention 19)
   labels.ts               formatEntryLabel: "R-396", "G-Front Cover", an unnumbered book's short name
   normalize.ts            normalizeTuneName, the key tunes and their aliases are matched by
-  filter.ts               the songs list: read its view from the URL, search, filter by book, sort, page
+  filter.ts               the songs list: read its view from the URL; search, filter by book, link and use;
+                          sort; page. foldForSearch, the folding every catalog search uses
+  songsCsv.ts             the songs list as CSV: its records and columns, and the file's name
+  lastScheduled.ts        a song's last scheduled date, from the date part of PCO's value
   tuneFilter.ts           the tunes list: search and page, and the trimmed row the browser gets
   entryNotes.ts           the notes beside a label, never repeating a location the label already says
   counts.ts               "1,247", "921 songs", "12 of 921 songs"
   sections.ts             catalogLayoutSegment, which tells the section nav where it is
   bookText.ts             the books pages' words, and the row ids that Go to number scrolls to
   importText.ts           the import pages' words
+  validation.ts           the new-song form: its fields, validateNewSong, draftFromPcoTitle, previewEntryLabel
+  pickers.ts              the pickers' searches (songs, hymns, tunes) and Reconcile's list search
+  linkText.ts             the words for links: reasons, sources, counts, and what Reconcile says after a change
 lib/import/               the seed import, pure: hymnsJson.ts plans the rows and the report,
-                          rows.ts types the planned rows and checks stored ones (parsePlannedRows)
+                          rows.ts types the planned rows and checks stored ones (parsePlannedRows);
+                          hymnsJsonFile.ts (server-only) is the one module that reads hymns.json
 lib/db/catalog.ts         the reads, in a handful of queries each, labelling every entry
+lib/db/catalogWrites.ts   createCatalogSong: the new-song form's write
 lib/db/importRuns.ts      import_runs: create, list, find, finish and discard runs; ImportRunError
 lib/db/catalogImport.ts   applyImportRun, findApplyRefusal
-lib/queries/catalog.ts, lib/queries/catalogImport.ts
+lib/queries/catalog.ts, lib/queries/catalogImport.ts, lib/queries/catalogEdit.ts
                           what pages and actions import (see lib/queries above)
+lib/csv.ts                RFC 4180 CSV text, with a guard against cells a spreadsheet would run as formulas
 ```
 
 **Reads.** `lib/db/catalog.ts` labels every entry with `formatEntryLabel`, so pages and client components never format one. The songs list sends all of its roughly 920 rows to the browser as `CatalogSongSummary` (about 50 KB gzipped), where `filter.ts` narrows them; the tunes list sends rows trimmed to what it shows (`toCatalogTuneRow`).
+
+**The songs list's filters and Export CSV.** A row carries its link (`pcoSongId`, `linkedBy`) and its Planning Center song's `lastScheduledAt`. `?linked=` (`all`, `yes`, `no`) keeps the songs linked to a Planning Center song, or not; `?used=never` keeps the songs never scheduled: not linked, or linked to a song Planning Center has never scheduled (`isUsed`; PCO counts upcoming plans, so "used" means scheduled, not sung). `routes.catalogFiltered({ linked, used })` builds those URLs: Reconcile links to `?linked=no`, and `/unused-hymns`, which the filter replaced, redirects (308) to `?used=never`. Export CSV downloads every song the filters leave, not just the page, entirely in the browser (`downloadCsv`: a Blob with a UTF-8 byte order mark, so Excel reads it as UTF-8): title, tune, a column per book, linked, last scheduled (`songsCsv.ts`, written by `lib/csv.ts`).
 
 **The seed import: preview, then apply.**
 
@@ -244,9 +275,60 @@ lib/queries/catalog.ts, lib/queries/catalogImport.ts
 2. *Review* (`/catalog/import/{runId}`). The page shows the report and, when `findApplyRefusal` says Apply would be refused now (the catalog has books), the reason beside an `aria-disabled` Apply.
 3. *Apply* (`applyImportAction` → `applyImportRun`), confirmed in a `Dialog`. One transaction refuses a run that is not a preview, or any run while the catalog has books (so the seed never runs twice), checks the stored rows with `parsePlannedRows`, inserts exactly what was previewed and marks the run `applied`; a refusal or a bad row leaves the catalog as it was. *Discard* marks a preview `discarded`. The three forms use `useActionState`, which convention 15 allows because their actions touch only the local database: a refusal comes back to the form as a message, and success revalidates the catalog's pages and redirects.
 
+**Adding a song** is the new-song form (`/catalog/songs/new`, the model for the forms to come; see [Add a server-action form](#add-a-server-action-form)). It chooses the hymn (one in the catalog, found by title, other title or tune, or a new title), the tune (one in the catalog, a new name, or none) and an optional first entry (a number or a location in a numbered book, or the end of a book without numbers). `createCatalogSong` (`lib/db/catalogWrites.ts`) writes the hymn, tune, song, entry and link in one transaction, after collecting every problem the catalog's rules raise, each naming the part of the form it is about and the row it clashes with: a title or tune name already taken, by an alias too (titles compared by `normalizeTitle`, names by `normalizeTuneName`); a song the hymn already has to that tune, or with no tune; a number another song has. A link that is refused afterwards rolls the whole song back.
+
+### Planning Center links
+
+A catalog song links to the Planning Center song it is, and plan pages take a song's numbers from that link, never from an item's title. `songs.pco_song_id` holds the link (with `linked_at` and `linked_by`: `auto`, `manual` or `import`), and it is unique: a Planning Center song links to at most one catalog song and the other way round.
+
+```text
+lib/reconcile.ts          pure: buildCatalogIndex, suggestLinks, chooseAutoLinks, readTuneHint, tunesNamedBy
+lib/fuzzy.ts              levenshtein, isNearMatch
+lib/db/pcoSongs.ts        the mirror: upsert a listing, mark removed, ignore, block, and its reads
+lib/db/links.ts           linkSong, unlinkSong, applyAutoLinks, listAutoLinks: the only writers of a link
+lib/queries/sync.ts       syncPcoSongs, the song sync; describePcoSongsSync, its run's message
+lib/queries/reconcile.ts  what Reconcile shows, and the links made from pages (see lib/queries above)
+```
+
+**The mirror** (`pco_songs`, migration `0003_pco_songs`) is the app's copy of the Planning Center song library: each song's id, title, author, copyright, CCLI number, admin, themes, hidden flag, `last_scheduled_at` (PCO's: org-local time labelled `Z`, and it counts upcoming plans), PCO's own dates, and `synced_at`. Rows are never deleted, so a link never points at nothing: a song a complete listing no longer has gets `removed_at`, cleared if it comes back. The app's own marks are `ignored_at` (Reconcile's Ignore: not hymnal material) and `auto_link_blocked_at` (set when a person undoes or removes a link, so syncs leave that song alone; a link by hand still works). There is no foreign key from `songs.pco_song_id` (SQLite cannot add one without rebuilding `songs`): `linkSong` checks that the song is in the mirror instead.
+
+**The sync** (`syncPcoSongs`) reads the whole library with one paced `fetchSongLibrary()` (about four requests), and only then writes, in one transaction: it upserts every song, marks removed the songs the listing lacks and unmarks those that came back, and makes the auto-links. A failed or partial read writes nothing, and so does a listing with no songs while the mirror has some (taken for a failure, not an emptied library). The `pco-songs` job runs it every hour and a minute after boot; "Sync now" (Settings and Reconcile) runs it through `runJob`, so it joins a run already in progress. Each run's `sync_runs` row says what it did: "Synced 397 songs: 2 added, 5 auto-linked".
+
+**Matching** (`lib/reconcile.ts`, pure) compares titles by `normalizeTitle` and tune names by `normalizeTuneName`. `suggestLinks(pcoSong, index)` gives the catalog songs a Planning Center song may be, best first, each with its reason: `exact` (the title is a hymn's title, so each of its tunes is a candidate), `alias` (another title of a hymn), `tune-hint` (the title before a trailing parenthetical is a hymn's, and the parenthetical names the tune: "Abba, Father (PRITCHARD)"; `readTuneHint` splits it off and `tunesNamedBy` finds the tunes) or `near` (`isNearMatch`, or a parenthetical that names none of the hymn's tunes). Pages show the best three (`TOP_SUGGESTIONS`).
+
+**Auto-links.** A sync links a Planning Center song by itself (`chooseAutoLinks`, then `applyAutoLinks` with `linked_by = 'auto'`) only when all of these hold:
+
+- it is not linked, still in Planning Center, not ignored and not blocked;
+- exactly one catalog song is a candidate for it with a strong reason (exact, alias or tune-hint), so a hymn sung to several tunes is never linked from its bare title, nor a title two hymns share;
+- that catalog song is not linked;
+- no other Planning Center song still in Planning Center has that same single strong candidate.
+
+Near matches never link. Reconcile lists the auto-links of the last 30 days for review, each with Undo.
+
+**Linking by hand.** `linkSong` and `unlinkSong` (`lib/db/links.ts`) are the only functions that change a link, for every caller: the sync, Reconcile, the plan page's Link, the new-song form and the song page's Unlink. A link that would take a song already linked elsewhere is refused with a message that says so, never moved; linking a Planning Center song also takes it off the ignored list. A link made from a page first mirrors the Planning Center song when the mirror lacks it (`mirrorPcoSong`: one unpaced `GET /songs/{id}`), so a link made before the first sync still points at a mirrored song. Undoing an auto-link and the song page's Unlink both block the Planning Center song's auto-link, so the next sync does not undo what a person did.
+
+**Reconcile** (`/catalog/reconcile`, `getReconcileData()`, a fixed number of queries) lists:
+
+- the Planning Center songs not in the catalog (neither linked, ignored nor removed), by title, each with its suggestions (with their reason, and Link, or a note when that catalog song is linked to another Planning Center song), "Choose another song" (a search over every catalog song, by title, tune or entry, with Link), "New catalog song" (the new-song form, prefilled from the song, which links it and comes back) and Ignore. A search over their titles and authors narrows the list in the browser and lives in `?q=`;
+- the auto-links of the last 30 days that still stand, with Undo;
+- the ignored songs, collapsed, with Unignore;
+- the last sync, with Sync now, and how many catalog songs are not in Planning Center, linking to `/catalog?linked=no`.
+
+Its actions (`reconcile/actions.ts`, which also holds the song page's Unlink) check the session, parse every id and revalidate every page that shows links: `revalidatePath("/catalog", "layout")` and `revalidatePath("/plans", "layout")`. A row that is resolved leaves its list: the list says what was done in a status line and moves focus to the row that took its place (`useRowNotice`), or to that line when the list is empty.
+
+**The song page's Planning Center card** (`PcoLinkCard`) shows the linked song as the mirror has it (title, author, copyright, when it was last scheduled, whether it was deleted from Planning Center), a link to it in Planning Center (`pcoWebUrls.song`), how and when the link was made, and Unlink, confirmed in a `Dialog`. A song that is not linked says so, with a link to Reconcile.
+
+**Plan pages.** `getPlanDetail` adds, for the plan's song items, `catalog` (the linked catalog song of each Planning Center song, by its id: title, tune and labelled entries in book order) and `suggestions` (the best three for each one not linked and not ignored, matched by the Planning Center song's own title, not the item's). It reads the database in at most seven queries, however long the plan. When the database cannot be read it logs, returns both empty with `catalogError`, and the plan's pages work without them; the Schedule tab says the numbers cannot be shown. The Schedule tab renders a `ScheduleSongCard` per song item (`scheduleSongView` in `lib/scheduleCards.ts` decides which):
+
+- linked: the catalog song and its numbers (`EntryNumbers`), with Numbers (the default when it has entries), Leave blank or Custom;
+- not linked: `LinkToCatalogInline`, its suggestions with a one-click Link (`linkPcoSong` in the plan's `actions.ts`, which checks the session, parses every id, links by hand and revalidates the plan) plus "Create in catalog" and "Find in catalog"; Leave blank or Custom;
+- ignored, without a Planning Center song, or when the catalog cannot be read: Leave blank or Custom.
+
+The schedule text prints, for each song item in sequence, `Title (R-396 / G-317)` for Numbers (its labels in book order, joined with " / "; the Doxology prints `G-Front Cover`; a descant a book prints under a number of its own is left out when the song has a plain entry, as `scheduleEntries` explains), `Title (text)` for Custom with text, and the title alone otherwise.
+
 ## Database
 
-The app's own data lives in one SQLite file per server, through Node's built-in `node:sqlite` (unflagged from Node 22.13; no install step and no native binary, so the deploy is unchanged). SQL is hand-written; there is no ORM. It holds `settings` and `sync_runs` (migration `0001_init`) and the song catalog (`0002_catalog`: books, hymns, tunes and their aliases, songs, entries and import runs; see [The song catalog](#the-song-catalog)).
+The app's own data lives in one SQLite file per server, through Node's built-in `node:sqlite` (unflagged from Node 22.13; no install step and no native binary, so the deploy is unchanged). SQL is hand-written; there is no ORM. It holds `settings` and `sync_runs` (migration `0001_init`), the song catalog (`0002_catalog`: books, hymns, tunes and their aliases, songs, entries and import runs; see [The song catalog](#the-song-catalog)) and the mirror of the Planning Center song library (`0003_pco_songs`; see [Planning Center links](#planning-center-links)).
 
 ```text
 lib/db/
@@ -257,11 +339,13 @@ lib/db/
   migrate.ts        migrate(db), appliedMigrations(db)
   migrations/       index.ts (MIGRATIONS, the Migration type), 0001_init.ts, …
   syncRuns.ts       start, finish and read sync_runs rows
-  catalog.ts        the catalog's reads; importRuns.ts and catalogImport.ts store and apply its imports
+  catalog.ts        the catalog's reads; importRuns.ts and catalogImport.ts store and apply its imports;
+                    catalogWrites.ts adds a song from the new-song form
+  pcoSongs.ts       the Planning Center song mirror; links.ts links and unlinks catalog songs to it
   backup.ts         backupDatabase(), listBackups(), isBackupDue(), pruneBackups()
   errors.ts         errorMessage(error)
-  testing.ts        openTestDb() and the catalog seed builders (seedBook, seedHymn, seedTune, seedSong,
-                    seedEntry), for tests
+  testing.ts        openTestDb() and the seed builders (seedBook, seedHymn, seedTune, seedSong, seedEntry,
+                    seedImportRun, seedPcoSong), for tests
 lib/jobs.ts         the background jobs and their scheduler
 lib/boot.ts         boot(): open the database, then start the jobs
 instrumentation.ts  register(): runs boot() when the Node.js server starts
@@ -312,7 +396,8 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 - **Jobs** (`lib/jobs.ts`). `JOBS` lists the background jobs. A `Job` is `{ kind, everyMs, atBoot?, isDue?, run }`. `startJobs()` checks each job every `everyMs` (and, with `atBoot`, a minute after boot) and runs it when `isDue(db, now)` says so, or every time without `isDue`. It schedules once per process (a globalThis flag), and its timers are `unref()`ed.
 - **Runs.** `runJob(job)` records a `sync_runs` row (started, then finished with `ok`, `message` and `counts` from what `run` returns, or with the error) and never throws or rejects. A call while a run of the same kind is in progress joins that run. The runs in progress live on globalThis, so an on-demand server action and the scheduler see each other.
 - **The backup job** is checked hourly and a minute after boot, and runs when the newest backup file is a day old, so restarts (every deploy is one) never stretch the gap much past a day. It also runs when the last backup run did not succeed, whether it failed or a restart interrupted it, even if that run had already written its file. Settings shows its last run.
-- **Add a job** with one entry in `JOBS`, such as `{ kind: "pco-songs", everyMs: HOUR_MS, atBoot: true, run: (db) => syncPcoSongs(db) }`; a new kind joins `SYNC_RUN_KINDS` (no migration). A "Sync now" button is a server action that checks the session and calls `runJob(job)`.
+- **The song sync** (`pcoSongsJob`) runs every hour and a minute after boot; see [Planning Center links](#planning-center-links). Settings shows its last run.
+- **Add a job** with one entry in `JOBS`, as `pcoSongsJob` is: `{ kind: "pco-songs", everyMs: HOUR_MS, atBoot: true, run: async (db) => { … } }`; a new kind joins `SYNC_RUN_KINDS` (no migration). A "Sync now" button is a server action that checks the session and calls `runJob(job)` (`syncPcoSongsAction` → `syncPcoSongsNow()`), called from the button's click with its pending state in `useState`: a job can take a while, and a transition held open across it would stall every navigation.
 
 ## Writes to Planning Center
 
@@ -354,11 +439,11 @@ await pcoMutate(
 
 **`PlanProvider`** (`app/components/PlanItems/PlanProvider.tsx`) is rendered by the `[planId]` layout with the `detail` from `getPlanDetail`.
 
-- **Server data stays in props.** It is never copied into `useState`, because `router.refresh()` re-runs the layout and the fresh `detail` must flow straight through.
-- **Selections are a reducer.** The Schedule tab's choices live in `useReducer(scheduleSelectionsReducer)` (`lib/scheduleSelections.ts`, pure and tested), keyed by item ID. The merged `scheduleItems` (each song defaulting to version 0) are derived with `useMemo` from `items` and the selections. `chooseOption` and `setCustomText` are stable callbacks.
-- `usePlan()` returns `{ plan, serviceType, items, hymns, scheduleItems, chooseOption, setCustomText }` and throws outside a provider, so only components under `[planId]/` may call it.
+- **Server data stays in props.** It is never copied into `useState`, because `router.refresh()` (and an action's revalidation) re-runs the layout and the fresh `detail` must flow straight through.
+- **Selections are a reducer.** The Schedule tab's choices live in `useReducer(scheduleSelectionsReducer)` (`lib/scheduleSelections.ts`, pure and tested), keyed by item ID. A selection is `{ option: "numbers" | "blank" | "custom"; customText? }`. The merged `scheduleItems` are derived with `useMemo` from `items`, the selections and `catalog` (`mergeScheduleSelections`): a song item with no choice of its own shows Numbers when its song is linked to a catalog song with entries, and Leave blank otherwise. Because the default is derived from `catalog` rather than stored, a song linked from the tab turns to its numbers when the revalidated layout re-renders, and the selections need no exception to the rule above. `chooseOption` and `setCustomText` are stable callbacks.
+- `usePlan()` returns `{ plan, serviceType, items, catalog, suggestions, catalogError, scheduleItems, chooseOption, setCustomText }` and throws outside a provider, so only components under `[planId]/` may call it.
 - The layout keys the provider by `serviceTypeId/planId`, so another plan starts with no selections. Selections survive tab switches, item pages and error retries, but not leaving the plan: Back to the list restores Next's cached page, not provider state.
-- On the Schedule tab, `CustomTextInput` keeps what is typed locally and saves it to the reducer 500 ms after typing pauses, or at once on blur.
+- On the Schedule tab, `CustomTextInput` (`ScheduleChoices.tsx`) keeps what is typed locally and saves it to the reducer 500 ms after typing pauses, or at once on blur.
 
 **URL state** (`app/hooks/useUrlState.ts`, `lib/urlState.ts`). Shareable view state (a filter, sort or page number) lives in the query string.
 
@@ -374,7 +459,7 @@ await pcoMutate(
 1 to 14 are the conventions the routing migration set; 15 and 16 are lessons learned during it; 17 onward come with the song catalog.
 
 1. **Routes.** A route is a folder under `app/(app)/`. `page.tsx` and `layout.tsx` are server components, and client components are for interaction only. Type route props with the generated `PageProps<"/plans/[serviceTypeId]/[planId]">` and `LayoutProps<…>` (available after `next typegen`; route groups are not part of the key; `params` is a Promise).
-2. **Hrefs.** Internal hrefs come only from the builders in `lib/routes.ts`. Each returns a template literal `as const` (`` `/plans/${st}/${id}` as const ``). Annotating the return type as `Route` fails to compile for dynamic paths. `typedRoutes: true` checks every `<Link href>` against the real routes. `NAV_ITEMS`, `PLAN_TABS` and `CATALOG_SECTIONS` live there too, and links out to PCO's web app come from `pcoWebUrls`.
+2. **Hrefs.** Internal hrefs come only from the builders in `lib/routes.ts`. Each returns a template literal `as const` (`` `/plans/${st}/${id}` as const ``). Annotating the return type as `Route` fails to compile for dynamic paths. `typedRoutes: true` checks every `<Link href>` against the real routes. `NAV_ITEMS`, `PLAN_TABS` and `CATALOG_SECTIONS` live there too, and links out to PCO's web app come from `pcoWebUrls`. A builder that takes a query string takes it as options and encodes it with `URLSearchParams` (`catalogFiltered({ linked: "no" })`, `catalogSongNew({ pcoSongId, returnTo })`).
 3. **Data access.** Server pages and layouts get data from `lib/queries/*` and use `parsePcoId` and `orNotFound` from `@/lib/pco`. Nothing fetches `/api/*` from the server: the request passes through the middleware without cookies and is redirected to sign-in. Client components receive data as props or from a provider and never call PCO.
 4. **Types.** Domain types live only in `lib/domain.ts`, and raw PCO shapes only in `lib/pco/resources.ts`. UI state such as `ScheduleSelection` is its own type, never a field of a domain type.
 5. **URL state.** Shareable view state lives in the URL, through `useUrlState` (see State). A component that reads `useSearchParams()` sits under `<Suspense>`.
@@ -385,21 +470,22 @@ await pcoMutate(
 10. **Dates.** A calendar date from PCO is formatted from its `YYYY-MM-DD` part with UTC math (`lib/format.ts`), so the text is the same on the server and in every time zone; the date part of `sort_date` is the org-local date. A true instant such as `computedAt` renders through `<LocalTime iso>`, in the viewer's time zone. It uses `useSyncExternalStore` because React 19 keeps the server's text after a suppressed hydration mismatch.
 11. **No prerendering.** Keep `force-dynamic` on the `(app)` layout, and never call `connection()` inside `lib/pco`.
 12. **Metadata never throws.** `generateMetadata` re-runs on every navigation, refresh and production prefetch, and a throw breaks the page. Keep it cheap and total: use `getPlanLabels()` (cached for 5 minutes, never throws, falls back to "Plan") and look up only keys that passed `parsePcoId`. Catalog pages use `getCatalogSongLabel`, `getCatalogTuneLabel`, `getCatalogBookLabel` and `getCatalogImportRunLabel`, which take the raw param, parse it themselves, and fall back to a generic word when it is invalid, unknown or the read fails.
-13. **Prefetch.** Rows that link to data-heavy routes use `prefetch={false}`. In production `<Link>` prefetches the rows on screen, so 25 rows would each trigger a metadata lookup and PCO calls. All users share one PCO budget, advertised as 100 requests per 20 seconds and lowered by PCO at times. `PlanItemsTable` rows are the exception and prefetch on purpose: an item page reads the plan the `[planId]` layout already fetched, and its metadata only reads labels `getPlanLabels()` has cached. Links to catalog pages may keep the default, since those pages read only the local database and a prefetch costs no PCO request: the songs and tunes lists and a song's cards do, each with a comment saying why. A page whose rows run to the hundreds turns it off anyway (a book's entries), and so do the books and import lists.
+13. **Prefetch.** Rows that link to data-heavy routes use `prefetch={false}`. In production `<Link>` prefetches the rows on screen, so 25 rows would each trigger a metadata lookup and PCO calls. All users share one PCO budget, advertised as 100 requests per 20 seconds and lowered by PCO at times. `PlanItemsTable` rows are the exception and prefetch on purpose: an item page reads the plan the `[planId]` layout already fetched, and its metadata only reads labels `getPlanLabels()` has cached. Links to catalog pages may keep the default, since those pages read only the local database and a prefetch costs no PCO request: the songs and tunes lists and a song's cards do, each with a comment saying why. A page whose rows run to the hundreds turns it off anyway (a book's entries), and so do the books and import lists, and Reconcile's links to the new-song form, which loads every hymn and tune.
 14. **Error retry.** `ErrorState` owns the retry: pass it the boundary's `reset` and it runs `startTransition(() => { router.refresh(); reset(); })`. `reset()` alone re-renders with what the client already has, so a failed server render would not run again. Use `onRetry` for a failure outside a boundary. Client code never calls `notFound()`; it renders an inline `EmptyState`.
 15. **Server actions.**
-    - An action is a public POST endpoint. Call `auth()` and throw without a session, as `refreshUnusedHymns` does; the middleware alone is not enough.
-    - **A module-level cache that an action touches must live on `globalThis`.** A client-imported action is compiled in Next's separate "action-browser" layer, so plain module state gets two instances: Refresh updated one while the page kept serving the other. See `sharedCache()` in `lib/queries/unusedHymns.ts`, whose test loads two copies of the module.
+    - An action is a public POST endpoint. Call `auth()` first and throw without a session; the middleware alone is not enough. Parse every id it is given, in a form field or an argument, with the parser for its kind (convention 19), and answer one that is not with a message, not a throw.
+    - **A module-level cache or connection that an action touches must live on `globalThis`.** A client-imported action is compiled in Next's separate "action-browser" layer, so plain module state gets two instances: an action would change one while the page kept reading the other. `getDb()` (`lib/db/index.ts`), the pacer and the jobs' runs in progress live there, and their tests load two copies of the module.
+    - A form's action returns a `FormState` (`lib/forms.ts`) to `useActionState`, and its submit button is `ui/SubmitButton`: see [Add a server-action form](#add-a-server-action-form). It writes in one `withTransaction`, revalidates every page that shows what it changed (a link: the `/catalog` and `/plans` layouts), then redirects (after creating something) or returns. Call `redirect()` outside any `try`: it works by throwing.
     - **Pending state, and what a navigation waits for.** React runs a form's action (`<form action>`, `useActionState`) inside a transition, as it does anything passed to `startTransition`, and a navigation (a link, Back) waits until that transition ends: with an action slowed to about 3 s, a click in the catalog's section nav took 3.3 s instead of 60 ms. So:
         - A form whose action writes only to the local database takes milliseconds, so it may use `<form action>` and `useActionState`, with `SubmitButton` showing that it is pending. The Import pages' Preview, Apply and Discard do.
-        - An action that waits on Planning Center, or on anything else slow, is called from an event handler, with its pending state in `useState`, never `useTransition`, so a navigation never waits for it. Refresh on Unused Hymns is the model (`UnusedHymnsView`).
+        - An action that waits on Planning Center, or on anything else slow, is called from an event handler, with its pending state in `useState`, never `useTransition`, so a navigation never waits for it. Sync now (Settings and Reconcile) is the model.
     - A failed refresh keeps the previous data: `TtlCache.refresh` replaces the stored value only when the load succeeds.
 16. **Non-ASCII in source.** Write non-ASCII characters in regex character classes and matching or normalization keys as `\u` escapes (`/[\u2018\u2019]/`), in tests too. Literal curly quotes were turned into straight quotes, and `normalizeTitle` silently stopped handling them while the test meant to cover it used straight quotes as well. Literal typographic characters in UI strings (·, ©, …) are fine.
 17. **Database.** Only `getDb()` opens the database (tests use `openTestDb()`), and pages reach it only through `lib/queries/*`. SQL lives in `lib/db/<area>.ts`, in named functions that take `db` first, tested on `:memory:`. A write of more than one statement runs in `withTransaction` with a synchronous function. Migrations are append-only: never edit, reorder or remove a committed one; change the schema with a new migration. Use only the `node:sqlite` API of Node 22.13. See [Database](#database).
 18. **Writes to Planning Center.** Only modules inside `lib/pco/` send a POST, PATCH or DELETE, and only through `pcoMutate` with a body from `jsonApi`. The barrel does not export them, so app code writes through `lib/queries`, which calls `lib/pco/writes.ts` from phase 3. Sync jobs pass `paced: true` on every PCO call; page loads and actions someone is waiting on never do. Never hard-code PCO's rate limits: the pacer learns them from every response. See [Writes to Planning Center](#writes-to-planning-center).
 19. **A parser per ID kind.** Every ID or code that comes from a URL or a form (a route param, a query parameter, a form field) passes through the parser for its kind before it reaches a route builder, a query or an action:
     - `parsePcoId` (`@/lib/pco`) for Planning Center IDs;
-    - `parseCatalogId` (`lib/catalog/ids.ts`) for catalog IDs: songs, tunes, hymns and import runs;
+    - `parseCatalogId` (`lib/catalog/ids.ts`) for catalog IDs: songs, tunes, hymns, books (by id, in a form) and import runs;
     - `parseBookCode` (`lib/catalog/ids.ts`) for book codes.
 
     Each returns the checked value or null, so a page writes `parseCatalogId(params.songId) ?? notFound()` and an action answers null with a message. Never pass an unparsed value to a builder or a query: builders interpolate without encoding, and queries trust the keys they are given. A new kind of ID gets its own parser, with tests, beside these.
@@ -497,6 +583,69 @@ Example: a Hymns section, with a list at `/catalog/hymns` and a page per hymn at
 5. **Components** go in `app/components/Catalog/Hymns/`. Display stays in server components (cards built on `CatalogCard`, labels shown with `EntryLabels`), and client components are only for interaction. List rows are stretched links (see [Why the boundaries sit where they do](#why-the-boundaries-sit-where-they-do)). Links to catalog pages may keep the default prefetch, with a comment saying why (convention 13).
 6. **Check** the tests and the four gates (every new route is ƒ), then, in the browser, the list's URL state through Back and forward, the 404s for `/catalog/hymns/abc` and `/catalog/hymns/999999`, dark mode and 320 px.
 
+### Add a server-action form
+
+Example: the new-song form at `/catalog/songs/new` (`SongForm`, `createSongAction`), the model for the catalog's forms. The action is a server action the form passes to `useActionState`, and every decision lives in `lib/` with tests.
+
+1. **Fields and validation** (pure), beside the area's other modules, as `lib/catalog/validation.ts` is: the field names (`NEW_SONG_FIELDS`), the parts that show one error each (`NewSongPart`), the typed input the form describes, and a validator that reads the `FormData` with the readers of `lib/forms.ts` and returns `{ ok: true, input }` or `{ ok: false, fieldErrors }`, with every part's problem at once. It checks only what needs no database. Test it with a `FormData` built in the test.
+
+   ```ts
+   const title = cleanText(readString(formData, "hymnTitle")); // trimmed text, "" when missing
+   const number = readOptionalPositiveInteger(formData, "number", { max: ENTRY_NUMBER_MAX });
+   // { ok: true, value: null } when blank, { ok: false } when it is not a whole number
+   const hymnId = readId(formData, "hymnId", parseCatalogId); // an id, through its parser
+   ```
+
+2. **The write** (`lib/db/<area>.ts`, tested on `openTestDb()`): one function that takes `db` and the typed input and does everything in one `withTransaction`. It collects the problems the database's rules raise before it writes (a name or a number taken), each with the part of the form it is about and the row it clashes with, and returns them as a value. A refusal found after writing (a link refused) is thrown inside the transaction, so it rolls back, and caught outside it (`createCatalogSong`).
+3. **The query** (`lib/queries/<area>.ts`): what the page shows, with the form's first values (`getNewSongFormData`), and the write, after any Planning Center read it needs (`createSong` mirrors the song to link first). Test it with only `getDb` mocked.
+4. **The action** (`app/(app)/…/actions.ts`, `"use server"`):
+
+   ```ts
+   export async function createSongAction(
+       _state: NewSongFormState, // FormState<NewSongPart | "link">
+       formData: FormData
+   ): Promise<NewSongFormState> {
+       await requireSession(); // auth(), and throw without a session
+       const values = readValues(formData, NEW_SONG_FIELDS);
+       const checked = validateNewSong(formData, getNewSongBooks());
+       if (!checked.ok) {
+           return formError(FIX_FIELDS_MESSAGE, { fieldErrors: checked.fieldErrors, values });
+       }
+       let result: CreateSongResult;
+       try {
+           result = await createSong({ ...checked.input, pcoSongId });
+       } catch (error) {
+           console.error("Failed to add a catalog song:", error);
+           return formError(FORM_FAILURE_MESSAGE, { values });
+       }
+       if (!result.ok) {
+           return formError(FIX_FIELDS_MESSAGE, { fieldErrors: problemErrors(result), values });
+       }
+       revalidatePath(routes.catalog(), "layout");
+       redirect(routes.catalogSong(result.songId)); // outside the try: redirect() throws
+   }
+   ```
+
+   A field error may link to what it clashes with, an href built by `lib/routes.ts` (`{ message, link: { href: routes.catalogSong(id), label } }`). A hidden id from the page goes through its parser like any other, and a path to go back to through `safeCallbackUrl` (`returnTo`). An action that creates nothing returns `formSuccess(message)` instead of redirecting.
+5. **The form** (`app/components/<Area>/`, a client component):
+
+   ```tsx
+   const [state, formAction] = useActionState(createSongAction, IDLE_FORM);
+   return (
+       <form action={formAction}>
+           {state.status === "error" && <p role="alert">{state.message}</p>}
+           {/* the fields; under each part: */}
+           <FieldErrorText id="hymn-error" error={fieldErrorOf(state, "hymn")} />
+           <SubmitButton pendingLabel="Adding the song…">Add song</SubmitButton>
+       </form>
+   );
+   ```
+
+   A field with an error gets `aria-invalid` and `aria-describedby` naming its error. **React resets a form after every action**, refused or not: each field goes back to its default value. Keep text fields controlled (React keeps a controlled field's default in step with its value), or give uncontrolled ones `defaultValue` from `state.values`. React does not do that for radio buttons or a `<select>`, so choose modes and books with buttons (`ui/Segmented`) and post them, and chosen ids, in hidden inputs, which a reset leaves alone. A part that shows and hides keeps what was typed in the form's state, not in the fields.
+6. **Rows that act, then leave** (Reconcile): a small form per button with the row's hidden ids, sharing the row's `useActionState`, each with its own `SubmitButton` (`variant="secondary"` for the quieter one). A row that leaves the list on success hands focus on and says what was done (`useRowNotice`); a client component that outlives its content's swap does the same (`PcoLinkCard`).
+7. **Tests** of the action mock `@/auth`, `next/cache`, `next/navigation` (with a `redirect` that throws, as the real one does) and the query module: no session throws before anything is read; ids that are not ids, field errors and refusals come back as states with what was posted; a failure is logged and gives `FORM_FAILURE_MESSAGE`; success revalidates and redirects. See `app/(app)/catalog/songs/new/actions.test.ts`.
+8. **Check** in the browser that a refusal shows above the form and on its part, keeps what was typed and leaves focus on the button, that success lands where it should, and the form in dark mode and at 320 px.
+
 ### Add a plan tab
 
 Example: a Notes tab at `…/{planId}/notes`.
@@ -566,7 +715,7 @@ Example: a team list for a service type.
 ## Testing
 
 - **No jsdom: keep logic in `lib/`.** `npm test` runs `vitest run` over `**/*.test.ts` in a `node` environment (`.claude/**` is excluded: agent worktrees hold full repo copies). There are no component tests and no E2E harness, so anything worth testing is a pure function in `lib/`, and components stay thin and are checked in the browser.
-- **Characterization tests.** Before moving or changing logic, pin what it does today, quirks included (a copyright that already starts with © gets a second ©). Move the logic with the tests green, then change behavior in its own commit, which flips exactly the assertions it changes. See `lib/copyright.test.ts`, `lib/serviceSchedule.test.ts` and `lib/hymnMatch.test.ts`.
+- **Characterization tests.** Before moving or changing logic, pin what it does today, quirks included (a copyright that already starts with © gets a second ©). Move the logic with the tests green, then change behavior in its own commit, which flips exactly the assertions it changes. See `lib/copyright.test.ts`, `lib/serviceSchedule.test.ts` and `lib/scheduleSelections.test.ts`.
 - **The stubbed-fetch pattern** (`lib/pco/testing.ts`).
   - Call `stubPcoCredentials()` in `beforeEach`, and in `afterEach` call `vi.restoreAllMocks()`, `vi.unstubAllGlobals()` and `vi.unstubAllEnvs()`.
   - `stubFetchRoutes({ [url]: body })` replaces global `fetch` with a table of full URLs, and a URL missing from the table fails the test. Each call returns a **fresh** `Response` (`json(body)`), because a body can be read only once.
@@ -587,3 +736,4 @@ Example: a team list for a service type.
 
   `typecheck` clears `.next/types` first because `next typegen` never deletes the types of removed or renamed routes, and those leftovers fail `tsc`. `next build` and `typecheck` both write `.next/`, so do not run them at the same time in one tree. In a nested git worktree (`.claude/worktrees/*`), `npm run lint` picks up the parent `.eslintrc`; lint with `ESLINT_USE_FLAT_CONFIG=false npx eslint --no-eslintrc -c .eslintrc.json --ext .js,.jsx,.ts,.tsx app lib`. CI runs `npm test` before it builds and deploys.
 - **Browser check.** Check UI changes with `npm run dev` while signed in (Google sign-in cannot be automated). Prefetch behavior shows only in a production build: `npm run build && npm start`.
+- **Signed-in pages without Google.** Run the app with its own `.env.local`: a throwaway `AUTH_SECRET`, an allowed address, and `DATABASE_PATH` and `DATABASE_BACKUP_DIR` in a scratch folder. Mint a session cookie with `encode` from `@auth/core/jwt` (`salt` is the cookie's name, `authjs.session-token` over http) and give it to the browser. Fake Planning Center with a script loaded through `NODE_OPTIONS=--require` that replaces `fetch` for `https://api.planningcenteronline.com/` and leaves every other URL alone, so the pages and the song sync read canned data.
