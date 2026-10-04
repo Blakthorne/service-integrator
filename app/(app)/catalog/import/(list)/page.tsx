@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import ImportNotice from "@/app/components/Catalog/Import/ImportNotice";
 import ImportRunsList from "@/app/components/Catalog/Import/ImportRunsList";
-import { countOf } from "@/lib/catalog/importText";
+import { countOf } from "@/lib/catalog/counts";
 import PreviewSeedForm from "@/app/components/Catalog/Import/PreviewSeedForm";
 import PageHeader from "@/app/components/ui/PageHeader";
 import { getCatalogCounts } from "@/lib/queries/catalog";

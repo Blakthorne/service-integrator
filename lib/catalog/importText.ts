@@ -8,6 +8,7 @@ import type {
     SeedSongWithoutTune,
     SeedSplitPair,
 } from "@/lib/domain";
+import { countOf } from "./counts";
 
 /**
  * The words the import pages use, as pure helpers shared by their server and
@@ -85,20 +86,6 @@ export const SKIP_REASONS: Record<SeedSkippedEntry["reason"], string> = {
     "number-taken": "Another record has this number",
     "song-already-in-book": "The song already has an entry in this book with the same note",
 };
-
-/** 1247 → "1,247": the same text on the server and in every browser. */
-export function formatCount(count: number): string {
-    return count.toLocaleString("en-US");
-}
-
-/** "1 book", "921 songs", "1,247 entries" (pass the plural when it is not "-s"). */
-export function countOf(
-    count: number,
-    singular: string,
-    plural: string = `${singular}s`
-): string {
-    return `${formatCount(count)} ${count === 1 ? singular : plural}`;
-}
 
 /** "a", "a and b", "a, b and c". */
 function joinWithAnd(items: string[]): string {

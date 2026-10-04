@@ -5,7 +5,7 @@ import SongsTable from "@/app/components/Catalog/Songs/SongsTable";
 import TuneDetailsCard from "@/app/components/Catalog/Tunes/TuneDetailsCard";
 import PageHeader from "@/app/components/ui/PageHeader";
 import { parseCatalogId } from "@/lib/catalog/ids";
-import { formatCountOf } from "@/lib/catalog/summary";
+import { countOf } from "@/lib/catalog/counts";
 import { getCatalogTune, getCatalogTuneLabel } from "@/lib/queries/catalog";
 import { routes } from "@/lib/routes";
 
@@ -50,10 +50,7 @@ export default async function CatalogTunePage({ params }: CatalogTunePageProps) 
                     headingId="songs-heading"
                     action={
                         <span className="text-sm text-gray-500 dark:text-gray-400">
-                            {formatCountOf(tune.songs.length, {
-                                one: "song",
-                                other: "songs",
-                            })}
+                            {countOf(tune.songs.length, "song")}
                         </span>
                     }
                     flush

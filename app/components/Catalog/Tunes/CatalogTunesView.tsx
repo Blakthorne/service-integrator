@@ -3,7 +3,7 @@
 import { useMemo, useRef } from "react";
 import Pagination from "@/app/components/ui/Pagination";
 import { useUrlState } from "@/app/hooks/useUrlState";
-import { formatMatchCount } from "@/lib/catalog/summary";
+import { formatMatchCount } from "@/lib/catalog/counts";
 import {
     parseCatalogTunesQuery,
     selectCatalogTunes,
@@ -11,8 +11,6 @@ import {
 } from "@/lib/catalog/tuneFilter";
 import SearchBox from "../SearchBox";
 import TunesTable from "./TunesTable";
-
-const TUNE = { one: "tune", other: "tunes" };
 
 interface CatalogTunesViewProps {
     /** Every tune, by name. */
@@ -63,7 +61,7 @@ export default function CatalogTunesView({ tunes }: CatalogTunesViewProps) {
                     aria-live="polite"
                     className="border-t border-gray-100 dark:border-gray-700 pt-3 text-sm font-medium text-gray-900 dark:text-gray-100"
                 >
-                    {formatMatchCount(shown.total, tunes.length, TUNE)}
+                    {formatMatchCount(shown.total, tunes.length, "tune")}
                 </p>
             </div>
             <div

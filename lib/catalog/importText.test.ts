@@ -1,9 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
-    countOf,
     describePlanned,
     describeSplitPairTunes,
-    formatCount,
     importRunLabel,
     NO_TUNE_REASONS,
     SPLIT_PAIR_LABELS,
@@ -12,28 +10,6 @@ import {
 describe("importRunLabel", () => {
     test("names the kind and the id", () => {
         expect(importRunLabel({ id: 3, kind: "hymns-json" })).toBe("Seed import 3");
-    });
-});
-
-describe("formatCount", () => {
-    test("groups thousands the same way everywhere", () => {
-        expect(formatCount(0)).toBe("0");
-        expect(formatCount(921)).toBe("921");
-        expect(formatCount(1247)).toBe("1,247");
-        expect(formatCount(1234567)).toBe("1,234,567");
-    });
-});
-
-describe("countOf", () => {
-    test("is singular for one only", () => {
-        expect(countOf(1, "song")).toBe("1 song");
-        expect(countOf(0, "song")).toBe("0 songs");
-        expect(countOf(921, "song")).toBe("921 songs");
-    });
-
-    test("takes the plural it is given, and groups thousands", () => {
-        expect(countOf(1, "entry", "entries")).toBe("1 entry");
-        expect(countOf(1247, "entry", "entries")).toBe("1,247 entries");
     });
 });
 

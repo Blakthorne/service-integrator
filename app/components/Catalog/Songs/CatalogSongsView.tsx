@@ -8,15 +8,13 @@ import {
     selectCatalogSongs,
     type CatalogSort,
 } from "@/lib/catalog/filter";
-import { formatMatchCount } from "@/lib/catalog/summary";
+import { formatMatchCount } from "@/lib/catalog/counts";
 import type { CatalogSongSummary } from "@/lib/domain";
 import CatalogSongsControls, {
     ALL_BOOKS,
     type CatalogBookOption,
 } from "./CatalogSongsControls";
 import SongsTable from "./SongsTable";
-
-const SONG = { one: "song", other: "songs" };
 
 interface CatalogSongsViewProps {
     /** Every song, by title (`getCatalogSongs`). */
@@ -79,7 +77,7 @@ export default function CatalogSongsView({ songs, books }: CatalogSongsViewProps
                 book={book ?? ALL_BOOKS}
                 sort={sort}
                 books={books}
-                summary={formatMatchCount(shown.total, songs.length, SONG)}
+                summary={formatMatchCount(shown.total, songs.length, "song")}
                 onQueryChange={handleQueryChange}
                 onBookChange={handleBookChange}
                 onSortChange={handleSortChange}

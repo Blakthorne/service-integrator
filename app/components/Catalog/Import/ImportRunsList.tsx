@@ -4,7 +4,8 @@ import LocalTime from "@/app/components/ui/LocalTime";
 import type { ImportRunSummary } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import ImportStatusBadge from "./ImportStatusBadge";
-import { countOf, importRunLabel, PLANNED_VERBS } from "@/lib/catalog/importText";
+import { countOf } from "@/lib/catalog/counts";
+import { importRunLabel, PLANNED_VERBS } from "@/lib/catalog/importText";
 
 interface ImportRunsListProps {
     /** Every run, newest first. */

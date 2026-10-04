@@ -8,10 +8,9 @@ import type {
     SeedSplitPair,
     SeedVariant,
 } from "@/lib/domain";
+import { countOf, formatCount } from "@/lib/catalog/counts";
 import {
-    countOf,
     describeSplitPairTunes,
-    formatCount,
     MERGE_KINDS,
     NO_TUNE_REASONS,
     SKIP_REASONS,
