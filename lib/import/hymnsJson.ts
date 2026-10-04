@@ -10,8 +10,9 @@ import type {
     SeedSplitPair,
     SeedVariant,
 } from "@/lib/domain";
+import { levenshtein } from "@/lib/fuzzy";
 import { normalizeTitle } from "@/lib/normalizeTitle";
-import { levenshtein, type RawHymn } from "@/lib/unusedHymns";
+import type { RawHymn } from "@/lib/unusedHymns";
 import type {
     PlannedAlias,
     PlannedBook,
