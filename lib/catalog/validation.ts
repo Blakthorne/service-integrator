@@ -1055,3 +1055,57 @@ export function validateBookMove(
         ({ book, direction }) => ({ bookId: book, direction })
     );
 }
+
+// A book's CSV file -------------------------------------------------------------
+
+/** The largest CSV file a book import takes: 1 MB, ample for a hymnal of thousands of songs. */
+export const BOOK_CSV_MAX_BYTES = 1024 * 1024;
+
+/** The longest file name an import run keeps. */
+export const SOURCE_NAME_MAX_LENGTH = 200;
+
+/** The fields the Import a book from CSV form posts: the book, and the file. */
+export const BOOK_CSV_FIELDS = ["bookId", "file"] as const;
+
+/** The parts of the CSV upload form, each of which shows at most one error. */
+export type BookCsvPart = "book" | "file";
+
+/** A CSV file to preview for a book, as the form posts it. */
+export interface BookCsvUploadInput {
+    bookId: number;
+    /** The file as the browser sent it; the action reads its text. */
+    file: File;
+    /** Its name, cleaned and shortened, or "upload.csv" for none. */
+    sourceName: string;
+}
+
+/** A file's name as an import run keeps it: cleaned, at most `SOURCE_NAME_MAX_LENGTH` characters, "upload.csv" for none. */
+export function cleanSourceName(name: string): string {
+    return cleanText(name).slice(0, SOURCE_NAME_MAX_LENGTH) || "upload.csv";
+}
+
+/**
+ * Read the Import a book from CSV form: the book's id, and a file that is
+ * not empty and at most `BOOK_CSV_MAX_BYTES` long. Whether its text is CSV
+ * that fits the book is for the preview's report to say.
+ */
+export function validateBookCsvUpload(formData: FormData): FormCheck<BookCsvUploadInput, BookCsvPart> {
+    const file = formData.get("file");
+    let read: PartRead<File>;
+    if (!(file instanceof File) || (file.size === 0 && file.name === "")) {
+        read = { ok: false, message: "Choose a CSV file." };
+    } else if (file.size === 0) {
+        read = { ok: false, message: `${cleanSourceName(file.name)} is empty.` };
+    } else if (file.size > BOOK_CSV_MAX_BYTES) {
+        read = { ok: false, message: "The file is larger than 1 MB. A book's CSV file is much smaller: is it the right file?" };
+    } else {
+        read = { ok: true, value: file };
+    }
+    return checkParts(
+        {
+            book: readCatalogId(formData, "bookId", "Choose the book to import into."),
+            file: read,
+        },
+        ({ book, file }) => ({ bookId: book, file, sourceName: cleanSourceName(file.name) })
+    );
+}

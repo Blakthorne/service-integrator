@@ -10,6 +10,7 @@ import {
 describe("importRunLabel", () => {
     test("names the kind and the id", () => {
         expect(importRunLabel({ id: 3, kind: "hymns-json" })).toBe("Seed import 3");
+        expect(importRunLabel({ id: 4, kind: "csv" })).toBe("CSV import 4");
     });
 });
 

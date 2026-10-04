@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { countCatalog } from "@/lib/db/catalog";
-import { openTestDb, seedImportRun } from "@/lib/db/testing";
+import { countCatalog, findBook } from "@/lib/db/catalog";
+import { openTestDb, seedBook, seedEntry, seedImportRun, seedSong } from "@/lib/db/testing";
 
 // vi.hoisted: vi.mock factories run before the module's own declarations.
 const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
@@ -16,6 +16,7 @@ import {
     getCatalogImportRun,
     getCatalogImportRunLabel,
     getCatalogImportRuns,
+    previewBookCsvImport,
     previewSeedImport,
 } from "./catalogImport";
 
@@ -59,7 +60,7 @@ describe("the seed import, end to end", () => {
         const review = getCatalogImportRun(first);
         expect(review?.applyRefusal).toBeNull();
         expect(review?.run.report.planned).toEqual(SEED_COUNTS);
-        expect(review?.run.report.splitPairs).toHaveLength(3);
+        expect(review?.run.kind === "hymns-json" && review.run.report.splitPairs).toHaveLength(3);
         expect(countCatalog(db).books).toBe(0);
 
         expect(applyCatalogImport(first)).toEqual({ ok: true, counts: SEED_COUNTS });
@@ -154,5 +155,88 @@ describe("getCatalogImportRunLabel", () => {
         });
         expect(getCatalogImportRunLabel("1")).toBe("Import run");
         expect(console.error).toHaveBeenCalledOnce();
+    });
+});
+
+describe("a book's CSV file, end to end", () => {
+    const AT = new Date("2026-10-04T12:00:00.000Z");
+
+    test("previews the file as a run, lists it beside the seed's, applies it once", () => {
+        const seedRun = seedImportRun(db, { status: "applied" });
+        const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns" });
+        const result = previewBookCsvImport(
+            { bookId: rejoice, sourceName: "  rejoice   hymns.csv ", text: "number,title,tune\n400,Be Thou My Vision,SLANE\n" },
+            AT
+        );
+        expect(result).toEqual({ ok: true, runId: expect.any(Number) });
+        const runId = result.ok ? result.runId : 0;
+
+        expect(getCatalogImportRuns().map(({ id, kind, status, sourceName }) => [id, kind, status, sourceName])).toEqual([
+            [runId, "csv", "preview", "rejoice hymns.csv"],
+            [seedRun, "hymns-json", "applied", "hymns.json"],
+        ]);
+        const review = getCatalogImportRun(runId);
+        expect(review).toMatchObject({ run: { kind: "csv", bookId: rejoice }, applyRefusal: null });
+        expect(review?.run.kind === "csv" && review.run.report.rows.map(({ label, outcome }) => [label, outcome])).toEqual([
+            ["R-400", "add"],
+        ]);
+        expect(getCatalogImportRunLabel(String(runId))).toBe(`CSV import ${runId}`);
+
+        expect(applyCatalogImport(runId)).toEqual({
+            ok: true,
+            counts: {
+                books: 0,
+                hymns: 1,
+                hymnAliases: 0,
+                tunes: 1,
+                tuneAliases: 0,
+                songs: 1,
+                songsWithoutTune: 0,
+                entries: 1,
+            },
+        });
+        expect(findBook(db, "R")?.entries.map(({ label, title }) => [label, title])).toEqual([["R-400", "Be Thou My Vision"]]);
+        expect(applyCatalogImport(runId)).toMatchObject({ ok: false, reason: "not-preview" });
+    });
+
+    test("stores a file with problems, whose review says why Apply is refused, and discards it", () => {
+        const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns" });
+        seedEntry(db, { bookId: rejoice, songId: seedSong(db), number: 400 });
+        const result = previewBookCsvImport({ bookId: rejoice, sourceName: "r.csv", text: "number,title\n400,A\n400,B\n" });
+        const runId = result.ok ? result.runId : 0;
+        const review = getCatalogImportRun(runId);
+        expect(review?.run.kind === "csv" && review.run.report.problems.map(({ reason }) => reason)).toEqual([
+            "number-duplicated",
+        ]);
+        expect(review?.applyRefusal).toEqual({
+            reason: "has-problems",
+            message: "The file has problems that block the import. Fix them in the file, then preview it again.",
+        });
+        expect(applyCatalogImport(runId)).toMatchObject({ ok: false, reason: "has-problems" });
+        expect(discardCatalogImport(runId)).toEqual({ ok: true });
+        expect(findBook(db, "R")?.entries).toHaveLength(1);
+    });
+
+    test("refuses, storing nothing, a file over 1 MB and a book that is not in the catalog", () => {
+        const rejoice = seedBook(db, { code: "R" });
+        const big = `number,title\n${"1,A\n".repeat(270_000)}`;
+        expect(previewBookCsvImport({ bookId: rejoice, sourceName: "big.csv", text: big })).toEqual({
+            ok: false,
+            reason: "too-large",
+            message: "The file is larger than 1 MB. A book's CSV file is much smaller: is it the right file?",
+        });
+        // 1 MB counts bytes of UTF-8: a character outside ASCII counts for two or more.
+        const wide = `number,title\n1,${"\u00e9".repeat(530_000)}\n`;
+        expect(wide.length).toBeLessThan(1024 * 1024);
+        expect(previewBookCsvImport({ bookId: rejoice, sourceName: "wide.csv", text: wide })).toMatchObject({
+            ok: false,
+            reason: "too-large",
+        });
+        expect(previewBookCsvImport({ bookId: 999, sourceName: "x.csv", text: "number,title\n1,A\n" })).toEqual({
+            ok: false,
+            reason: "book-not-found",
+            message: "That book is not in the catalog. Choose one from the list.",
+        });
+        expect(getCatalogImportRuns()).toEqual([]);
     });
 });

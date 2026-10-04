@@ -332,8 +332,8 @@ export interface CatalogCounts {
     entries: number;
 }
 
-/** What an import reads: the seed file (more kinds join with later imports). */
-export type ImportRunKind = "hymns-json";
+/** What an import reads: the seed file ("hymns-json"), or one book's CSV file ("csv"). */
+export type ImportRunKind = "hymns-json" | "csv";
 
 /** A run is previewed, then applied or discarded, once. */
 export type ImportRunStatus = "preview" | "applied" | "discarded";
@@ -353,10 +353,10 @@ export interface ImportRunSummary {
     planned: ImportCounts;
 }
 
-/** An import run with its report, for its review page. */
-export interface ImportRunDetail extends ImportRunSummary {
-    report: SeedImportReport;
-}
+/** An import run with its report, for its review page: the seed's, or a book's CSV file's. */
+export type ImportRunDetail =
+    | (ImportRunSummary & { kind: "hymns-json"; report: SeedImportReport })
+    | (ImportRunSummary & { kind: "csv"; report: BookCsvReport });
 
 /** How many rows of each kind an import adds, or added. */
 export interface ImportCounts {
@@ -474,6 +474,112 @@ export interface SeedImportReport {
     songsWithoutTune: SeedSongWithoutTune[];
     possibleDuplicates: SeedPossibleDuplicate[];
     skippedEntries: SeedSkippedEntry[];
+}
+
+/**
+ * Why a book's CSV file cannot be imported as it is. Each one blocks the
+ * import until the file is fixed and previewed again.
+ */
+export type BookCsvProblemReason =
+    /** The file is not CSV that can be read (see `parseCsv`). */
+    | "malformed"
+    /** The file has no header, or no rows below it. */
+    | "empty"
+    /** The header does not name the book's columns: number (or position), title, tune, variant. */
+    | "header"
+    /** A row has more fields than the header names. */
+    | "extra-fields"
+    /** A row has no title, or none with letters or digits. */
+    | "blank-title"
+    /** A title, tune or variant note is longer than the catalog takes. */
+    | "too-long"
+    /** A row of a numbered book has no number, or one that is not a whole number from 1 to 99,999. */
+    | "bad-number"
+    /** A row of a book without numbers has no position, or one that is not a whole number from 1 to 99,999. */
+    | "bad-position"
+    /** One number is on several rows. */
+    | "number-duplicated"
+    /** One position is on several rows. */
+    | "position-duplicated"
+    /** The book already has the number, for another song (or another variant of the song). */
+    | "number-taken"
+    /** The rows, or the rows and the book, would put one song in the book twice with the same variant note, or none. */
+    | "song-twice";
+
+/** What a book's CSV file does that needs a look, but does not block the import. */
+export type BookCsvWarningReason =
+    /** The title is several hymns' title: the row goes with one of them. */
+    | "ambiguous-hymn"
+    /** The tune name is several tunes' name: the row goes with one of them. */
+    | "ambiguous-tune"
+    /** The book already has the row's entry, so the row is left out. */
+    | "already-in-book"
+    /** A book without numbers: the rows go after its entries, in the order of their positions. */
+    | "positions";
+
+/** A problem or warning of a book's CSV file, with the lines it is on. */
+export interface BookCsvIssue<R extends string> {
+    reason: R;
+    /** The line it is on (the header is line 1); null when it is about the whole file. */
+    line: number | null;
+    /** Every line it is about, such as each row with the same number; empty when it is about the whole file. */
+    lines: number[];
+    message: string;
+}
+
+export type BookCsvProblem = BookCsvIssue<BookCsvProblemReason>;
+
+export type BookCsvWarning = BookCsvIssue<BookCsvWarningReason>;
+
+/**
+ * How a row's hymn or tune matched the catalog: one it has ("existing", by
+ * its own name or by another), a new one, or none (a row with no tune).
+ */
+export type BookCsvMatch =
+    | { kind: "existing"; id: number; name: string; by: "name" | "alias" }
+    | { kind: "new" }
+    | { kind: "none" };
+
+/** A row of a book's CSV file, as the preview shows it. */
+export interface BookCsvRow {
+    line: number;
+    /** The number it gives (a numbered book); null for none that reads, or in a book without numbers. */
+    number: number | null;
+    /** The position it gives (a book without numbers); null for none that reads, or in a numbered book. */
+    position: number | null;
+    /** Its entry's label, "R-12" or an unnumbered book's short name; null when its number does not read. */
+    label: string | null;
+    /** Its title, tune and variant note, as typed, with spaces cleaned; null for a tune or note left blank. */
+    title: string;
+    tune: string | null;
+    variantNote: string | null;
+    hymn: BookCsvMatch;
+    tuneMatch: BookCsvMatch;
+    /** Whether its song (hymn to tune) is the catalog's already, or new; null when the row cannot be matched. */
+    song: "existing" | "new" | null;
+    /** What applying the import does with it: adds its entry, leaves it out (already in the book), or cannot (a problem). */
+    outcome: "add" | "skip" | "blocked";
+}
+
+/** The review of a book's CSV file: what it read, what it adds, what blocks it and what needs a look. */
+export interface BookCsvReport {
+    /** The book it imports into, as it was at the preview. */
+    book: { id: number; code: string; name: string; numbered: boolean };
+    input: {
+        /** Rows below the header, blank ones included. */
+        rows: number;
+        /** Rows with nothing in them, which are left out. */
+        blankRows: number;
+        /** The header's columns, as the file names them. */
+        columns: string[];
+    };
+    /** The rows applying it adds (never a book or an alias). */
+    planned: ImportCounts;
+    /** What blocks the import; none when it can be applied. */
+    problems: BookCsvProblem[];
+    warnings: BookCsvWarning[];
+    /** Each row that is not blank, in file order. */
+    rows: BookCsvRow[];
 }
 
 // ---------------------------------------------------------------------------

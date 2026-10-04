@@ -1,6 +1,7 @@
 import "server-only";
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
 import type {
+    BookCsvReport,
     ImportCounts,
     ImportRunDetail,
     ImportRunKind,
@@ -8,14 +9,16 @@ import type {
     ImportRunSummary,
     SeedImportReport,
 } from "@/lib/domain";
+import type { StoredBookCsvRows } from "@/lib/import/bookCsv";
 import type { PlannedCatalogRows } from "@/lib/import/rows";
 
 /**
- * The kinds of import, as stored in `import_runs.kind`. They are checked
- * here rather than by a CHECK in the schema, so a new kind needs no
- * migration; readers skip runs of a kind this build does not know.
+ * The kinds of import, as stored in `import_runs.kind`: the seed from
+ * hymns.json, and a book's CSV file. They are checked here rather than by a
+ * CHECK in the schema, so a new kind needs no migration; readers skip runs
+ * of a kind this build does not know.
  */
-export const IMPORT_RUN_KINDS: readonly ImportRunKind[] = ["hymns-json"];
+export const IMPORT_RUN_KINDS: readonly ImportRunKind[] = ["hymns-json", "csv"];
 
 /** The statuses of a run: previewed, then applied or discarded, once. */
 export const IMPORT_RUN_STATUSES: readonly ImportRunStatus[] = [
@@ -24,8 +27,11 @@ export const IMPORT_RUN_STATUSES: readonly ImportRunStatus[] = [
     "discarded",
 ];
 
-/** What a run of each kind is called, as in "Seed import 3". */
-const KIND_NAMES: Record<ImportRunKind, string> = { "hymns-json": "Seed import" };
+/** What a run of each kind is called, as in "Seed import 3" or "CSV import 4". */
+const KIND_NAMES: Record<ImportRunKind, string> = {
+    "hymns-json": "Seed import",
+    csv: "CSV import",
+};
 
 export function isImportRunKind(value: unknown): value is ImportRunKind {
     return (IMPORT_RUN_KINDS as readonly unknown[]).includes(value);
@@ -39,8 +45,15 @@ function isStatus(value: unknown): value is ImportRunStatus {
 export type ImportRunErrorReason =
     | "not-found"
     | "not-preview"
+    /** The seed: the catalog has books, so it has run already. */
     | "catalog-not-empty"
-    | "invalid-rows";
+    | "invalid-rows"
+    /** A book's file: its report has problems that block it. */
+    | "has-problems"
+    /** A book's file: the book it imports into is gone, or no longer numbers (or no longer has no numbers). */
+    | "book-not-found"
+    /** A book's file: the catalog has changed since the preview, so it would not add what the preview showed. */
+    | "stale";
 
 const REASON_MESSAGES: Record<ImportRunErrorReason, string> = {
     "not-found": "There is no such import run.",
@@ -49,6 +62,11 @@ const REASON_MESSAGES: Record<ImportRunErrorReason, string> = {
         "The catalog already has books, so the seed import cannot run again.",
     "invalid-rows":
         "The import run's planned rows are damaged. Discard it and preview again.",
+    "has-problems":
+        "The file has problems that block the import. Fix them in the file, then preview it again.",
+    "book-not-found":
+        "The book this file was previewed for is not in the catalog as it was. Preview the file again.",
+    stale: "The catalog has changed since this preview, so it would not add what the report shows. Preview the file again.",
 };
 
 /**
@@ -65,16 +83,29 @@ export class ImportRunError extends Error {
     }
 }
 
-/** What a preview stores. */
-export interface NewImportRun {
-    kind: ImportRunKind;
-    /** What it read, such as "hymns.json". */
-    sourceName: string;
-    /** The book it imports into; null for the seed. */
-    bookId?: number | null;
-    report: SeedImportReport;
-    rows: PlannedCatalogRows;
-}
+/**
+ * What a preview stores: the seed's report and planned rows, or a book
+ * file's report and what applying it plans again from (its records and
+ * plan), with the book.
+ */
+export type NewImportRun =
+    | {
+          kind: "hymns-json";
+          /** What it read: "hymns.json". */
+          sourceName: string;
+          bookId?: null;
+          report: SeedImportReport;
+          rows: PlannedCatalogRows;
+      }
+    | {
+          kind: "csv";
+          /** The file's name, as uploaded. */
+          sourceName: string;
+          /** The book it imports into. */
+          bookId: number;
+          report: BookCsvReport;
+          rows: StoredBookCsvRows;
+      };
 
 /** Store a previewed import, at `at`. Returns its id. */
 export function createImportRun(
@@ -154,7 +185,10 @@ export function listImportRuns(db: DatabaseSync): ImportRunSummary[] {
         .flatMap((row) => toSummary(row) ?? []);
 }
 
-/** One run with its report, or null when there is none (or it is of a kind this build does not know). */
+/**
+ * One run with its report, the seed's or a book file's by its kind, or null
+ * when there is none (or it is of a kind this build does not know).
+ */
 export function findImportRun(db: DatabaseSync, id: number): ImportRunDetail | null {
     const row = db
         .prepare(`SELECT ${SUMMARY_COLUMNS}, report FROM import_runs WHERE id = ?`)
@@ -163,7 +197,10 @@ export function findImportRun(db: DatabaseSync, id: number): ImportRunDetail | n
     if (!row || !summary) {
         return null;
     }
-    return { ...summary, report: JSON.parse(String(row.report)) as SeedImportReport };
+    const report: unknown = JSON.parse(String(row.report));
+    return summary.kind === "csv"
+        ? { ...summary, kind: "csv", report: report as BookCsvReport }
+        : { ...summary, kind: "hymns-json", report: report as SeedImportReport };
 }
 
 /** A run's page title, such as "Seed import 3", or null when there is no such run (of a kind this build knows). */

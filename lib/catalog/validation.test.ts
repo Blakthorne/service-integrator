@@ -8,8 +8,11 @@ import {
     cleanText,
     draftFromPcoTitle,
     previewEntryLabel,
+    BOOK_CSV_MAX_BYTES,
+    cleanSourceName,
     defaultLabelFormat,
     labelFormatProblem,
+    validateBookCsvUpload,
     validateBookEdit,
     validateBookMove,
     validateEntryDelete,
@@ -755,5 +758,54 @@ describe("the book forms", () => {
             ok: false,
             fieldErrors: { book: { message: "That book is not in the catalog." } },
         });
+    });
+});
+
+describe("validateBookCsvUpload", () => {
+    function upload(bookId: string, file: File | null): FormData {
+        const formData = new FormData();
+        formData.set("bookId", bookId);
+        if (file) {
+            formData.set("file", file);
+        }
+        return formData;
+    }
+
+    test("reads the book and the file, with its name cleaned", () => {
+        const file = new File(["number,title\n1,A\n"], "  my   book.csv ", { type: "text/csv" });
+        expect(validateBookCsvUpload(upload("3", file))).toEqual({
+            ok: true,
+            input: { bookId: 3, file, sourceName: "my book.csv" },
+        });
+    });
+
+    test("refuses no file, an empty one and one over 1 MB, and a book id that does not parse", () => {
+        expect(validateBookCsvUpload(upload("x", null))).toEqual({
+            ok: false,
+            fieldErrors: {
+                book: { message: "Choose the book to import into." },
+                file: { message: "Choose a CSV file." },
+            },
+        });
+        expect(validateBookCsvUpload(upload("3", new File([], "")))).toMatchObject({
+            ok: false,
+            fieldErrors: { file: { message: "Choose a CSV file." } },
+        });
+        expect(validateBookCsvUpload(upload("3", new File([], "empty.csv")))).toMatchObject({
+            ok: false,
+            fieldErrors: { file: { message: "empty.csv is empty." } },
+        });
+        expect(validateBookCsvUpload(upload("3", new File(["x".repeat(BOOK_CSV_MAX_BYTES + 1)], "big.csv")))).toMatchObject({
+            ok: false,
+            fieldErrors: { file: { message: expect.stringContaining("larger than 1 MB") } },
+        });
+        const formData = upload("3", null);
+        formData.set("file", "not a file");
+        expect(validateBookCsvUpload(formData)).toMatchObject({ ok: false, fieldErrors: { file: expect.anything() } });
+    });
+
+    test("keeps at most 200 characters of a file's name, and names a nameless one", () => {
+        expect(cleanSourceName(`${"a".repeat(250)}.csv`)).toHaveLength(200);
+        expect(cleanSourceName("  ")).toBe("upload.csv");
     });
 });

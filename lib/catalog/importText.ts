@@ -17,12 +17,16 @@ import { countOf } from "./counts";
  */
 
 /**
- * What a run of each kind is called, as in "Seed import 3". The page title
- * comes from `KIND_NAMES` in `lib/db/importRuns.ts`; keep the two in step.
+ * What a run of each kind is called, as in "Seed import 3" or "CSV import
+ * 4". The page title comes from `KIND_NAMES` in `lib/db/importRuns.ts`;
+ * keep the two in step.
  */
-const KIND_LABELS: Record<ImportRunKind, string> = { "hymns-json": "Seed import" };
+const KIND_LABELS: Record<ImportRunKind, string> = {
+    "hymns-json": "Seed import",
+    csv: "CSV import",
+};
 
-/** "Seed import 3". */
+/** "Seed import 3", "CSV import 4". */
 export function importRunLabel(run: Pick<ImportRunSummary, "id" | "kind">): string {
     return `${KIND_LABELS[run.kind]} ${run.id}`;
 }

@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import type { ImportRunKind } from "@/lib/domain";
+import { planBookCsvText } from "@/lib/import/bookCsv";
 import { planHymnsJsonImport } from "@/lib/import/hymnsJson";
 import {
     createImportRun,
@@ -12,7 +12,7 @@ import {
     isImportRunKind,
     listImportRuns,
 } from "./importRuns";
-import { openTestDb, seedImportRun } from "./testing";
+import { openTestDb, seedBook, seedImportRun } from "./testing";
 
 const T0 = new Date("2026-10-04T12:00:00.000Z");
 
@@ -65,9 +65,10 @@ function thrown(call: () => unknown): unknown {
 }
 
 describe("isImportRunKind", () => {
-    test("knows the seed import only", () => {
+    test("knows the seed import and a book's CSV file", () => {
         expect(isImportRunKind("hymns-json")).toBe(true);
-        expect(isImportRunKind("csv")).toBe(false);
+        expect(isImportRunKind("csv")).toBe(true);
+        expect(isImportRunKind("spreadsheet")).toBe(false);
         expect(isImportRunKind(null)).toBe(false);
     });
 });
@@ -92,11 +93,11 @@ describe("createImportRun", () => {
     test("refuses a kind it does not know", () => {
         expect(() =>
             createImportRun(db, {
-                kind: "csv" as ImportRunKind,
-                sourceName: "book.csv",
+                kind: "spreadsheet" as "hymns-json",
+                sourceName: "book.xlsx",
                 ...plan,
             })
-        ).toThrow("Unknown import run kind: csv");
+        ).toThrow("Unknown import run kind: spreadsheet");
         expect(listImportRuns(db)).toEqual([]);
     });
 });
@@ -135,7 +136,7 @@ describe("listImportRuns", () => {
 
     test("leaves out runs of a kind or status this build does not know", () => {
         const known = seedImportRun(db);
-        seedImportRun(db, { kind: "csv" });
+        seedImportRun(db, { kind: "spreadsheet" });
         seedImportRun(db, { status: "undone" });
         expect(listImportRuns(db).map(({ id }) => id)).toEqual([known]);
     });
@@ -176,7 +177,7 @@ describe("findImportRun", () => {
 
     test("is null for a run that does not exist or that this build does not know", () => {
         expect(findImportRun(db, 999)).toBeNull();
-        expect(findImportRun(db, seedImportRun(db, { kind: "csv" }))).toBeNull();
+        expect(findImportRun(db, seedImportRun(db, { kind: "spreadsheet" }))).toBeNull();
     });
 });
 
@@ -185,7 +186,7 @@ describe("findImportRunLabel", () => {
         const id = preview();
         expect(findImportRunLabel(db, id)).toBe(`Seed import ${id}`);
         expect(findImportRunLabel(db, 999)).toBeNull();
-        expect(findImportRunLabel(db, seedImportRun(db, { kind: "csv" }))).toBeNull();
+        expect(findImportRunLabel(db, seedImportRun(db, { kind: "spreadsheet" }))).toBeNull();
     });
 });
 
@@ -228,5 +229,46 @@ describe("finishImportRun", () => {
             reason: "not-preview",
         });
         expect(status(id)).toBe("applied");
+    });
+});
+
+describe("a book's CSV run", () => {
+    /** A run of a two-row file for a new Chorus Book. */
+    function csvRun(at: Date = T0) {
+        const bookId = seedBook(db, { code: "CB", name: "Chorus Book", numbered: false });
+        const plan = planBookCsvText(
+            { id: bookId, code: "CB", name: "Chorus Book", numbered: false, labelFormat: "Chorus Book" },
+            "position,title\n1,Alleluia\n2,Deep and Wide\n",
+            { hymns: [], tunes: [], songs: [], entries: [] }
+        );
+        const id = createImportRun(
+            db,
+            { kind: "csv", sourceName: "choruses.csv", bookId, report: plan.report, rows: plan.stored },
+            at
+        );
+        return { id, bookId, plan };
+    }
+
+    test("is stored with its book, and listed beside the seed's runs, newest first", () => {
+        const seed = preview(T0);
+        const { id, bookId, plan: csv } = csvRun(new Date("2026-10-05T08:00:00.000Z"));
+        expect(listImportRuns(db)).toEqual([
+            {
+                id,
+                at: "2026-10-05T08:00:00.000Z",
+                kind: "csv",
+                status: "preview",
+                sourceName: "choruses.csv",
+                bookId,
+                planned: csv.report.planned,
+            },
+            expect.objectContaining({ id: seed, kind: "hymns-json", bookId: null }),
+        ]);
+    });
+
+    test("is found with its report, and named by its kind", () => {
+        const { id, plan: csv } = csvRun();
+        expect(findImportRun(db, id)).toMatchObject({ id, kind: "csv", report: csv.report });
+        expect(findImportRunLabel(db, id)).toBe(`CSV import ${id}`);
     });
 });

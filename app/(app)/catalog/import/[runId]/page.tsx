@@ -123,7 +123,9 @@ export default async function ImportRunPage({
             </div>
             <div className="w-full max-w-5xl mx-auto space-y-6">
                 <RunNotice run={run} applyRefusal={applyRefusal} />
-                <SeedReport report={run.report} sourceName={run.sourceName} />
+                {run.kind === "hymns-json" && (
+                    <SeedReport report={run.report} sourceName={run.sourceName} />
+                )}
             </div>
         </div>
     );
