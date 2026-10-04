@@ -1,7 +1,16 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { countCatalog, findBook } from "@/lib/db/catalog";
-import { openTestDb, seedBook, seedEntry, seedImportRun, seedSong } from "@/lib/db/testing";
+import { createImportRun } from "@/lib/db/importRuns";
+import {
+    SEED_FIXTURE_COUNTS,
+    openTestDb,
+    seedBook,
+    seedEntry,
+    seedImportRun,
+    seedPlan,
+    seedSong,
+} from "@/lib/db/testing";
 
 // vi.hoisted: vi.mock factories run before the module's own declarations.
 const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
@@ -17,7 +26,6 @@ import {
     getCatalogImportRunLabel,
     getCatalogImportRuns,
     previewBookCsvImport,
-    previewSeedImport,
 } from "./catalogImport";
 
 let db: DatabaseSync;
@@ -34,42 +42,45 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-const SEED_COUNTS = {
-    books: 2,
-    hymns: 895,
-    hymnAliases: 4,
-    tunes: 768,
-    tuneAliases: 1,
-    songs: 921,
-    songsWithoutTune: 107,
-    entries: 1247,
-};
+describe("a seed run the app stored, now that the seed cannot be previewed", () => {
+    // The seed's preview is gone from the app, but the runs it stored are in the
+    // database, and render and apply from their stored report and rows.
+    function storedSeedRun(): number {
+        return createImportRun(db, { kind: "hymns-json", sourceName: "hymns.json", ...seedPlan() });
+    }
 
-describe("the seed import, end to end", () => {
-    test("previews the seed from hymns.json, applies it once, and refuses a second", () => {
-        const first = previewSeedImport();
+    test("is listed, and reviewed from its stored report, which still has the seed's findings", () => {
+        const first = storedSeedRun();
+
         expect(getCatalogImportRuns()).toEqual([
             expect.objectContaining({
                 id: first,
                 kind: "hymns-json",
                 status: "preview",
                 sourceName: "hymns.json",
-                planned: SEED_COUNTS,
+                planned: SEED_FIXTURE_COUNTS,
             }),
         ]);
         const review = getCatalogImportRun(first);
         expect(review?.applyRefusal).toBeNull();
-        expect(review?.run.report.planned).toEqual(SEED_COUNTS);
-        expect(review?.run.kind === "hymns-json" && review.run.report.splitPairs).toHaveLength(3);
+        expect(review?.run.report.planned).toEqual(SEED_FIXTURE_COUNTS);
+        expect(review?.run.kind === "hymns-json" && review.run.report.splitPairs).toHaveLength(1);
+        expect(review?.run.kind === "hymns-json" && review.run.report.variants).toHaveLength(1);
+        expect(getCatalogImportRunLabel(String(first))).toBe(`Seed import ${first}`);
+    });
+
+    test("is applied once while the catalog is empty, and a second is refused", () => {
+        const first = storedSeedRun();
         expect(countCatalog(db).books).toBe(0);
 
-        expect(applyCatalogImport(first)).toEqual({ ok: true, counts: SEED_COUNTS, bookCode: null });
+        // A seed adds the books, so there is no book to go to.
+        expect(applyCatalogImport(first)).toEqual({ ok: true, counts: SEED_FIXTURE_COUNTS, bookCode: null });
         expect(countCatalog(db)).toEqual({
             books: 2,
-            hymns: 895,
-            tunes: 768,
-            songs: 921,
-            entries: 1247,
+            hymns: 6,
+            tunes: 6,
+            songs: 8,
+            entries: 13,
         });
         expect(getCatalogImportRun(first)).toMatchObject({
             run: { status: "applied" },
@@ -79,7 +90,7 @@ describe("the seed import, end to end", () => {
             },
         });
 
-        const second = previewSeedImport();
+        const second = storedSeedRun();
         const catalogNotEmpty = {
             reason: "catalog-not-empty",
             message: "The catalog already has books, so the seed import cannot run again.",

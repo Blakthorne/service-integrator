@@ -12,7 +12,6 @@ import {
     applyCatalogImport,
     discardCatalogImport,
     previewBookCsvImport,
-    previewSeedImport,
     type ApplyCatalogImportResult,
     type BookCsvPreviewResult,
     type DiscardCatalogImportResult,
@@ -65,22 +64,6 @@ function refused(message: string): ImportActionState {
 
 // Each action below runs its query inside a try block and calls `redirect()`
 // outside it: redirect works by throwing, so a try block would swallow it.
-
-/**
- * The seed preview form's action: plan the seed from hymns.json, store it as
- * a preview run and go to the run's review page.
- */
-export async function previewSeedImportAction(): Promise<ImportActionState> {
-    await requireSession();
-    let runId: number;
-    try {
-        runId = previewSeedImport();
-    } catch (error) {
-        return failed("preview the seed import", error);
-    }
-    revalidatePath(routes.catalogImport(), "layout");
-    redirect(routes.catalogImportRun(runId));
-}
 
 /**
  * What the Import a book from CSV form is told: a refusal to show (a field to

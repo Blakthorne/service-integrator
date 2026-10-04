@@ -1,7 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { planBookCsvText } from "@/lib/import/bookCsv";
-import { planHymnsJsonImport } from "@/lib/import/hymnsJson";
 import {
     createImportRun,
     discardImportRun,
@@ -12,7 +11,7 @@ import {
     isImportRunKind,
     listImportRuns,
 } from "./importRuns";
-import { openTestDb, seedBook, seedImportRun } from "./testing";
+import { SEED_FIXTURE_COUNTS, openTestDb, seedBook, seedImportRun, seedPlan } from "./testing";
 
 const T0 = new Date("2026-10-04T12:00:00.000Z");
 
@@ -26,21 +25,8 @@ afterEach(() => {
     db.close();
 });
 
-/** A small seed: two hymns, one of them in both books. */
-const plan = planHymnsJsonImport([
-    {
-        song_title: "Amazing Grace",
-        tune_name: "NEW BRITAIN",
-        rejoice_hymns: 108,
-        great_hymns_of_the_faith: 247,
-    },
-    {
-        song_title: "Doxology",
-        tune_name: "OLD HUNDREDTH",
-        rejoice_hymns: 14,
-        great_hymns_of_the_faith: 0,
-    },
-]);
+/** A small seed's stored report and rows (`smallSeedRows`): six hymns, eight songs and thirteen entries in two books. */
+const plan = seedPlan();
 
 function preview(at: Date = T0): number {
     return createImportRun(
@@ -119,16 +105,7 @@ describe("listImportRuns", () => {
                 status: "preview",
                 sourceName: "hymns.json",
                 bookId: null,
-                planned: {
-                    books: 2,
-                    hymns: 2,
-                    hymnAliases: 0,
-                    tunes: 2,
-                    tuneAliases: 0,
-                    songs: 2,
-                    songsWithoutTune: 0,
-                    entries: 4,
-                },
+                planned: SEED_FIXTURE_COUNTS,
             },
             expect.objectContaining({ id: first, status: "discarded" }),
         ]);

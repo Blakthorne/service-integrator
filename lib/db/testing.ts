@@ -1,7 +1,7 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { normalizeTuneName } from "@/lib/catalog/normalize";
-import type { MirroredPcoSong, SongLinkSource } from "@/lib/domain";
-import { planHymnsJsonImport } from "@/lib/import/hymnsJson";
+import type { MirroredPcoSong, SeedImportReport, SongLinkSource } from "@/lib/domain";
+import type { PlannedCatalogRows } from "@/lib/import/rows";
 import { normalizeTitle } from "@/lib/normalizeTitle";
 import { openDatabase } from "./connection";
 import { migrate } from "./migrate";
@@ -265,14 +265,204 @@ export interface SeedImportRunFields {
 }
 
 /**
- * Insert an import run: by default a preview of the seed of an empty
- * hymns.json (its two books and nothing else), at 2026-10-04 12:00 UTC.
+ * The rows of a seed run with nothing in it but its two books, Rejoice Hymns
+ * (R) and Great Hymns of the Faith (G): what a preview of the seed of an
+ * empty hymns.json stored. The seed's planner is gone, but its stored runs
+ * are not, so tests build the runs they need from rows like these.
+ */
+export function emptySeedRows(): PlannedCatalogRows {
+    return {
+        books: [
+            { code: "R", name: "Rejoice Hymns", shortName: "Rejoice", numbered: true, labelFormat: "R-{n}", sortOrder: 1 },
+            {
+                code: "G",
+                name: "Great Hymns of the Faith",
+                shortName: "Great Hymns",
+                numbered: true,
+                labelFormat: "G-{n}",
+                sortOrder: 2,
+            },
+        ],
+        hymns: [],
+        tunes: [],
+        songs: [],
+        entries: [],
+    };
+}
+
+/** The en dash of "Rejoice - the Lord Is King!", which the fixture's hymn alias spells with one. */
+const EN_DASH = String.fromCharCode(0x2013);
+
+/**
+ * The rows of a small seed, enough to exercise everything applying one
+ * writes: a hymn sung to two tunes, and a tune-less song of it; a tune
+ * shared by two hymns; a hymn with another title and a tune with another
+ * name; a descant, as a variant note on a second entry of the same song; and
+ * the Doxology at the front cover of G, which has a location and no number.
+ * Fixed: tests count on what is in it (see `SEED_FIXTURE_COUNTS`).
+ */
+export function smallSeedRows(): PlannedCatalogRows {
+    const rows = emptySeedRows();
+    const hymn = (key: string, title: string, aliases: string[] = []) => ({
+        key,
+        title,
+        aliases: aliases.map((alias) => ({ alias, normalized: normalizeTitle(alias) })),
+    });
+    const tune = (name: string, aliases: string[] = []) => ({
+        key: normalizeTuneName(name),
+        name,
+        aliases: aliases.map((alias) => ({ alias, normalized: normalizeTuneName(alias) })),
+    });
+    const entry = (
+        bookCode: string,
+        hymnKey: string,
+        tuneKey: string | null,
+        place: { number: number | null; locationLabel?: string; variantNote?: string }
+    ) => ({
+        bookCode,
+        hymnKey,
+        tuneKey,
+        number: place.number,
+        position: null,
+        locationLabel: place.locationLabel ?? null,
+        variantNote: place.variantNote ?? null,
+    });
+    return {
+        ...rows,
+        hymns: [
+            hymn("amazing grace", "Amazing Grace"),
+            hymn("doxology", "Doxology"),
+            hymn("praise god from whom all blessings flow", "Praise God, from Whom All Blessings Flow"),
+            hymn("hark the herald angels sing", "Hark! the Herald Angels Sing"),
+            hymn("thank you lord", "Thank You, Lord"),
+            hymn("rejoice the lord is king", "Rejoice, the Lord Is King", [`Rejoice ${EN_DASH} the Lord Is King!`]),
+        ],
+        tunes: [
+            tune("NEW BRITAIN"),
+            tune("OLD HUNDREDTH"),
+            tune("MENDELSSOHN"),
+            tune("LYNCH"),
+            tune("THANK YOU, LORD"),
+            tune("DARWALL", ["DARWAL"]),
+        ],
+        songs: [
+            { hymnKey: "amazing grace", tuneKey: "NEW BRITAIN" },
+            { hymnKey: "doxology", tuneKey: "OLD HUNDREDTH" },
+            { hymnKey: "praise god from whom all blessings flow", tuneKey: "OLD HUNDREDTH" },
+            { hymnKey: "hark the herald angels sing", tuneKey: "MENDELSSOHN" },
+            { hymnKey: "thank you lord", tuneKey: "LYNCH" },
+            { hymnKey: "thank you lord", tuneKey: "THANK YOU, LORD" },
+            { hymnKey: "thank you lord", tuneKey: null },
+            { hymnKey: "rejoice the lord is king", tuneKey: "DARWALL" },
+        ],
+        entries: [
+            entry("R", "amazing grace", "NEW BRITAIN", { number: 130 }),
+            entry("G", "amazing grace", "NEW BRITAIN", { number: 236 }),
+            entry("R", "doxology", "OLD HUNDREDTH", { number: 14 }),
+            entry("G", "doxology", "OLD HUNDREDTH", { number: null, locationLabel: "front cover" }),
+            entry("R", "praise god from whom all blessings flow", "OLD HUNDREDTH", { number: 15 }),
+            entry("R", "hark the herald angels sing", "MENDELSSOHN", { number: 227 }),
+            entry("R", "hark the herald angels sing", "MENDELSSOHN", {
+                number: 228,
+                variantNote: "Descant - last stanza only",
+            }),
+            entry("G", "hark the herald angels sing", "MENDELSSOHN", { number: 93 }),
+            entry("R", "thank you lord", "LYNCH", { number: 561 }),
+            entry("R", "thank you lord", "THANK YOU, LORD", { number: 266 }),
+            entry("G", "thank you lord", null, { number: 221 }),
+            entry("R", "rejoice the lord is king", "DARWALL", { number: 43 }),
+            entry("G", "rejoice the lord is king", "DARWALL", { number: 143 }),
+        ],
+    };
+}
+
+/**
+ * What `smallSeedRows` adds to an empty catalog, counted by hand: the same
+ * counts as the `planned` of its report.
+ */
+export const SEED_FIXTURE_COUNTS = {
+    books: 2,
+    hymns: 6,
+    hymnAliases: 1,
+    tunes: 6,
+    tuneAliases: 1,
+    songs: 8,
+    songsWithoutTune: 1,
+    entries: 13,
+};
+
+/**
+ * A seed run's stored report and rows for `rows` (`smallSeedRows()` by
+ * default): the counts of its `planned` are counted from the rows, and its
+ * lists hold what the planner would have found in the fixture (its one split
+ * pair, its one descant, its one song without a tune). For a run made with
+ * `createImportRun(db, { kind: "hymns-json", sourceName: "hymns.json",
+ * ...seedPlan() })`.
+ */
+export function seedPlan(rows: PlannedCatalogRows = smallSeedRows()): {
+    report: SeedImportReport;
+    rows: PlannedCatalogRows;
+} {
+    const songsWithoutTune = rows.songs.filter(({ tuneKey }) => tuneKey === null).length;
+    const entriesByBook = Object.fromEntries(
+        rows.books.map(({ code }) => [code, rows.entries.filter(({ bookCode }) => bookCode === code).length])
+    );
+    const hasThankYou = rows.hymns.some(({ key }) => key === "thank you lord");
+    const hasHark = rows.hymns.some(({ key }) => key === "hark the herald angels sing");
+    return {
+        report: {
+            input: {
+                records: rows.songs.length,
+                recordsWithoutTune: songsWithoutTune,
+                recordsByBook: entriesByBook,
+            },
+            planned: {
+                books: rows.books.length,
+                hymns: rows.hymns.length,
+                hymnAliases: rows.hymns.reduce((total, { aliases }) => total + aliases.length, 0),
+                tunes: rows.tunes.length,
+                tuneAliases: rows.tunes.reduce((total, { aliases }) => total + aliases.length, 0),
+                songs: rows.songs.length,
+                songsWithoutTune,
+                entries: rows.entries.length,
+            },
+            entriesByBook,
+            splitPairs: hasThankYou
+                ? [{ title: "Thank You, Lord", label: "G-221", outcome: "ambiguous", tunes: ["LYNCH", "THANK YOU, LORD"] }]
+                : [],
+            variants: hasHark
+                ? [
+                      {
+                          record: "Hark! the Herald Angels Sing (Descant - last stanza only)",
+                          title: "Hark! the Herald Angels Sing",
+                          variantNote: "Descant - last stanza only",
+                          tune: "MENDELSSOHN",
+                          tuneFromBase: false,
+                          sharesSong: true,
+                          labels: ["R-228"],
+                      },
+                  ]
+                : [],
+            merges: [],
+            songsWithoutTune: hasThankYou
+                ? [{ title: "Thank You, Lord", labels: ["G-221"], reason: "ambiguous-split-pair" }]
+                : [],
+            possibleDuplicates: [],
+            skippedEntries: [],
+        },
+        rows,
+    };
+}
+
+/**
+ * Insert an import run: by default a preview of a seed with nothing in it
+ * but its two books (`emptySeedRows`), at 2026-10-04 12:00 UTC.
  */
 export function seedImportRun(
     db: DatabaseSync,
     fields: SeedImportRunFields = {}
 ): number {
-    const empty = planHymnsJsonImport([]);
+    const empty = seedPlan(emptySeedRows());
     return insert(
         db,
         "INSERT INTO import_runs (at, kind, book_id, status, source_name, report, rows) VALUES (?, ?, ?, ?, ?, ?, ?)",

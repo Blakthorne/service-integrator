@@ -1,7 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { planHymnsJsonImport, type HymnsJsonImport } from "@/lib/import/hymnsJson";
-import { hymnsJsonRecords } from "@/lib/import/hymnsJsonFile";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
     countCatalog,
     findBook,
@@ -12,11 +10,14 @@ import {
 import { applyImportRun, findApplyRefusal, previewBookCsvRun, readBookCsvCatalog } from "./catalogImport";
 import { createImportRun, findImportRun, ImportRunError } from "./importRuns";
 import {
+    SEED_FIXTURE_COUNTS,
+    emptySeedRows,
     openTestDb,
     seedBook,
     seedEntry,
     seedHymn,
     seedImportRun,
+    seedPlan,
     seedSong,
     seedTune,
 } from "./testing";
@@ -31,7 +32,8 @@ afterEach(() => {
     db.close();
 });
 
-function preview(plan: HymnsJsonImport): number {
+/** Store a seed run, as a preview did while the seed could be previewed: its stored report and rows. */
+function preview(plan: ReturnType<typeof seedPlan> = seedPlan()): number {
     return createImportRun(db, { kind: "hymns-json", sourceName: "hymns.json", ...plan });
 }
 
@@ -54,26 +56,24 @@ function refusal(call: () => unknown): ImportRunError {
 
 const EMPTY = { books: 0, hymns: 0, tunes: 0, songs: 0, entries: 0 };
 
-describe("applyImportRun with the real seed", () => {
-    let seed: HymnsJsonImport;
+describe("applyImportRun with a seed's stored rows", () => {
+    // The seed can no longer be previewed, but a run it stored can be applied
+    // while the catalog is empty, so what applying writes is still pinned,
+    // against the small fixture (`smallSeedRows`).
     let runId: number;
 
-    beforeAll(() => {
-        seed = planHymnsJsonImport(hymnsJsonRecords);
-    });
-
     beforeEach(() => {
-        runId = preview(seed);
+        runId = preview();
     });
 
     test("adds exactly what the preview planned, and marks the run applied", () => {
-        expect(applyImportRun(db, runId)).toEqual(seed.report.planned);
+        expect(applyImportRun(db, runId)).toEqual(SEED_FIXTURE_COUNTS);
         expect(countCatalog(db)).toEqual({
             books: 2,
-            hymns: 895,
-            tunes: 768,
-            songs: 921,
-            entries: 1247,
+            hymns: 6,
+            tunes: 6,
+            songs: 8,
+            entries: 13,
         });
         expect(findImportRun(db, runId)?.status).toBe("applied");
     });
@@ -101,11 +101,11 @@ describe("applyImportRun with the real seed", () => {
             locationLabel: "front cover",
             label: "G-Front Cover",
         });
-        expect(great?.entries).toHaveLength(539);
-        expect(findBook(db, "r")?.entries).toHaveLength(708);
+        expect(great?.entries).toHaveLength(5);
+        expect(findBook(db, "r")?.entries).toHaveLength(8);
     });
 
-    test("keeps the merges' aliases and the variants' notes", () => {
+    test("keeps the aliases and the variants' notes", () => {
         applyImportRun(db, runId);
         const rejoice = listCatalogSongs(db).find(
             ({ title }) => title === "Rejoice, the Lord Is King"
@@ -156,13 +156,13 @@ describe("applyImportRun with the real seed", () => {
     test("refuses to run twice", () => {
         applyImportRun(db, runId);
         expect(refusal(() => applyImportRun(db, runId)).reason).toBe("not-preview");
-        const again = preview(seed);
+        const again = preview();
         expect(refusal(() => applyImportRun(db, again))).toMatchObject({
             reason: "catalog-not-empty",
             message: "The catalog already has books, so the seed import cannot run again.",
         });
         expect(status(again)).toBe("preview");
-        expect(countCatalog(db).songs).toBe(921);
+        expect(countCatalog(db).songs).toBe(8);
     });
 });
 
@@ -204,10 +204,9 @@ describe("applyImportRun's refusals", () => {
     });
 
     test("refuses rows that do not hang together, writing nothing", () => {
-        const { rows } = planHymnsJsonImport([]);
         const id = seedImportRun(db, {
             rows: {
-                ...rows,
+                ...emptySeedRows(),
                 songs: [{ hymnKey: "missing hymn", tuneKey: null }],
             },
         });
@@ -217,14 +216,7 @@ describe("applyImportRun's refusals", () => {
     });
 
     test("refuses rows that plan a key twice, writing nothing", () => {
-        const plan = planHymnsJsonImport([
-            {
-                song_title: "Amazing Grace",
-                tune_name: "NEW BRITAIN",
-                rejoice_hymns: 130,
-                great_hymns_of_the_faith: 236,
-            },
-        ]);
+        const plan = seedPlan();
         for (const rows of [
             { ...plan.rows, hymns: [...plan.rows.hymns, ...plan.rows.hymns] },
             { ...plan.rows, tunes: [...plan.rows.tunes, ...plan.rows.tunes] },
@@ -238,14 +230,7 @@ describe("applyImportRun's refusals", () => {
     });
 
     test("writes nothing when the database refuses a row", () => {
-        const plan = planHymnsJsonImport([
-            {
-                song_title: "Amazing Grace",
-                tune_name: "NEW BRITAIN",
-                rejoice_hymns: 108,
-                great_hymns_of_the_faith: -1,
-            },
-        ]);
+        const plan = seedPlan();
         const duplicate = { ...plan.rows.entries[0] };
         const id = seedImportRun(db, {
             report: plan.report,
