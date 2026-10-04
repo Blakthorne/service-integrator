@@ -2,6 +2,10 @@ import { describe, expect, test } from "vitest";
 import type { CatalogSongOption, MirroredPcoSong, UnlinkedPcoSong } from "@/lib/domain";
 import {
     PICKER_LIMIT,
+    describeHymnOption,
+    describePickerMatches,
+    describeSongOption,
+    describeTuneOption,
     filterUnlinkedPcoSongs,
     searchHymnOptions,
     searchSongOptions,
@@ -158,5 +162,42 @@ describe("filterUnlinkedPcoSongs", () => {
         expect(ids("pritchard")).toEqual(["2"]);
         expect(ids("getty")).toEqual(["3"]);
         expect(ids("zzz")).toEqual([]);
+    });
+});
+
+describe("the lines under an option", () => {
+    test("give a song's tune and labels", () => {
+        expect(describeSongOption(SONGS[2])).toBe("NEW BRITAIN · R-130, G-236");
+        expect(describeSongOption(SONGS[3])).toBe("no tune · G-Front Cover");
+        expect(describeSongOption(SONGS[5])).toBe("no tune");
+    });
+
+    test("give the tunes a hymn is sung to", () => {
+        expect(describeHymnOption(HYMNS[0])).toBe("Sung to NEW BRITAIN");
+        expect(describeHymnOption({ ...HYMNS[0], tunes: ["NEW BRITAIN", null] })).toBe(
+            "Sung to NEW BRITAIN, no tune"
+        );
+        expect(describeHymnOption({ ...HYMNS[0], tunes: [] })).toBe("No song yet");
+    });
+
+    test("give a tune's meter and other names", () => {
+        expect(describeTuneOption(TUNES[0])).toBe("6.6.6.6.8.8 · also DARWAL");
+        expect(describeTuneOption(TUNES[1])).toBe("C.M.");
+        expect(describeTuneOption(TUNES[3])).toBe("");
+    });
+});
+
+describe("describePickerMatches", () => {
+    test("prompts before anything is typed", () => {
+        expect(describePickerMatches(" ", { matches: [], total: 0 })).toBe("Type to search.");
+    });
+
+    test("counts the matches, and says when typing more would narrow them", () => {
+        expect(describePickerMatches("zz", { matches: [], total: 0 })).toBe("Nothing matches.");
+        expect(describePickerMatches("grace", { matches: [1], total: 1 })).toBe("1 match.");
+        expect(describePickerMatches("grace", { matches: [1, 2], total: 2 })).toBe("2 matches.");
+        expect(describePickerMatches("a", { matches: [1, 2], total: 54 })).toBe(
+            "Showing 2 of 54 matches: type more to narrow them."
+        );
     });
 });

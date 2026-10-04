@@ -31,6 +31,46 @@ export interface TuneOption {
 /** How many matches a picker shows at once. */
 export const PICKER_LIMIT = 8;
 
+/** A song option's line under its title: its tune ("no tune" when unknown) and its entries' labels. */
+export function describeSongOption(song: CatalogSongOption): string {
+    return [song.tuneName ?? "no tune", song.labels.join(", ")].filter(Boolean).join(" · ");
+}
+
+/** A hymn option's line under its title: the tunes it is sung to ("no tune" for a song without one). */
+export function describeHymnOption(hymn: HymnOption): string {
+    return hymn.tunes.length === 0
+        ? "No song yet"
+        : `Sung to ${hymn.tunes.map((tune) => tune ?? "no tune").join(", ")}`;
+}
+
+/** A tune option's line under its name: its meter and its other names, or "" when it has neither. */
+export function describeTuneOption(tune: TuneOption): string {
+    return [tune.meter, tune.aliases.length > 0 ? `also ${tune.aliases.join(", ")}` : null]
+        .filter(Boolean)
+        .join(" · ");
+}
+
+/**
+ * What a picker says about its matches, for the line under its search
+ * field (read out as it changes): a prompt before anything is typed, then
+ * how many match, and that typing more narrows a long list.
+ */
+export function describePickerMatches(
+    query: string,
+    { matches, total }: PickerMatches<unknown>
+): string {
+    if (foldForSearch(query) === "") {
+        return "Type to search.";
+    }
+    if (total === 0) {
+        return "Nothing matches.";
+    }
+    if (matches.length < total) {
+        return `Showing ${matches.length} of ${total} matches: type more to narrow them.`;
+    }
+    return total === 1 ? "1 match." : `${total} matches.`;
+}
+
 /** What a picker shows for a search: the best matches, and how many there are in all. */
 export interface PickerMatches<T> {
     /** The best matches, at most the limit, best first. */
