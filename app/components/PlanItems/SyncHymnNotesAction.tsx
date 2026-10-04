@@ -9,6 +9,7 @@ import {
     type SyncHymnNotesState,
 } from "@/app/(app)/plans/[serviceTypeId]/[planId]/actions";
 import Dialog from "@/app/components/ui/Dialog";
+import { buttonClasses } from "@/app/components/ui/buttonClasses";
 import type { HymnNoteStatus } from "@/lib/hymnNotes";
 import {
     MISSING_CATEGORY_HELP,
@@ -72,12 +73,6 @@ const TAG_CLASSES: Readonly<Record<HymnNoteLineKind, string>> = {
     "no-note":
         "bg-gray-50 text-gray-700 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700",
 };
-
-const PRIMARY_BUTTON_CLASS =
-    "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors";
-
-const SECONDARY_BUTTON_CLASS =
-    "px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed";
 
 /** A link in running text: underlined, since its colour alone is under 3:1 against the text's. */
 const LINK_CLASS =
@@ -265,9 +260,9 @@ export default function SyncHymnNotesAction({ serviceTypeId, planId }: SyncHymnN
                 ref={buttonRef}
                 type="button"
                 onClick={openDialog}
-                // SubmitButton's primary colours: white text is 5.3:1 on
-                // blue-600, and the ring outside the button 3:1 on the page.
-                // Sized like "View in Planning Center" below it.
+                // buttonClasses' primary colours (white text is 5.3:1 on blue-600,
+                // the ring outside the button 3:1 on the page), but sized like
+                // "View in Planning Center" below it, which no variant is.
                 className="px-4 py-2 text-white text-center bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors whitespace-nowrap cursor-pointer"
             >
                 Sync hymn notes
@@ -319,7 +314,7 @@ function SyncDialogBody({ state, attempt, answerRef, onClose, onPreview, onSync 
         case "previewing":
             return (
                 <Buttons>
-                    <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                    <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Cancel
                     </button>
                 </Buttons>
@@ -430,7 +425,7 @@ function ReadyPreview({
                             type="button"
                             onClick={onClose}
                             disabled={syncing}
-                            className={SECONDARY_BUTTON_CLASS}
+                            className={buttonClasses("secondary", syncing)}
                         >
                             Cancel
                         </button>
@@ -443,15 +438,13 @@ function ReadyPreview({
                             }}
                             // aria-disabled, not disabled, so it keeps focus while the sync runs.
                             aria-disabled={syncing}
-                            className={`${PRIMARY_BUTTON_CLASS} ${
-                                syncing ? "opacity-60 cursor-not-allowed" : "hover:bg-blue-700 cursor-pointer"
-                            }`}
+                            className={buttonClasses("primary", syncing)}
                         >
                             {syncing ? "Writing…" : confirmLabel(changes)}
                         </button>
                     </>
                 ) : (
-                    <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                    <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Close
                     </button>
                 )}
@@ -483,7 +476,7 @@ function PreviewProblem({
                 <Answer answerRef={answerRef}>{result.status.message}</Answer>
                 <MissingCategoryHelp />
                 <Buttons>
-                    <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                    <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Close
                     </button>
                 </Buttons>
@@ -505,13 +498,13 @@ function PreviewProblem({
                 {message}
             </Answer>
             <Buttons>
-                <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                     Close
                 </button>
                 <button
                     type="button"
                     onClick={onPreview}
-                    className={`${PRIMARY_BUTTON_CLASS} hover:bg-blue-700 cursor-pointer`}
+                    className={buttonClasses("primary")}
                 >
                     Try again
                 </button>
@@ -553,14 +546,14 @@ function ResultsBody({
                 </Answer>
                 <NoteRows rows={resultRows(result.items)} label="What the sync did, song by song" />
                 <Buttons>
-                    <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                    <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Done
                     </button>
                     {unwritten > 0 && (
                         <button
                             type="button"
                             onClick={onPreview}
-                            className={`${PRIMARY_BUTTON_CLASS} hover:bg-blue-700 cursor-pointer`}
+                            className={buttonClasses("primary")}
                         >
                             Preview again
                         </button>
@@ -576,13 +569,13 @@ function ResultsBody({
             </Answer>
             {result.kind === "no-category" && <MissingCategoryHelp />}
             <Buttons>
-                <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                     Close
                 </button>
                 <button
                     type="button"
                     onClick={onPreview}
-                    className={`${PRIMARY_BUTTON_CLASS} hover:bg-blue-700 cursor-pointer`}
+                    className={buttonClasses("primary")}
                 >
                     Preview again
                 </button>
