@@ -75,7 +75,7 @@ app/
             not-found.tsx
     catalog/
       layout.tsx                CatalogSectionNav (Songs · Tunes · Books · Import) above every catalog page;
-                                fetches nothing
+                                fetches nothing, and leaves the width to each page
       (list)/page.tsx · loading.tsx
                                 the songs list at /catalog: getCatalogSongs() → <Suspense><CatalogSongsView/></Suspense>
       songs/[songId]/
@@ -450,7 +450,7 @@ Example: a Reports page at `/reports`.
 
 ### Add a catalog page
 
-Example: a Hymns section, with a list at `/catalog/hymns` and a page per hymn at `/catalog/hymns/{hymnId}`. Catalog pages read the local database through synchronous queries, so they differ from a top-level page in three ways: the catalog's ID parsers, the `(list)` group, and no `loading.tsx` on a detail page. The catalog layout already gives every page the section nav, the font and the width.
+Example: a Hymns section, with a list at `/catalog/hymns` and a page per hymn at `/catalog/hymns/{hymnId}`. Catalog pages read the local database through synchronous queries, so they differ from a top-level page in three ways: the catalog's ID parsers, the `(list)` group, and no `loading.tsx` on a detail page. The catalog layout gives every page the section nav and the font, and leaves the width to the page: wrap the header and content in `w-full max-w-4xl mx-auto`, the width of the section nav, and go wider only for content that needs it, as the import report's `max-w-5xl` does under a header as wide as the nav.
 
 1. **Read.** Put the SQL in `lib/db/catalog.ts`: functions that take `db` first and label any entry they return, tested on `openTestDb()` with the seed builders (`seedBook`, `seedHymn`, `seedSong`, …). Add the types to `lib/domain.ts` under "Catalog". Expose the reads in `lib/queries/catalog.ts`: `getCatalogHymns()`, `getCatalogHymn(id)`, which returns null when there is no such hymn, and a label for `generateMetadata` built on `labelOr`, which parses the param itself and never throws:
 
@@ -478,7 +478,7 @@ Example: a Hymns section, with a list at `/catalog/hymns` and a page per hymn at
        const hymnId = parseCatalogId((await params).hymnId) ?? notFound();
        const hymn = getCatalogHymn(hymnId) ?? notFound();
        return (
-           <>
+           <div className="w-full max-w-4xl mx-auto">
                <PageHeader
                    title={hymn.title}
                    breadcrumbs={[
@@ -488,7 +488,7 @@ Example: a Hymns section, with a list at `/catalog/hymns` and a page per hymn at
                    ]}
                />
                <HymnDetailView hymn={hymn} />
-           </>
+           </div>
        );
    }
    ```
