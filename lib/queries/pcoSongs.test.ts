@@ -749,23 +749,31 @@ describe("createSongInPlanningCenter", () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    test("refuses the same song while it is being created", async () => {
+    test("refuses the same song while it is being created, from another copy of the module too", async () => {
         const songId = seedCatalogSong();
         let answer: (response: Response) => void = () => {};
         stubFetchRoutes({
             [`POST ${urls.songs}`]: () => new Promise<Response>((resolve) => (answer = resolve)),
         });
+        // A server action's copy of the module is not the page's
+        // (convention 15): the songs being created must live on globalThis
+        // for the two to see each other.
+        vi.resetModules();
+        const copy = await import("./pcoSongs");
 
         const first = createSongInPlanningCenter(songId, FORM);
         await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
-        await expect(createSongInPlanningCenter(songId, FORM)).resolves.toEqual({
+        const busy = {
             ok: false,
             reason: "busy",
             message: '"O God, Our Help in Ages Past (ST. ANNE)" is being created in Planning Center already.',
-        });
+        };
+        await expect(copy.createSongInPlanningCenter(songId, FORM)).resolves.toEqual(busy);
+        await expect(createSongInPlanningCenter(songId, FORM)).resolves.toEqual(busy);
         answer(json({ data: created() }, { status: 201 }));
         await expect(first).resolves.toMatchObject({ ok: true, linked: true });
         expect(writes()).toHaveLength(1);
+        expect(fetch).toHaveBeenCalledTimes(1);
     });
 
     test("gives Planning Center's refusal of the song as a value, logs it, and links nothing", async () => {
