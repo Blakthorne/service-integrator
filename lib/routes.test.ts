@@ -103,7 +103,7 @@ describe("NAV_ITEMS", () => {
 
     // [pathname, Plans active, Catalog active]
     const cases: [string, boolean, boolean][] = [
-        ["/", true, false],
+        ["/", false, false],
         ["/plans", true, false],
         ["/plans/1405391/98765", true, false],
         ["/plans/1405391/98765/schedule", true, false],
@@ -143,8 +143,7 @@ describe("navAriaCurrent", () => {
     type Current = "page" | "true" | undefined;
     // [pathname, Plans, Catalog]
     const cases: [string, Current, Current][] = [
-        // "/" only redirects to /plans, which is the Plans item's own page.
-        ["/", "true", undefined],
+        ["/", undefined, undefined],
         ["/plans", "page", undefined],
         ["/plans/1405391/98765", "true", undefined],
         ["/plans/1405391/98765/schedule", "true", undefined],

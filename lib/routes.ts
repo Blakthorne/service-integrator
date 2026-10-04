@@ -96,8 +96,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     {
         href: routes.plans(),
         label: "Plans",
-        isActive: (pathname) =>
-            pathname === routes.home() || isAtOrBelow(pathname, routes.plans()),
+        isActive: (pathname) => isAtOrBelow(pathname, routes.plans()),
     },
     {
         href: routes.catalog(),
