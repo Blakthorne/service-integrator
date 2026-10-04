@@ -172,37 +172,61 @@ function mirrorSongs(
 // The credit editor
 // ---------------------------------------------------------------------------
 
+/** A song's author as Planning Center has it now, and what it reads as. */
+export interface CurrentAuthor {
+    /** "" for none. */
+    author: string;
+    credits: SongCredits;
+}
+
 /** What `saveSongCredits` did. */
 export type SaveSongCreditsResult =
-    | {
+    | ({
           ok: true;
           /** False when the song's author already said exactly this, so nothing was sent. */
           changed: boolean;
-          /** The song's author as Planning Center has it now. */
-          author: string;
-          /** What it reads as now, as the mirror stores it. */
-          credits: SongCredits;
-      }
-    | PcoWriteRefusal;
+      } & CurrentAuthor)
+    | (PcoWriteRefusal & {
+          /**
+           * With a "changed" refusal: the author Planning Center has now,
+           * which differs from the one the page showed, and what it reads
+           * as, for the page to show instead.
+           */
+          current?: CurrentAuthor;
+      });
+
+/** The same author: Planning Center may send an empty one as null or as "". */
+function sameAuthor(a: string | null, b: string | null): boolean {
+    return (a ?? "") === (b ?? "");
+}
 
 /**
  * Save Planning Center song `pcoSongId`'s credits from the credit editor:
- * one song, only when someone saves, never a mass rewrite.
+ * one song, only when someone saves, never a mass rewrite. `shownAuthor`
+ * is the author the editor showed the song with, which the person edited.
  *
  * The credits are checked against the `creditRoles` setting first
  * (`checkCredits`; with no names at all they are refused, as that would
- * empty the author). The song is then read afresh, and its author
- * written in the convention (`renderCredits`, a PATCH of `author` alone)
- * unless it says exactly that already; the write is logged (`song`, with
- * the author before and after). Last, the mirror gets the song as
- * Planning Center has it now, and its credits are derived afresh.
+ * empty the author). The song is then read afresh. When its author already
+ * says exactly what the credits write, nothing is sent. When it differs
+ * from `shownAuthor` (an empty one and a missing one are the same), it was
+ * changed in Planning Center since the page loaded, so the save is
+ * refused as "changed", sending nothing, with the author as it is now:
+ * the person never saw it, so it is never overwritten. Otherwise its
+ * author is written in the convention (`renderCredits`, a PATCH of
+ * `author` alone) and the write logged (`song`, with the author before and
+ * after). Last, the mirror gets the song as Planning Center has it now,
+ * and its credits are derived afresh, a refused song's too, so that the
+ * page shows its author as it is now once reloaded.
  *
  * Refused when the id is not a song's or Planning Center has no such song,
- * when the credits do not check, or when Planning Center refuses the
- * write. Throws when Planning Center or the database fails.
+ * when the credits do not check, when the author changed since the page
+ * loaded, or when Planning Center refuses the write. Throws when Planning
+ * Center or the database fails.
  */
 export async function saveSongCredits(
     pcoSongId: string,
+    shownAuthor: string | null,
     credits: readonly Credit[],
     now: Date = new Date()
 ): Promise<SaveSongCreditsResult> {
@@ -223,9 +247,23 @@ export async function saveSongCredits(
     if (song === null) {
         return refusal("not-found", NO_SUCH_PCO_SONG);
     }
+    const currentOf = (of: PcoLibrarySong): CurrentAuthor => ({
+        author: of.author ?? "",
+        credits: songCreditsOf(parseCredits(of.author, settings.creditRoles)),
+    });
     const author = renderCredits(checked.credits);
+    const changed = !sameAuthor(song.author, author);
+    if (changed && !sameAuthor(song.author, shownAuthor)) {
+        mirrorSongs(db, [song], settings.creditRoles, now);
+        return {
+            ...refusal(
+                "changed",
+                `The credits of "${song.title}" changed in Planning Center since this page loaded, so nothing was saved. Check them as they are now, then save again.`
+            ),
+            current: currentOf(song),
+        };
+    }
     let saved = song;
-    const changed = song.author !== author;
     if (changed) {
         const target = `song ${id}`;
         const payload = { action: "credits", title: song.title, previous: song.author, author };
@@ -242,12 +280,7 @@ export async function saveSongCredits(
         logWrite(db, { kind: "song", target, ok: true, payload, result: { song: songSummary(saved) } }, now);
     }
     mirrorSongs(db, [saved], settings.creditRoles, now);
-    return {
-        ok: true,
-        changed,
-        author: saved.author ?? "",
-        credits: songCreditsOf(parseCredits(saved.author, settings.creditRoles)),
-    };
+    return { ok: true, changed, ...currentOf(saved) };
 }
 
 // ---------------------------------------------------------------------------

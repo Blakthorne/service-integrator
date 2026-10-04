@@ -124,7 +124,7 @@ describe("saveSongCredits", () => {
                 json({ data: songResource(SONG, { title: "O God, Our Help", author: AUTHOR }) }),
         });
 
-        await expect(saveSongCredits(SONG, OUR_HELP, T0)).resolves.toEqual({
+        await expect(saveSongCredits(SONG, "Isaac Watts", OUR_HELP, T0)).resolves.toEqual({
             ok: true,
             changed: true,
             author: AUTHOR,
@@ -163,7 +163,7 @@ describe("saveSongCredits", () => {
             [urls.song()]: { data: songResource(SONG, { author: "Isaac Watts" }) },
             [`PATCH ${urls.song()}`]: () => json({ data: songResource(SONG, { author: "Words & Music: A; Arr.: B" }) }),
         });
-        await saveSongCredits(SONG, [
+        await saveSongCredits(SONG, "Isaac Watts", [
             { role: "arr.", names: [" B "] },
             { role: "music", names: ["A"] },
             { role: "WORDS", names: ["A", ""] },
@@ -173,16 +173,82 @@ describe("saveSongCredits", () => {
         });
     });
 
-    test("sends nothing when the author already says exactly that, and still refreshes the mirror", async () => {
-        seedPcoSong(db, { id: SONG, title: "Old title", author: AUTHOR });
+    test("refuses, sending nothing, when the author changed in Planning Center since the page loaded", async () => {
+        // The page showed the mirror's "Isaac Wats"; Planning Center has been corrected since.
+        seedPcoSong(db, { id: SONG, title: "O God, Our Help", author: "Isaac Wats" });
         const fetchMock = stubFetchRoutes({
             [urls.song()]: { data: songResource(SONG, { title: "O God, Our Help", author: AUTHOR }) },
         });
 
-        await expect(saveSongCredits(SONG, OUR_HELP, T0)).resolves.toMatchObject({ ok: true, changed: false, author: AUTHOR });
+        await expect(
+            saveSongCredits(
+                SONG,
+                "Isaac Wats",
+                [
+                    { role: "Words", names: ["Isaac Wats"] },
+                    { role: "Arr.", names: ["X"] },
+                ],
+                T0
+            )
+        ).resolves.toEqual({
+            ok: false,
+            reason: "changed",
+            message:
+                'The credits of "O God, Our Help" changed in Planning Center since this page loaded, so nothing was saved. Check them as they are now, then save again.',
+            current: { author: AUTHOR, credits: { status: "ok", credits: OUR_HELP } },
+        });
         expect(writesSent(fetchMock)).toEqual([]);
         expect(writes()).toEqual([]);
-        expect(findPcoSong(db, SONG)).toMatchObject({ title: "O God, Our Help" });
+        // The mirror takes the author as it is now, so the page shows it once reloaded.
+        expect(findPcoSong(db, SONG)).toMatchObject({ author: AUTHOR, syncedAt: T0.toISOString() });
+        expect(findSongCredits(db, SONG)).toEqual({ status: "ok", credits: OUR_HELP });
+    });
+
+    test("refuses too when an author was added or emptied in Planning Center since the page loaded", async () => {
+        const fetchMock = stubFetchRoutes({ [urls.song()]: { data: songResource(SONG, { author: "John Newton" }) } });
+        await expect(saveSongCredits(SONG, null, OUR_HELP)).resolves.toMatchObject({
+            ok: false,
+            reason: "changed",
+            current: { author: "John Newton" },
+        });
+        stubFetchRoutes({ [urls.song()]: { data: songResource(SONG, { author: null }) } });
+        await expect(saveSongCredits(SONG, "John Newton", OUR_HELP)).resolves.toMatchObject({
+            ok: false,
+            reason: "changed",
+            current: { author: "", credits: { status: "legacy", credits: [] } },
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("takes an empty author and a missing one for the same, whichever the page or Planning Center has", async () => {
+        for (const [shown, now] of [
+            [null, ""],
+            ["", null],
+            [null, null],
+        ] as const) {
+            const fetchMock = stubFetchRoutes({
+                [urls.song()]: { data: songResource(SONG, { author: now }) },
+                [`PATCH ${urls.song()}`]: () => json({ data: songResource(SONG, { author: AUTHOR }) }),
+            });
+            await expect(saveSongCredits(SONG, shown, OUR_HELP)).resolves.toMatchObject({ ok: true, changed: true });
+            expect(writesSent(fetchMock)).toHaveLength(1);
+        }
+    });
+
+    test("saves over an author changed since the page loaded only when it already says exactly that", async () => {
+        seedPcoSong(db, { id: SONG, title: "Old title", author: "Isaac Wats" });
+        const fetchMock = stubFetchRoutes({
+            [urls.song()]: { data: songResource(SONG, { title: "O God, Our Help", author: AUTHOR }) },
+        });
+
+        await expect(saveSongCredits(SONG, "Isaac Wats", OUR_HELP, T0)).resolves.toMatchObject({
+            ok: true,
+            changed: false,
+            author: AUTHOR,
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+        expect(writes()).toEqual([]);
+        expect(findPcoSong(db, SONG)).toMatchObject({ title: "O God, Our Help", author: AUTHOR });
         expect(findSongCredits(db, SONG)).toEqual({ status: "ok", credits: OUR_HELP });
     });
 
@@ -193,7 +259,7 @@ describe("saveSongCredits", () => {
             [`PATCH ${urls.song()}`]: () => json({ data: songResource(SONG, { author: "Text: A; Tune: B" }) }),
         });
         await expect(
-            saveSongCredits(SONG, [
+            saveSongCredits(SONG, "", [
                 { role: "Text", names: ["A"] },
                 { role: "Tune", names: ["B"] },
             ])
@@ -210,7 +276,7 @@ describe("saveSongCredits", () => {
         expect(writesSent(fetchMock)[0].body).toEqual({
             data: { type: "Song", attributes: { author: "Text: A; Tune: B" } },
         });
-        await expect(saveSongCredits(SONG, [{ role: "Words", names: ["A"] }])).resolves.toMatchObject({
+        await expect(saveSongCredits(SONG, "", [{ role: "Words", names: ["A"] }])).resolves.toMatchObject({
             ok: false,
             reason: "invalid",
             message: '"Words" is not a credit role: use Text or Tune.',
@@ -219,20 +285,20 @@ describe("saveSongCredits", () => {
 
     test("refuses, sending nothing, an id that is not a song's, credits that do not check, or no names", async () => {
         const fetchMock = stubFetchRoutes({});
-        await expect(saveSongCredits("x", OUR_HELP)).resolves.toEqual({
+        await expect(saveSongCredits("x", "", OUR_HELP)).resolves.toEqual({
             ok: false,
             reason: "not-found",
             message: "There is no such Planning Center song.",
         });
-        await expect(saveSongCredits(SONG, [{ role: "Composer", names: ["A"] }])).resolves.toMatchObject({
+        await expect(saveSongCredits(SONG, "", [{ role: "Composer", names: ["A"] }])).resolves.toMatchObject({
             ok: false,
             reason: "invalid",
         });
-        await expect(saveSongCredits(SONG, [{ role: "Words", names: ["Newton, John"] }])).resolves.toMatchObject({
+        await expect(saveSongCredits(SONG, "", [{ role: "Words", names: ["Newton, John"] }])).resolves.toMatchObject({
             ok: false,
             reason: "invalid",
         });
-        await expect(saveSongCredits(SONG, [{ role: "Words", names: [" "] }])).resolves.toEqual({
+        await expect(saveSongCredits(SONG, "", [{ role: "Words", names: [" "] }])).resolves.toEqual({
             ok: false,
             reason: "invalid",
             message: "Enter at least one name: the credits would be empty.",
@@ -243,7 +309,7 @@ describe("saveSongCredits", () => {
 
     test("refuses a song Planning Center does not have, writing nothing", async () => {
         const fetchMock = stubFetchRoutes({ [urls.song()]: () => json({ errors: [] }, { status: 404 }) });
-        await expect(saveSongCredits(SONG, OUR_HELP)).resolves.toMatchObject({ ok: false, reason: "not-found" });
+        await expect(saveSongCredits(SONG, "", OUR_HELP)).resolves.toMatchObject({ ok: false, reason: "not-found" });
         expect(writesSent(fetchMock)).toEqual([]);
         expect(findPcoSong(db, SONG)).toBeNull();
     });
@@ -255,7 +321,7 @@ describe("saveSongCredits", () => {
             [`PATCH ${urls.song()}`]: () => VALIDATION_ERROR("is too long", "author"),
         });
 
-        await expect(saveSongCredits(SONG, OUR_HELP)).resolves.toEqual({
+        await expect(saveSongCredits(SONG, "Isaac Watts", OUR_HELP)).resolves.toEqual({
             ok: false,
             reason: "refused",
             message: 'Planning Center refused the credits of "O God, Our Help": author: is too long',
@@ -279,7 +345,10 @@ describe("saveSongCredits", () => {
             [urls.song()]: { data: songResource(SONG, { author: "Isaac Watts" }) },
             [`PATCH ${urls.song()}`]: () => json({ errors: [] }, { status: 500 }),
         });
-        await expect(saveSongCredits(SONG, OUR_HELP)).rejects.toMatchObject({ name: "PcoError", status: 500 });
+        await expect(saveSongCredits(SONG, "Isaac Watts", OUR_HELP)).rejects.toMatchObject({
+            name: "PcoError",
+            status: 500,
+        });
         expect(writes()).toMatchObject([{ kind: "song", ok: false, result: { status: 500 } }]);
     });
 
@@ -287,7 +356,7 @@ describe("saveSongCredits", () => {
         const cause = breakDatabase();
         vi.spyOn(console, "error").mockImplementation(() => {});
         const fetchMock = stubFetchRoutes({});
-        await expect(saveSongCredits(SONG, OUR_HELP)).rejects.toBe(cause);
+        await expect(saveSongCredits(SONG, "", OUR_HELP)).rejects.toBe(cause);
         expect(fetchMock).not.toHaveBeenCalled();
     });
 });
