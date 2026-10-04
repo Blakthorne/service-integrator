@@ -11,6 +11,7 @@ import {
     toOne,
 } from "./client";
 import { InvalidPcoIdError } from "./ids";
+import { pcoPacer } from "./pacer";
 import { calledRequests, stubFetchRoutes } from "./testing";
 
 const BASE = "https://api.planningcenteronline.com/services/v2";
@@ -928,5 +929,136 @@ describe("validation errors (422)", () => {
         expect(error).not.toBeInstanceOf(PcoValidationError);
         expect(error).toMatchObject({ name: "PcoError", status });
         expect(error).not.toHaveProperty("details");
+    });
+});
+
+describe("paced requests", () => {
+    const songBody = jsonApi("Song", { title: "Amazing Grace" });
+
+    /** Stand in for the shared pacer: log each turn and grant it at once. */
+    function spyOnPacer(log: string[]) {
+        return vi.spyOn(pcoPacer(), "acquire").mockImplementation(async () => {
+            log.push("turn");
+        });
+    }
+
+    /** Stub fetch, logging each request's method and URL; `respond` answers it. */
+    function stubLoggedFetch(log: string[], respond: (call: number) => Response) {
+        let call = 0;
+        const fetchMock = vi
+            .fn()
+            .mockImplementation(async (url: string, init?: RequestInit) => {
+                log.push(`${init?.method ?? "GET"} ${url}`);
+                return respond(call++);
+            });
+        vi.stubGlobal("fetch", fetchMock);
+        return fetchMock;
+    }
+
+    test("are off by default: no read or write waits for the pacer", async () => {
+        const acquire = vi.spyOn(pcoPacer(), "acquire");
+        stubFetch((url) =>
+            json(
+                url === `${BASE}/songs`
+                    ? page([{ id: "1" }], { next: `${BASE}/songs?offset=1` })
+                    : page([{ id: "2" }])
+            )
+        );
+
+        await pcoFetch("/service_types/1", "serviceTypes");
+        await pcoFetchAll("/songs", "songs");
+        await pcoMutate("PATCH", "/songs/9", songBody);
+
+        expect(acquire).not.toHaveBeenCalled();
+    });
+
+    test("pcoFetchAll takes a turn before every page it follows, and before a 429 retry", async () => {
+        vi.useFakeTimers();
+        const log: string[] = [];
+        const acquire = spyOnPacer(log);
+        stubLoggedFetch(log, (call) => {
+            if (call === 0) return json(page([{ id: "1" }], { next: `${BASE}/songs?offset=1` }));
+            if (call === 1) return tooManyRequests("1");
+            if (call === 2) return json(page([{ id: "2" }], { next: `${BASE}/songs?offset=2` }));
+            return json(page([{ id: "3" }]));
+        });
+
+        const result = pcoFetchAll("/songs", "songs", { maxPages: 3, paced: true });
+        await vi.advanceTimersByTimeAsync(1000);
+
+        await expect(result).resolves.toMatchObject({
+            data: [{ id: "1" }, { id: "2" }, { id: "3" }],
+        });
+        expect(log).toEqual([
+            "turn",
+            `GET ${BASE}/songs`,
+            "turn",
+            `GET ${BASE}/songs?offset=1`,
+            "turn",
+            `GET ${BASE}/songs?offset=1`,
+            "turn",
+            `GET ${BASE}/songs?offset=2`,
+        ]);
+        expect(acquire).toHaveBeenCalledTimes(4);
+    });
+
+    test("pcoFetch and pcoMutate take one turn per request", async () => {
+        const log: string[] = [];
+        spyOnPacer(log);
+        stubLoggedFetch(log, () => json({ data: {} }));
+
+        await pcoFetch("/service_types/1", "serviceTypes", { paced: true });
+        await pcoMutate("PATCH", "/songs/9", songBody, { paced: true });
+        await pcoMutate("DELETE", "/songs/9", undefined, { paced: true });
+
+        expect(log).toEqual([
+            "turn",
+            `GET ${BASE}/service_types/1`,
+            "turn",
+            `PATCH ${BASE}/songs/9`,
+            "turn",
+            `DELETE ${BASE}/songs/9`,
+        ]);
+    });
+
+    test("sends nothing, and starts no timeout, until the pacer grants the turn", async () => {
+        let grant = () => {};
+        vi.spyOn(pcoPacer(), "acquire").mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    grant = resolve;
+                })
+        );
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        const fetchMock = stubFetch(() => json({ data: { id: "9" } }, { status: 201 }));
+
+        const result = pcoMutate("POST", "/songs", songBody, { paced: true });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(timeout).not.toHaveBeenCalled();
+
+        grant();
+        await expect(result).resolves.toEqual({ data: { id: "9" } });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(timeout.mock.calls).toEqual([[15_000]]);
+    });
+
+    test("a URL the guard refuses takes no turn", async () => {
+        const acquire = vi.spyOn(pcoPacer(), "acquire").mockResolvedValue(undefined);
+        const fetchMock = stubFetch(() =>
+            json(page([{ id: "1" }], { next: "https://evil.example/services/v2/songs" }))
+        );
+
+        await expect(
+            pcoMutate("POST", "/../people/v2/people", songBody, { paced: true })
+        ).rejects.toBeInstanceOf(PcoUrlError);
+        expect(acquire).not.toHaveBeenCalled();
+
+        // The first page takes its turn; the refused links.next takes none.
+        await expect(pcoFetchAll("/songs", "songs", { paced: true })).rejects.toBeInstanceOf(
+            PcoUrlError
+        );
+        expect(acquire).toHaveBeenCalledTimes(1);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 });

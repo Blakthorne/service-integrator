@@ -1,6 +1,7 @@
 import "server-only";
 import { PCO_CACHE_POLICY, type PcoResourceKind } from "./cachePolicy";
 import { assertPcoId, type PcoId } from "./ids";
+import { pcoPacer } from "./pacer";
 import type {
     PcoErrorObject,
     PcoErrorResponse,
@@ -192,13 +193,28 @@ const readOptionalJson: ReadBody = async (response) => {
     return text.trim() === "" ? null : JSON.parse(text);
 };
 
+/** Options that every PCO request function takes. */
+export interface PcoRequestOptions {
+    /**
+     * Wait for the shared pacer (pacer.ts) before each request this call
+     * sends, every page pcoFetchAll follows and a 429 retry included. Sync
+     * jobs pass `paced: true`; page loads leave it off, so they never wait.
+     */
+    paced?: boolean;
+}
+
 /**
  * One guarded request, retrying a short 429 once. `init` carries what differs
  * between calls (method, body, cache option); the auth headers, the redirect
  * refusal and the timeout are added here, so no caller can leave them out.
  * Resolves to `read` of the 2xx response.
  */
-async function request(url: URL, init: RequestInit, read: ReadBody): Promise<unknown> {
+async function request(
+    url: URL,
+    init: RequestInit,
+    read: ReadBody,
+    { paced = false }: PcoRequestOptions = {}
+): Promise<unknown> {
     const guarded: RequestInit = {
         ...init,
         headers: pcoAuthHeaders(),
@@ -208,8 +224,11 @@ async function request(url: URL, init: RequestInit, read: ReadBody): Promise<unk
     };
     const path = url.pathname + url.search;
     // A fresh timeout for each attempt; it also bounds reading the body.
-    const attempt = () =>
+    const send = () =>
         fetch(url.href, { ...guarded, signal: AbortSignal.timeout(PCO_TIMEOUT_MS) });
+    // A paced attempt waits for its turn, so its timeout starts only once it
+    // is sent.
+    const attempt = paced ? () => pcoPacer().acquire().then(send) : send;
 
     try {
         let response = await attempt();
@@ -243,8 +262,12 @@ async function request(url: URL, init: RequestInit, read: ReadBody): Promise<unk
  * starts with "/". Throws PcoUrlError before fetching if the normalized URL
  * leaves the Services API, and PcoError on a non-2xx response.
  */
-export async function pcoFetch<T>(path: string, kind: PcoResourceKind): Promise<T> {
-    return (await request(servicesUrl(path), PCO_CACHE_POLICY[kind], readJson)) as T;
+export async function pcoFetch<T>(
+    path: string,
+    kind: PcoResourceKind,
+    options?: PcoRequestOptions
+): Promise<T> {
+    return (await request(servicesUrl(path), PCO_CACHE_POLICY[kind], readJson, options)) as T;
 }
 
 /** What pcoFetchAll collects across every page of a list endpoint. */
@@ -257,6 +280,12 @@ export interface PcoPages<T, I> {
     totalCount: number;
 }
 
+/** Options for pcoFetchAll. */
+export interface PcoFetchAllOptions extends PcoRequestOptions {
+    /** The most pages to fetch before throwing; defaults to 50. */
+    maxPages?: number;
+}
+
 /**
  * GET every page of a PCO list endpoint by following `links.next`, which is
  * guarded like the first URL. Throws rather than silently truncating when a
@@ -265,7 +294,7 @@ export interface PcoPages<T, I> {
 export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResourceIdentifier>(
     path: string,
     kind: PcoResourceKind,
-    { maxPages = DEFAULT_MAX_PAGES }: { maxPages?: number } = {}
+    { maxPages = DEFAULT_MAX_PAGES, paced = false }: PcoFetchAllOptions = {}
 ): Promise<PcoPages<T, I>> {
     const init = PCO_CACHE_POLICY[kind];
     const data: T[] = [];
@@ -280,7 +309,7 @@ export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResour
                 `Planning Center returned more than ${maxPages} pages for ${path}`
             );
         }
-        const page = (await request(url, init, readJson)) as PcoListResponse<T, I>;
+        const page = (await request(url, init, readJson, { paced })) as PcoListResponse<T, I>;
         data.push(...page.data);
         for (const resource of page.included ?? []) {
             const key = `${resource.type}:${resource.id}`;
@@ -315,14 +344,15 @@ export type PcoMutationMethod = "POST" | "PATCH" | "DELETE";
 export async function pcoMutate<T = unknown>(
     method: PcoMutationMethod,
     path: string,
-    body?: PcoWriteBody
+    body?: PcoWriteBody,
+    options?: PcoRequestOptions
 ): Promise<T | null> {
     const init: RequestInit = {
         method,
         cache: "no-store",
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     };
-    return (await request(servicesUrl(path), init, readOptionalJson)) as T | null;
+    return (await request(servicesUrl(path), init, readOptionalJson, options)) as T | null;
 }
 
 /** A to-one relationship in a write body. Its ID has passed assertPcoId. */
