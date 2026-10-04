@@ -10,8 +10,8 @@ import type { ServiceType } from "./domain";
  *
  * Pure and safe on both sides: lib/db/settings.ts stores the values,
  * lib/queries/settings.ts reads and saves them, and the text functions
- * (lib/copyright.ts, lib/serviceSchedule.ts, lib/hymnNotes.ts) take what they
- * need of them as arguments.
+ * (lib/copyright.ts, lib/credits.ts, lib/serviceSchedule.ts,
+ * lib/hymnNotes.ts) take what they need of them as arguments.
  */
 
 /**

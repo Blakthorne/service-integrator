@@ -10,7 +10,9 @@ import { DEFAULT_SETTINGS } from "./settings";
 
 // Characterization tests: they pin what the code did when it was moved out of
 // the components, quirks included. A test marked QUIRK documents behavior that
-// looks wrong but is deliberately kept; fix commits flip those assertions.
+// looks wrong but is deliberately kept; fix commits flip those assertions. The
+// author line's tests moved to lib/credits.test.ts with the reading they pin,
+// assertions unchanged.
 
 const FOOTER = "Used by permission. CCLI Streaming License 1564484.";
 
@@ -30,11 +32,6 @@ function songItem(
     return { title, itemType: "song", sequence, song: itemSong };
 }
 
-/** Line 1 of the block: `"<title>" <author line>.` for a song titled "T". */
-function titleLineFor(author: string): string {
-    return formatCopyrightText(song({ author })).split("\n")[0];
-}
-
 /** Line 2 of the block: the copyright line. */
 function copyrightLineFor(
     copyright: string | null | undefined,
@@ -44,91 +41,6 @@ function copyrightLineFor(
     // field missing from the JSON.
     return formatCopyrightText(song({ copyright, admin })).split("\n")[1];
 }
-
-describe("formatCopyrightText: author line", () => {
-    test("a single author gets 'Words and Music by'", () => {
-        expect(titleLineFor("X")).toBe('"T" Words and Music by X.');
-    });
-
-    test("'A and B' is words by A, music by B", () => {
-        expect(titleLineFor("A and B")).toBe('"T" Words by A. Music by B.');
-    });
-
-    test("'A, B, C' is words by A and B, music by C", () => {
-        expect(titleLineFor("A, B, C")).toBe(
-            '"T" Words by A and B. Music by C.'
-        );
-    });
-
-    test("a fourth comma-separated author is dropped", () => {
-        expect(titleLineFor("A, B, C, D")).toBe(
-            '"T" Words by A and B. Music by C.'
-        );
-    });
-
-    test("'A, B' (two comma parts) is treated as ONE author", () => {
-        expect(titleLineFor("A, B")).toBe('"T" Words and Music by A, B.');
-    });
-
-    test("a third ' and '-separated author is dropped", () => {
-        expect(titleLineFor("A and B and C")).toBe(
-            '"T" Words by A. Music by B.'
-        );
-    });
-
-    test("an empty author becomes 'Unknown'", () => {
-        expect(titleLineFor("")).toBe('"T" Words and Music by Unknown.');
-    });
-
-    test("a whitespace-only author also becomes 'Unknown'", () => {
-        expect(titleLineFor("   ")).toBe('"T" Words and Music by Unknown.');
-    });
-
-    test("QUIRK: an author already ending in '.' is followed by a second '.'", () => {
-        expect(titleLineFor("John Newton.")).toBe(
-            '"T" Words and Music by John Newton..'
-        );
-    });
-
-    test("each comma-separated author is trimmed", () => {
-        expect(titleLineFor("  A ,  B ,C  ")).toBe(
-            '"T" Words by A and B. Music by C.'
-        );
-    });
-
-    test("an empty side of ' and ' falls back (first -> Unknown, second -> the first author)", () => {
-        expect(titleLineFor("A and ")).toBe('"T" Words by A. Music by A.');
-        expect(titleLineFor(" and B")).toBe(
-            '"T" Words by Unknown. Music by B.'
-        );
-    });
-
-    test("only a lowercase ' and ' splits authors ('AND' and '&' do not)", () => {
-        expect(titleLineFor("A AND B")).toBe('"T" Words and Music by A AND B.');
-        expect(titleLineFor("A & B")).toBe('"T" Words and Music by A & B.');
-    });
-
-    test("QUIRK: three or more comma parts win over ' and ', which is then not split", () => {
-        expect(titleLineFor("A and B, C, D")).toBe(
-            '"T" Words by A and B and C. Music by D.'
-        );
-    });
-
-    test("two comma parts fall through to ' and ' splitting", () => {
-        expect(titleLineFor("A and B, C")).toBe(
-            '"T" Words by A. Music by B, C.'
-        );
-    });
-
-    test("a null or undefined author becomes 'Unknown', like an empty one", () => {
-        expect(formatCopyrightText(song({ author: null })).split("\n")[0]).toBe(
-            '"T" Words and Music by Unknown.'
-        );
-        expect(
-            formatCopyrightText(song({ author: undefined })).split("\n")[0]
-        ).toBe('"T" Words and Music by Unknown.');
-    });
-});
 
 describe("formatCopyrightText: copyright line", () => {
     test("a null or undefined copyright is 'Public Domain.' and ignores the admin", () => {

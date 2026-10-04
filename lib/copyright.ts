@@ -1,3 +1,4 @@
+import { renderLegacyCreditLine } from "./credits";
 import type { PlanItemWithSong, Song } from "./domain";
 import { DEFAULT_SETTINGS, type CopyrightSettings } from "./settings";
 
@@ -20,38 +21,17 @@ export type CopyrightItem = Pick<PlanItemWithSong, "itemType" | "sequence"> & {
  * (`ccliLicenseNumber`; the default is the number it always printed).
  *
  * Moved verbatim from SongCopyright.tsx; copyright.test.ts pins its behavior,
- * quirks included (for example ".." after an author that already ends in a
- * period). A missing, empty or whitespace-only copyright is "Public Domain.".
+ * quirks included, and the author line, which lib/credits.ts prints
+ * (`renderLegacyCreditLine`), is pinned in credits.test.ts (for example ".."
+ * after an author that already ends in a period). A missing, empty or
+ * whitespace-only copyright is "Public Domain.".
  */
 export function formatCopyrightText(
     song: CopyrightSong,
     { ccliLicenseNumber }: CopyrightSettings = DEFAULT_SETTINGS
 ): string {
     // PCO can send a null author; treat it like an empty one ("Unknown").
-    const author = song.author ?? "";
-
-    // First split by comma to check if there are three authors
-    const commaAuthors = author.split(",").map((a) => a.trim());
-    let authorLine: string;
-
-    if (commaAuthors.length >= 3) {
-        // If there are three or more authors separated by commas
-        const wordsAuthors = commaAuthors.slice(0, 2).join(" and ");
-        const musicAuthor = commaAuthors[2];
-        authorLine = `Words by ${wordsAuthors}. Music by ${musicAuthor}`;
-    } else {
-        // If not three authors, split by "and"
-        const authors = author.split(" and ").map((a) => a.trim());
-        if (authors.length === 1) {
-            // Single author case
-            authorLine = `Words and Music by ${authors[0] || "Unknown"}`;
-        } else {
-            // Two authors case
-            const wordsAuthor = authors[0] || "Unknown";
-            const musicAuthor = authors[1] || wordsAuthor;
-            authorLine = `Words by ${wordsAuthor}. Music by ${musicAuthor}`;
-        }
-    }
+    const authorLine = renderLegacyCreditLine(song.author ?? "", DEFAULT_SETTINGS);
 
     // Format copyright line with conditional © symbol. A missing, empty or
     // whitespace-only copyright counts as public domain.
