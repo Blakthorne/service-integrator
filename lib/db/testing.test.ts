@@ -6,6 +6,10 @@ import {
     seedEntry,
     seedHymn,
     seedPcoSong,
+    seedPcoSongCredits,
+    seedPcoSongTag,
+    seedPcoTag,
+    seedPcoTagGroup,
     seedScheduleSelection,
     seedSetting,
     seedSong,
@@ -340,6 +344,83 @@ describe("seedSetting", () => {
         expect(db.prepare("SELECT * FROM settings ORDER BY key").all()).toEqual([
             { key: "newer-key", value: '{"a":[1]}', updated_at: "2026-10-04T13:00:00.000Z" },
             { key: "numberSeparator", value: '", "', updated_at: "2026-10-04T12:00:00.000Z" },
+        ]);
+    });
+});
+
+describe("seedPcoSongCredits", () => {
+    const credits = (pcoSongId: string) =>
+        db
+            .prepare("SELECT * FROM pco_song_credits WHERE pco_song_id = ? ORDER BY position")
+            .all(pcoSongId)
+            .map((stored) => ({ ...stored }));
+
+    test("stores a row for each name of each role, numbered in order, as ok by default", () => {
+        const id = seedPcoSong(db);
+        seedPcoSongCredits(db, id, [
+            { role: "Words", names: ["Isaac Watts"] },
+            { role: "Arr.", names: ["A", "B"] },
+        ]);
+        expect(credits(id)).toEqual([
+            { pco_song_id: id, role: "Words", name: "Isaac Watts", position: 0, parse_status: "ok" },
+            { pco_song_id: id, role: "Arr.", name: "A", position: 1, parse_status: "ok" },
+            { pco_song_id: id, role: "Arr.", name: "B", position: 2, parse_status: "ok" },
+        ]);
+    });
+
+    test("with no credits, stores the one row that holds only the status, any status included", () => {
+        const id = seedPcoSong(db);
+        seedPcoSongCredits(db, id, [], "newer-status");
+        expect(credits(id)).toEqual([
+            { pco_song_id: id, role: null, name: null, position: 0, parse_status: "newer-status" },
+        ]);
+    });
+});
+
+describe("seedPcoTagGroup, seedPcoTag and seedPcoSongTag", () => {
+    const stored = (table: string, id: string) =>
+        ({ ...db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id) });
+
+    test("make song tag groups with ids 8000001, 8000002, … whose songs may have several tags, by default", () => {
+        expect([seedPcoTagGroup(db), seedPcoTagGroup(db)]).toEqual(["8000001", "8000002"]);
+        expect(stored("pco_tag_groups", "8000001")).toEqual({
+            id: "8000001",
+            name: "Tag Group 1",
+            tags_for: "song",
+            allow_multiple: 1,
+        });
+        seedPcoTagGroup(db, { id: "8000004" });
+        expect(seedPcoTagGroup(db)).toBe("8000005");
+    });
+
+    test("a group takes every field, an arrangement group included", () => {
+        seedPcoTagGroup(db, { id: "7", name: "Speed", tagsFor: "arrangement", allowMultiple: false });
+        expect(stored("pco_tag_groups", "7")).toEqual({
+            id: "7",
+            name: "Speed",
+            tags_for: "arrangement",
+            allow_multiple: 0,
+        });
+    });
+
+    test("make tags with ids 8100001, 8100002, …, each in a new group by default", () => {
+        expect([seedPcoTag(db), seedPcoTag(db)]).toEqual(["8100001", "8100002"]);
+        expect(stored("pco_tags", "8100001")).toEqual({
+            id: "8100001",
+            group_id: "8000001",
+            name: "Tag 1",
+        });
+        expect(stored("pco_tags", "8100002")).toMatchObject({ group_id: "8000002", name: "Tag 2" });
+    });
+
+    test("a tag takes every field, and a song is given a tag", () => {
+        const groupId = seedPcoTagGroup(db, { name: "Type" });
+        const tagId = seedPcoTag(db, { id: "42", groupId, name: "Hymn" });
+        expect(stored("pco_tags", tagId)).toEqual({ id: "42", group_id: groupId, name: "Hymn" });
+        const songId = seedPcoSong(db);
+        seedPcoSongTag(db, songId, tagId);
+        expect(db.prepare("SELECT * FROM pco_song_tags").all().map((row) => ({ ...row }))).toEqual([
+            { pco_song_id: songId, tag_id: "42" },
         ]);
     });
 });

@@ -1,8 +1,8 @@
 /**
  * The app's domain types: the one place where the shapes of service types,
- * plans, plan items, songs, the Schedule tab's selections and the song
- * catalog are declared. Pure types, safe to import from client and server
- * code alike.
+ * plans, plan items, songs, the Schedule tab's selections, the song catalog
+ * and its links, and songs' credits and tags are declared. Pure types, safe
+ * to import from client and server code alike.
  *
  * Raw Planning Center (JSON:API) shapes live in lib/pco/resources.ts, and
  * lib/pco/mappers.ts turns them into these.
@@ -554,4 +554,68 @@ export interface CatalogSongOption {
     labels: string[];
     /** The Planning Center song it is linked to, or null. */
     pcoSongId: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Credits
+//
+// Who wrote a Planning Center song's words and its music, and who arranged or
+// translated it, as its `author` field says. lib/credits.ts reads the field
+// (the labelled convention `Words: Isaac Watts; Music: Lowell Mason`, or,
+// for an author with no labels, the reading the copyright text always gave
+// it) and writes it back; the mirror keeps what each song's author reads as
+// (`pco_song_credits`), derived on every sync and every credit save. The
+// roles are the `creditRoles` setting.
+// ---------------------------------------------------------------------------
+
+/**
+ * How a Planning Center song's author reads as credits: "ok" (the labelled
+ * convention), "legacy" (no labels at all, read the way the copyright text
+ * always read an author) or "unparsed" (labels that do not parse, so it is
+ * flagged, never rewritten).
+ */
+export type CreditParseStatus = "ok" | "legacy" | "unparsed";
+
+/** One role of a song's credits and who holds it: `{ role: "Words", names: ["Isaac Watts"] }`. */
+export interface Credit {
+    /** The role, spelled as the `creditRoles` setting spells it: "Words", "Music", "Arr.", "Trans.". */
+    role: string;
+    /** Who holds it, in order; never empty. */
+    names: string[];
+}
+
+/** What a song's author reads as: how it read, and its credits, one per role (none when it names nobody). */
+export interface SongCredits {
+    status: CreditParseStatus;
+    /** In the order of the `creditRoles` setting. */
+    credits: Credit[];
+}
+
+// ---------------------------------------------------------------------------
+// Song tags
+//
+// Planning Center's tag groups for songs ("Type": Chorus, Hymn, …) and their
+// tags, mirrored in the database (`pco_tag_groups`, `pco_tags`) with which
+// songs have each tag (`pco_song_tags`). Only groups whose tags are for songs
+// are mirrored; arrangement groups ("Speed", "Style") are not.
+// ---------------------------------------------------------------------------
+
+/** One of a tag group's tags, such as "Hymn" in "Type". */
+export interface PcoTag {
+    id: string;
+    /** Its group's id. */
+    groupId: string;
+    name: string;
+}
+
+/** A tag group for songs, with its tags. */
+export interface PcoTagGroup {
+    id: string;
+    name: string;
+    /** What its tags are for: "song" for every group the mirror keeps. */
+    tagsFor: string;
+    /** Whether a song may have several of its tags at once. */
+    allowMultiple: boolean;
+    /** Its tags, by name. */
+    tags: PcoTag[];
 }
