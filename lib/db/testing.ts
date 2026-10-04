@@ -1,6 +1,7 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { normalizeTuneName } from "@/lib/catalog/normalize";
 import type { SongLinkSource } from "@/lib/domain";
+import { planHymnsJsonImport } from "@/lib/import/hymnsJson";
 import { normalizeTitle } from "@/lib/normalizeTitle";
 import { openDatabase } from "./connection";
 import { migrate } from "./migrate";
@@ -215,5 +216,43 @@ export function seedEntry(db: DatabaseSync, fields: SeedEntryFields): number {
         position,
         fields.locationLabel ?? null,
         fields.variantNote ?? null
+    );
+}
+
+/**
+ * The fields of an import run; `seedImportRun` fills in the rest. The kind and
+ * status are plain text, so a test can store what a newer build might.
+ */
+export interface SeedImportRunFields {
+    at?: string;
+    kind?: string;
+    bookId?: number | null;
+    status?: string;
+    sourceName?: string;
+    /** Stored as JSON. */
+    report?: unknown;
+    /** Stored as JSON. */
+    rows?: unknown;
+}
+
+/**
+ * Insert an import run: by default a preview of the seed of an empty
+ * hymns.json (its two books and nothing else), at 2026-10-04 12:00 UTC.
+ */
+export function seedImportRun(
+    db: DatabaseSync,
+    fields: SeedImportRunFields = {}
+): number {
+    const empty = planHymnsJsonImport([]);
+    return insert(
+        db,
+        "INSERT INTO import_runs (at, kind, book_id, status, source_name, report, rows) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        fields.at ?? "2026-10-04T12:00:00.000Z",
+        fields.kind ?? "hymns-json",
+        fields.bookId ?? null,
+        fields.status ?? "preview",
+        fields.sourceName ?? "hymns.json",
+        JSON.stringify(fields.report ?? empty.report),
+        JSON.stringify(fields.rows ?? empty.rows)
     );
 }

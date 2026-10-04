@@ -293,12 +293,17 @@ export interface ImportRunSummary {
     sourceName: string;
     /** The book it imports into, or null for the seed, which creates its books. */
     bookId: number | null;
-    /** How many rows of each kind it adds, such as { songs: 921, entries: 1247 }. */
-    planned: Record<string, number>;
+    /** How many rows of each kind it adds (applying it adds exactly these). */
+    planned: ImportCounts;
 }
 
-/** How many rows of each kind the seed import adds. */
-export type SeedImportCounts = {
+/** An import run with its report, for its review page. */
+export interface ImportRunDetail extends ImportRunSummary {
+    report: SeedImportReport;
+}
+
+/** How many rows of each kind an import adds, or added. */
+export interface ImportCounts {
     books: number;
     hymns: number;
     hymnAliases: number;
@@ -308,7 +313,7 @@ export type SeedImportCounts = {
     /** Of the songs, how many have no known tune. */
     songsWithoutTune: number;
     entries: number;
-};
+}
 
 /**
  * A Great Hymns record with no tune whose hymn has tunes in Rejoice Hymns:
@@ -396,7 +401,7 @@ export interface SeedImportReport {
         recordsByBook: Record<string, number>;
     };
     /** The rows applying it adds. */
-    planned: SeedImportCounts;
+    planned: ImportCounts;
     /** The entries it adds to each book, by book code. */
     entriesByBook: Record<string, number>;
     splitPairs: SeedSplitPair[];
