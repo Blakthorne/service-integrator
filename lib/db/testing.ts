@@ -385,3 +385,21 @@ export function seedWriteLog(db: DatabaseSync, fields: SeedWriteLogFields = {}):
         JSON.stringify(fields.result ?? {})
     );
 }
+
+/**
+ * Store a setting's value as JSON, as saving it does, at `updatedAt`
+ * (2026-10-04 12:00 UTC by default). Any key and any JSON value, so a test
+ * can store what a newer build might, or a value that no longer parses.
+ */
+export function seedSetting(
+    db: DatabaseSync,
+    key: string,
+    value: unknown,
+    updatedAt = "2026-10-04T12:00:00.000Z"
+): void {
+    db.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)").run(
+        key,
+        JSON.stringify(value),
+        updatedAt
+    );
+}

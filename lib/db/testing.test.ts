@@ -7,6 +7,7 @@ import {
     seedHymn,
     seedPcoSong,
     seedScheduleSelection,
+    seedSetting,
     seedSong,
     seedTune,
     seedWriteLog,
@@ -329,5 +330,16 @@ describe("seedWriteLog", () => {
             payload: '{"a":1}',
             result: '{"error":"no"}',
         });
+    });
+});
+
+describe("seedSetting", () => {
+    test("stores any value as JSON under any key, at 2026-10-04 12:00 UTC by default", () => {
+        seedSetting(db, "numberSeparator", ", ");
+        seedSetting(db, "newer-key", { a: [1] }, "2026-10-04T13:00:00.000Z");
+        expect(db.prepare("SELECT * FROM settings ORDER BY key").all()).toEqual([
+            { key: "newer-key", value: '{"a":[1]}', updated_at: "2026-10-04T13:00:00.000Z" },
+            { key: "numberSeparator", value: '", "', updated_at: "2026-10-04T12:00:00.000Z" },
+        ]);
     });
 });
