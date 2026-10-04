@@ -41,9 +41,11 @@ export interface SettingsForm {
  *
  * Once a save succeeds the fields are exactly the ones it posted, holding
  * what it stored (a trimmed number: `valuesAfterSave`), and `saved` is true
- * until one is edited (`isSaved`). The props are not followed: a
- * revalidation, after a save or Sync now, must never overwrite what is being
- * typed.
+ * until one is edited (`isSaved`). The fields are read-only while a save is
+ * under way (`pending`), which a save queued behind another action, such as
+ * Sync now, can make long: Next runs a page's server actions one at a time.
+ * The props are not followed: a revalidation, after a save or Sync now, must
+ * never overwrite what is being typed.
  */
 export function useSettingsForm(
     initial: FormValues,

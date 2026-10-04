@@ -24,6 +24,8 @@ interface SettingsTextFieldProps {
     inputMode?: "text" | "numeric";
     placeholder?: string;
     autoCapitalize?: "none" | "sentences";
+    /** True while the form saves: the field takes no input (`useSettingsForm` ignores it anyway). */
+    readOnly?: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ export function SettingsTextField({
     inputMode,
     placeholder,
     autoCapitalize,
+    readOnly,
 }: SettingsTextFieldProps) {
     const hintId = `${id}-hint`;
     const previewId = `${id}-preview`;
@@ -73,6 +76,7 @@ export function SettingsTextField({
                 placeholder={placeholder}
                 autoComplete="off"
                 autoCapitalize={autoCapitalize}
+                readOnly={readOnly}
                 spellCheck={false}
                 aria-describedby={describedBy}
                 aria-invalid={error ? true : undefined}

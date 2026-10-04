@@ -44,6 +44,7 @@ export default function CopyrightForm({ ccliLicenseNumber }: CopyrightFormProps)
                 }
                 error={fieldErrorOf(form.state, CCLI_LICENSE_NUMBER_FIELD)}
                 inputMode="numeric"
+                readOnly={form.pending}
             />
             <SettingsFormFooter form={form} saveLabel="Save copyright" />
         </form>

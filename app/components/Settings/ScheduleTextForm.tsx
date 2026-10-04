@@ -64,6 +64,7 @@ export default function ScheduleTextForm({ rows, numberSeparator }: ScheduleText
                                         value={values[field] ?? row.label}
                                         onChange={(value) => form.setValue(field, value)}
                                         error={fieldErrorOf(state, field)}
+                                        readOnly={form.pending}
                                     />
                                 );
                             })}
@@ -90,6 +91,7 @@ export default function ScheduleTextForm({ rows, numberSeparator }: ScheduleText
                 }
                 error={fieldErrorOf(state, NUMBER_SEPARATOR_FIELD)}
                 autoCapitalize="none"
+                readOnly={form.pending}
             />
             <SettingsFormFooter form={form} saveLabel="Save schedule text" />
         </form>

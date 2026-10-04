@@ -48,6 +48,7 @@ export default function HymnalNotesForm({
                 value={values[CATEGORY_NAME_FIELD]}
                 onChange={(value) => form.setValue(CATEGORY_NAME_FIELD, value)}
                 error={fieldErrorOf(state, CATEGORY_NAME_FIELD)}
+                readOnly={form.pending}
             />
             <div className="space-y-1">
                 <input type="hidden" name={INCLUDES_TUNE_FIELD} value={tuneChecked ? YES : NO} />
@@ -55,6 +56,9 @@ export default function HymnalNotesForm({
                     <input
                         type="checkbox"
                         checked={tuneChecked}
+                        // Not `disabled`, which would grey the box for the moment a
+                        // save lasts; the form ignores a change while it saves.
+                        aria-disabled={form.pending || undefined}
                         onChange={(event) =>
                             form.setValue(INCLUDES_TUNE_FIELD, event.target.checked ? YES : NO)
                         }
