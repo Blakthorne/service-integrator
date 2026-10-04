@@ -71,8 +71,9 @@ export function getCatalogCounts(): CatalogCounts {
  * A page-title label for `generateMetadata` (convention 12): the label `find`
  * gives for a key that passed `parse`, or `fallback` when the key is invalid
  * (the page renders the 404), there is no such row, or reading fails (logged).
+ * Never throws, and never calls `find` for a key that does not parse.
  */
-function labelOr<K>(
+export function labelOr<K>(
     raw: string,
     parse: (raw: unknown) => K | null,
     find: (key: K) => string | null,
