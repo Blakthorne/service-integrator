@@ -2,10 +2,11 @@ import { describe, expect, test } from "vitest";
 import type { SyncRun } from "@/lib/db/syncRuns";
 import {
     HYMN_NOTE_BADGE_LABELS,
-    dashboardNotices,
+    databaseNotice,
     emptyTodosText,
     hymnNoteBadge,
     planNotesSummary,
+    serviceTypesNotice,
     songNumbersView,
     todoView,
 } from "./dashboard";
@@ -265,30 +266,30 @@ describe("todoView", () => {
     });
 });
 
-describe("dashboardNotices", () => {
-    test("none when everything could be read", () => {
-        expect(dashboardNotices({ serviceTypesError: null, databaseError: null })).toEqual([]);
+describe("databaseNotice", () => {
+    test("none when the database could be read", () => {
+        expect(databaseNotice({ databaseError: null })).toBeNull();
     });
 
-    test("service types that cannot be read: no plans, quietly", () => {
-        expect(
-            dashboardNotices({ serviceTypesError: "Planning Center API responded with status: 500", databaseError: null })
-        ).toEqual(["Planning Center couldn't be reached, so the next plans can't be shown."]);
-    });
-
-    test("a database that cannot be read: why, and what is still shown", () => {
-        expect(
-            dashboardNotices({ serviceTypesError: null, databaseError: "Could not open the database at /srv/x: denied" })
-        ).toEqual([
-            "The database can't be read: Could not open the database at /srv/x: denied. The plans are shown without numbers or hymnal notes, and the catalog and the song sync can't be checked.",
-        ]);
-        expect(dashboardNotices({ serviceTypesError: null, databaseError: "Disk full." })[0]).toMatch(
+    test("why, and what is still shown", () => {
+        expect(databaseNotice({ databaseError: "Could not open the database at /srv/x: denied" })).toBe(
+            "The database can't be read: Could not open the database at /srv/x: denied. The plans are shown without numbers or hymnal notes, and the catalog and the song sync can't be checked."
+        );
+        expect(databaseNotice({ databaseError: "Disk full." })).toMatch(
             /^The database can't be read: Disk full\. The plans/
         );
     });
+});
 
-    test("both, Planning Center first", () => {
-        expect(dashboardNotices({ serviceTypesError: "x", databaseError: "y" })).toHaveLength(2);
+describe("serviceTypesNotice", () => {
+    test("none when the service types could be read", () => {
+        expect(serviceTypesNotice({ serviceTypesError: null })).toBeNull();
+    });
+
+    test("no plans, quietly: the reason is not shown", () => {
+        expect(
+            serviceTypesNotice({ serviceTypesError: "Planning Center API responded with status: 500 (/service_types)" })
+        ).toBe("Planning Center couldn't be reached, so the next plans can't be shown.");
     });
 });
 

@@ -267,22 +267,24 @@ export function todoView(todo: DashboardTodo): TodoView {
 }
 
 /**
- * The warnings above the dashboard, one sentence or two each: what could
- * not be read, and what the page still shows without it.
+ * The warning at the top of the dashboard when the database cannot be read:
+ * why, and what the page still shows without it. Null when it can be read.
  */
-export function dashboardNotices(
-    dashboard: Pick<Dashboard, "serviceTypesError" | "databaseError">
-): string[] {
-    const notices: string[] = [];
-    if (dashboard.serviceTypesError !== null) {
-        notices.push("Planning Center couldn't be reached, so the next plans can't be shown.");
-    }
-    if (dashboard.databaseError !== null) {
-        notices.push(
-            `The database can't be read${reasonSentence(dashboard.databaseError)} The plans are shown without numbers or hymnal notes, and the catalog and the song sync can't be checked.`
-        );
-    }
-    return notices;
+export function databaseNotice(dashboard: Pick<Dashboard, "databaseError">): string | null {
+    return dashboard.databaseError === null
+        ? null
+        : `The database can't be read${reasonSentence(dashboard.databaseError)} The plans are shown without numbers or hymnal notes, and the catalog and the song sync can't be checked.`;
+}
+
+/**
+ * The warning in place of the next plans when Planning Center's service
+ * types cannot be read, quiet like the plans list's: the reason is logged,
+ * not shown. Null when they can be read.
+ */
+export function serviceTypesNotice(dashboard: Pick<Dashboard, "serviceTypesError">): string | null {
+    return dashboard.serviceTypesError === null
+        ? null
+        : "Planning Center couldn't be reached, so the next plans can't be shown.";
 }
 
 /** What a service type's card says when it has no next plan, or it could not be read. */
