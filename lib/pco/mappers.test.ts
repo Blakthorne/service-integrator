@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { PlanItem } from "../domain";
 import {
     joinItemsToSongs,
+    toPcoLibrarySong,
     toPlan,
     toPlanItem,
     toServiceType,
@@ -170,6 +171,100 @@ describe("toSong", () => {
         });
         expect(song.author).toBeNull();
         expect(song.copyright).toBeNull();
+    });
+});
+
+describe("toPcoLibrarySong", () => {
+    test("maps every field the mirror keeps", () => {
+        expect(toPcoLibrarySong(songResource("77"))).toStrictEqual({
+            id: "77",
+            title: "Amazing Grace",
+            author: "John Newton",
+            copyright: "Public Domain",
+            ccliNumber: 22025,
+            admin: "Admin Co",
+            themes: "Grace",
+            hidden: false,
+            lastScheduledAt: "2026-09-27T08:00:00Z",
+            createdAt: "2019-01-01T00:00:00Z",
+            updatedAt: "2026-09-27T08:00:00Z",
+        });
+        expect(toPcoLibrarySong(songResource("78", { hidden: true })).hidden).toBe(true);
+    });
+
+    test("keeps nulls as null and empty strings as empty strings", () => {
+        expect(
+            toPcoLibrarySong(
+                songResource("77", {
+                    author: null,
+                    copyright: "",
+                    ccli_number: null,
+                    admin: null,
+                    themes: "",
+                    last_scheduled_at: null,
+                })
+            )
+        ).toMatchObject({
+            author: null,
+            copyright: "",
+            ccliNumber: null,
+            admin: null,
+            themes: "",
+            lastScheduledAt: null,
+        });
+    });
+
+    test("turns attributes missing from the JSON into null, a title into an empty one", () => {
+        const resource = songResource("77");
+        const attributes: Partial<PcoSongResource["attributes"]> = {
+            ...resource.attributes,
+        };
+        for (const name of [
+            "title",
+            "author",
+            "copyright",
+            "ccli_number",
+            "admin",
+            "themes",
+            "hidden",
+            "last_scheduled_at",
+            "created_at",
+            "updated_at",
+        ] as const) {
+            delete attributes[name];
+        }
+        expect(
+            toPcoLibrarySong({
+                ...resource,
+                attributes: attributes as PcoSongResource["attributes"],
+            })
+        ).toStrictEqual({
+            id: "77",
+            title: "",
+            author: null,
+            copyright: null,
+            ccliNumber: null,
+            admin: null,
+            themes: null,
+            hidden: false,
+            lastScheduledAt: null,
+            createdAt: null,
+            updatedAt: null,
+        });
+    });
+
+    test.each<[string, unknown, number | null]>([
+        ["a whole number", 22025, 22025],
+        ["digits sent as text", " 22025 ", 22025],
+        ["a fraction", 22025.5, null],
+        ["words", "CCLI 22025", null],
+        ["an empty string", "", null],
+        ["a number too large to be exact", 2 ** 60, null],
+    ])("keeps a CCLI number that is %s only if it is a whole number", (_case, value, expected) => {
+        const song = toPcoLibrarySong(
+            songResource("77", { ccli_number: value as number | null })
+        );
+        expect(song.ccliNumber).toBe(expected);
     });
 });
 

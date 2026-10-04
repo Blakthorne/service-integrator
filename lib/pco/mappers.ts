@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+    PcoLibrarySong,
     Plan,
     PlanItem,
     PlanItemWithSong,
@@ -86,6 +87,45 @@ export function toSong(resource: PcoSongResource): Song {
         copyright: attributes.copyright ?? null,
         notes: attributes.notes ?? null,
         themes: attributes.themes ?? null,
+    };
+}
+
+/**
+ * A CCLI number as a whole number, or null. Planning Center sends a number;
+ * anything else (a fraction, words) is dropped, because the mirror stores an
+ * integer and one bad value must not fail a whole sync. Digits sent as text
+ * are read as the number.
+ */
+function ccliNumberOf(value: unknown): number | null {
+    if (typeof value === "number") {
+        return Number.isSafeInteger(value) ? value : null;
+    }
+    if (typeof value === "string" && /^\s*[0-9]{1,15}\s*$/.test(value)) {
+        return Number(value);
+    }
+    return null;
+}
+
+/**
+ * Map a raw song to a library song, with every field the mirror keeps. A
+ * null or missing field becomes null (a missing title an empty one), an
+ * empty string stays an empty string, and the song is hidden only when
+ * Planning Center says so.
+ */
+export function toPcoLibrarySong(resource: PcoSongResource): PcoLibrarySong {
+    const attributes = resource.attributes;
+    return {
+        id: resource.id,
+        title: attributes.title ?? "",
+        author: attributes.author ?? null,
+        copyright: attributes.copyright ?? null,
+        ccliNumber: ccliNumberOf(attributes.ccli_number),
+        admin: attributes.admin ?? null,
+        themes: attributes.themes ?? null,
+        hidden: attributes.hidden === true,
+        lastScheduledAt: attributes.last_scheduled_at ?? null,
+        createdAt: attributes.created_at ?? null,
+        updatedAt: attributes.updated_at ?? null,
     };
 }
 
