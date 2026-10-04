@@ -1,6 +1,16 @@
+import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { PcoError, PcoUrlError, jsonApi, pcoFetch, pcoFetchAll, toOne } from "./client";
+import {
+    PcoError,
+    PcoUrlError,
+    jsonApi,
+    pcoFetch,
+    pcoFetchAll,
+    pcoMutate,
+    toOne,
+} from "./client";
 import { InvalidPcoIdError } from "./ids";
+import { calledRequests, stubFetchRoutes } from "./testing";
 
 const BASE = "https://api.planningcenteronline.com/services/v2";
 const AUTH = `Basic ${Buffer.from("id:tok").toString("base64")}`;
@@ -643,5 +653,154 @@ describe("jsonApi", () => {
 
     test.each(["", "0", "01", "1.5", "../1", "1/2", " 1"])("toOne rejects the ID %j", (id) => {
         expect(() => toOne("Song", id)).toThrow(InvalidPcoIdError);
+    });
+});
+
+describe("pcoMutate", () => {
+    const songBody = jsonApi("Song", { title: "Amazing Grace" });
+    const song = { data: { type: "Song", id: "9", attributes: { title: "Amazing Grace" } } };
+
+    test.each([
+        ["POST", "/songs", 201],
+        ["PATCH", "/songs/9", 200],
+    ] as const)(
+        "%s sends the JSON body with auth and a JSON content type, uncached and refusing redirects",
+        async (method, path, status) => {
+            const fetchMock = stubFetchRoutes({
+                [`${method} ${BASE}${path}`]: () => json(song, { status }),
+            });
+
+            await expect(pcoMutate(method, path, songBody)).resolves.toEqual(song);
+
+            expect(calledRequests(fetchMock)).toEqual([
+                { method, url: `${BASE}${path}`, body: songBody },
+            ]);
+            expect(fetchMock).toHaveBeenCalledWith(
+                `${BASE}${path}`,
+                expect.objectContaining({
+                    method,
+                    body: JSON.stringify(songBody),
+                    cache: "no-store",
+                    redirect: "error",
+                    headers: { Authorization: AUTH, "Content-Type": "application/json" },
+                    signal: expect.any(AbortSignal),
+                })
+            );
+        }
+    );
+
+    test("DELETE sends no body and resolves to null on 204 No Content", async () => {
+        const fetchMock = stubFetchRoutes({
+            [`DELETE ${BASE}/songs/9`]: () => new Response(null, { status: 204 }),
+        });
+
+        await expect(pcoMutate("DELETE", "/songs/9")).resolves.toBeNull();
+
+        const [[, init]] = fetchMock.mock.calls;
+        expect(init).not.toHaveProperty("body");
+        expect(init).toMatchObject({ method: "DELETE", cache: "no-store", redirect: "error" });
+    });
+
+    test("resolves to null for a 2xx with an empty body", async () => {
+        stubFetchRoutes({
+            [`PATCH ${BASE}/songs/9`]: () => new Response("", { status: 200 }),
+        });
+        await expect(pcoMutate("PATCH", "/songs/9", songBody)).resolves.toBeNull();
+    });
+
+    test.each([
+        "/service_types/../../../people/v2/people%3F/plans",
+        "/service_types/%2e%2e/%2E%2E/%2e%2e/people/v2/people",
+        "/../people/v2/people",
+        "songs",
+        "https://evil.example/services/v2/songs",
+    ])("refuses %j before any fetch", async (path) => {
+        const fetchMock = stubFetchRoutes({});
+        await expect(pcoMutate("POST", path, songBody)).rejects.toBeInstanceOf(PcoUrlError);
+        await expect(pcoMutate("DELETE", path)).rejects.toBeInstanceOf(PcoUrlError);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("throws a PcoError with the status and path on a 404", async () => {
+        stubFetchRoutes({
+            [`PATCH ${BASE}/songs/404`]: () => json({ errors: [] }, { status: 404 }),
+        });
+
+        const error = await pcoMutate("PATCH", "/songs/404", songBody).catch(
+            (e: unknown) => e
+        );
+
+        expect(error).toBeInstanceOf(PcoError);
+        expect(error).toMatchObject({
+            name: "PcoError",
+            status: 404,
+            path: "/services/v2/songs/404",
+        });
+    });
+
+    test("retries a 429 POST once after Retry-After, as PCO refused it unprocessed", async () => {
+        vi.useFakeTimers();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0 ? tooManyRequests("2") : json(song, { status: 201 })
+        );
+
+        const result = pcoMutate("POST", "/songs", songBody);
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(result).resolves.toEqual(song);
+        expect(calledRequests(fetchMock)).toEqual([
+            { method: "POST", url: `${BASE}/songs`, body: songBody },
+            { method: "POST", url: `${BASE}/songs`, body: songBody },
+        ]);
+    });
+
+    test("gives each attempt a 15-second timeout, and never retries a write that timed out", async () => {
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        const abort = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+        const fetchMock = vi.fn().mockRejectedValue(abort);
+        vi.stubGlobal("fetch", fetchMock);
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect(timeout.mock.calls).toEqual([[15_000]]);
+        expect((error as Error).message).toBe(
+            "Planning Center did not respond within 15 s (/services/v2/songs)"
+        );
+        expect((error as Error).cause).toBe(abort);
+        // PCO may have applied it, so sending it again could apply it twice.
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("no error it throws carries the credentials", async () => {
+        vi.stubEnv("PLANNING_CENTER_ID", "app-id");
+        vi.stubEnv("PLANNING_CENTER_TOKEN", "s3cret-pat");
+        const encoded = Buffer.from("app-id:s3cret-pat").toString("base64");
+        const timedOut = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+        const fetchMock = stubFetchRoutes({
+            [`PATCH ${BASE}/songs/404`]: () => json({ errors: [] }, { status: 404 }),
+            [`POST ${BASE}/songs`]: () => tooManyRequests(),
+            [`DELETE ${BASE}/songs/9`]: () => Promise.reject(timedOut),
+        });
+
+        const errors = await Promise.all(
+            [
+                pcoMutate("PATCH", "/songs/404", songBody),
+                pcoMutate("POST", "/songs", songBody),
+                pcoMutate("DELETE", "/songs/9"),
+                pcoMutate("POST", "/../people/v2/people", songBody),
+            ].map((promise) => promise.then(() => null, (e: unknown) => e))
+        );
+
+        // The requests did carry them, so the check below is not vacuous.
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`Basic ${encoded}`);
+        for (const error of errors) {
+            expect(error).toBeInstanceOf(Error);
+            const printed = inspect(error, { depth: null });
+            for (const secret of ["s3cret-pat", encoded, "Basic "]) {
+                expect(printed).not.toContain(secret);
+            }
+        }
     });
 });

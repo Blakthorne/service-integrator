@@ -130,6 +130,12 @@ type ReadBody = (response: Response) => Promise<unknown>;
 /** A GET's body, which is always JSON. */
 const readJson: ReadBody = (response) => response.json();
 
+/** A write's body: JSON, or null when there is none (204 No Content). */
+const readOptionalJson: ReadBody = async (response) => {
+    const text = await response.text();
+    return text.trim() === "" ? null : JSON.parse(text);
+};
+
 /**
  * One guarded request, retrying a short 429 once. `init` carries what differs
  * between calls (method, body, cache option); the auth headers, the redirect
@@ -234,6 +240,33 @@ export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResour
     }
 
     return { data, included, totalCount: totalCount ?? data.length };
+}
+
+/** The methods pcoMutate sends. */
+export type PcoMutationMethod = "POST" | "PATCH" | "DELETE";
+
+/**
+ * Write to the PCO Services API: `path` as for pcoFetch, `body` (built with
+ * jsonApi) sent as JSON. Guarded, timed out and retried once on a short 429
+ * exactly like a GET (PCO answers 429 before processing a request, so a
+ * retried POST cannot apply twice), and never cached. Resolves to the JSON
+ * response, or null when there is none (204 No Content). Throws PcoUrlError
+ * before sending and PcoError on a non-2xx response.
+ *
+ * Only modules inside lib/pco write to Planning Center, so the barrel does not
+ * export this.
+ */
+export async function pcoMutate<T = unknown>(
+    method: PcoMutationMethod,
+    path: string,
+    body?: PcoWriteBody
+): Promise<T | null> {
+    const init: RequestInit = {
+        method,
+        cache: "no-store",
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    };
+    return (await request(servicesUrl(path), init, readOptionalJson)) as T | null;
 }
 
 /** A to-one relationship in a write body. Its ID has passed assertPcoId. */

@@ -1,9 +1,20 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import * as barrel from "@/lib/pco";
 import { fetchAllSongs, pcoAuthHeaders } from "@/lib/pco";
 
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+});
+
+describe("the barrel", () => {
+    test("leaves out the write plumbing: only modules inside lib/pco write to PCO", () => {
+        const exported = Object.keys(barrel);
+        expect(exported).toContain("PcoError");
+        for (const name of ["pcoMutate", "jsonApi", "toOne"]) {
+            expect(exported).not.toContain(name);
+        }
+    });
 });
 
 describe("pcoAuthHeaders", () => {
