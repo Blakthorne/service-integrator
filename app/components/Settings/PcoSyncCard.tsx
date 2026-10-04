@@ -31,7 +31,9 @@ export default function PcoSyncCard({ status }: PcoSyncCardProps) {
                 match one catalog song;{" "}
                 <Link
                     href={routes.catalogReconcile()}
-                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+                    // In a line of text, blue against the grey around it is under the 3:1
+                    // a link needs to be told apart by colour alone, so it is underlined.
+                    className="text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                 >
                     Reconcile
                 </Link>{" "}
