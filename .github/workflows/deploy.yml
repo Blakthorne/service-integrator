@@ -212,7 +212,7 @@ jobs:
                   | ssh -F ~/.ssh/config-ci \
                       -p "$DEPLOY_PORT" \
                       "$DEPLOY_USER@$DEPLOY_HOST" \
-                      'mkdir -p ~/service-integrator && cat > ~/service-integrator/.env.production && chmod 600 ~/service-integrator/.env.production'
+                      'mkdir -p ~/service-integrator ~/service-integrator-data/backups && chmod 700 ~/service-integrator-data && { cat; printf "DATABASE_PATH=%s\nDATABASE_BACKUP_DIR=%s\n" "$HOME/service-integrator-data/service-integrator.sqlite" "$HOME/service-integrator-data/backups"; } > ~/service-integrator/.env.production && chmod 600 ~/service-integrator/.env.production'
 
             - name: Extract and restart
               env:
@@ -230,6 +230,15 @@ jobs:
                   # Source it explicitly here so pm2 is on PATH regardless.
                   export NVM_DIR="${HOME}/.nvm"
                   [ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
+
+                  # The catalog database needs node:sqlite (Node 22.13+). Check
+                  # before extracting, so a server still on an older Node keeps
+                  # running the current build instead of a broken one.
+                  if ! node -e "require('node:sqlite')" 2>/dev/null; then
+                      echo "Node $(node --version) on the server has no node:sqlite." >&2
+                      echo "Install Node 22 with nvm, make it the default, then run 'pm2 update'." >&2
+                      exit 1
+                  fi
 
                   cd ~/service-integrator
                   tar -xzf /tmp/deploy.tar.gz
