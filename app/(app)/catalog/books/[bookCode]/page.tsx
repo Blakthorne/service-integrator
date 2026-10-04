@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import BookEntriesTable from "@/app/components/Catalog/Books/BookEntriesTable";
-import { formatEntryCount } from "@/lib/catalog/bookText";
 import GoToNumber from "@/app/components/Catalog/Books/GoToNumber";
 import PageHeader from "@/app/components/ui/PageHeader";
+import { toBookRows } from "@/lib/catalog/bookRows";
+import { formatEntryCount } from "@/lib/catalog/bookText";
 import { parseBookCode } from "@/lib/catalog/ids";
 import { getCatalogBook, getCatalogBookLabel } from "@/lib/queries/catalog";
 import { routes } from "@/lib/routes";
@@ -22,7 +23,8 @@ export async function generateMetadata({
 /**
  * One book with all its entries in browse order: the front cover first, then
  * by number (or by position in an unnumbered book). A code that is not a book
- * code, or one no book has, ends in `not-found.tsx`.
+ * code, or one no book has, ends in `not-found.tsx`. The table gets the rows
+ * as one lean prop (`toBookRows`), not as server-rendered elements.
  */
 export default async function BookPage({
     params,
@@ -30,13 +32,14 @@ export default async function BookPage({
     const raw = await params;
     const code = parseBookCode(raw.bookCode) ?? notFound();
     const book = getCatalogBook(code) ?? notFound();
-    const hasNumbers = book.entries.some((entry) => entry.number !== null);
+    const rows = toBookRows(book);
+    const hasNumbers = rows.some((row) => row.number !== null);
 
     return (
         <div className="font-sans">
             <PageHeader
                 title={book.name}
-                description={`${book.code} · ${book.numbered ? "Numbered" : "Not numbered"} · ${formatEntryCount(book.entries.length)}`}
+                description={`${book.code} · ${book.numbered ? "Numbered" : "Not numbered"} · ${formatEntryCount(rows.length)}`}
                 breadcrumbs={[
                     { label: "Catalog", href: routes.catalog() },
                     { label: "Books", href: routes.catalogBooks() },
@@ -49,7 +52,11 @@ export default async function BookPage({
                         <GoToNumber bookCode={book.code} />
                     </div>
                 )}
-                <BookEntriesTable book={book} />
+                <BookEntriesTable
+                    rows={rows}
+                    numbered={book.numbered}
+                    bookName={book.name}
+                />
             </div>
         </div>
     );
