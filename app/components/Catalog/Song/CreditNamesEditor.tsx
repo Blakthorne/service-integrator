@@ -186,9 +186,17 @@ interface CreditNamesEditorProps {
     rows: readonly CreditNamesRow[];
     /** The `creditRoles` setting, which each name is checked against. */
     roles: readonly string[];
+    /** Called with the rows changed; the parent may ignore a change, as it does while it saves. */
     onChange: (rows: CreditNamesRow[]) => void;
     /** True while an action runs: the fields take no input, and the buttons do nothing. */
     readOnly: boolean;
+}
+
+/** A change made with a button: the rows it made, the field to focus once they are shown, and what to say. */
+interface FocusRequest {
+    rows: readonly CreditNamesRow[];
+    fieldId: string;
+    said: string;
 }
 
 /**
@@ -200,7 +208,9 @@ interface CreditNamesEditorProps {
  *
  * Adding, removing or splitting a name hands focus to the field that
  * stands for it now, so a keyboard user is never left on a button that
- * has gone, and says what was done in a status line.
+ * has gone, and says what was done in a status line. Both wait until the
+ * rows the change made are on screen: a change the parent ignored leaves
+ * no request behind to move focus at the next keystroke.
  */
 export default function CreditNamesEditor({
     idPrefix,
@@ -210,23 +220,24 @@ export default function CreditNamesEditor({
     readOnly,
 }: CreditNamesEditorProps) {
     const [announcement, setAnnouncement] = useState("");
-    /** The id of the field that takes focus once the rows have changed. */
-    const focusRef = useRef<string | null>(null);
+    /** The last change made with a button, until the rows on screen are the ones it made, or others. */
+    const focusRef = useRef<FocusRequest | null>(null);
 
     useEffect(() => {
-        if (focusRef.current !== null) {
-            document.getElementById(focusRef.current)?.focus();
-            focusRef.current = null;
+        const request = focusRef.current;
+        focusRef.current = null;
+        if (request !== null && request.rows === rows) {
+            document.getElementById(request.fieldId)?.focus();
+            setAnnouncement(request.said);
         }
     }, [rows]);
 
-    /** Apply a change made with a button, then hand focus to `focusId` and say `said`. */
-    function change(next: CreditNamesRow[], focusId: string, said: string) {
+    /** Ask for a change made with a button; once it is on screen, focus `fieldId` and say `said`. */
+    function change(next: CreditNamesRow[], fieldId: string, said: string) {
         if (readOnly) {
             return;
         }
-        focusRef.current = focusId;
-        setAnnouncement(said);
+        focusRef.current = { rows: next, fieldId, said };
         onChange(next);
     }
 
