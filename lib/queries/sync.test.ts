@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { unlinkSong } from "@/lib/db/links";
-import { findPcoSong, listPcoSongs } from "@/lib/db/pcoSongs";
+import { linkSong, unlinkSong } from "@/lib/db/links";
+import { findPcoSong, listPcoSongs, upsertPcoSongs } from "@/lib/db/pcoSongs";
 import {
     openTestDb,
     seedHymn,
@@ -156,6 +156,46 @@ describe("syncPcoSongs", () => {
             removed: 0,
         });
         expect(findPcoSong(db, "1002")?.removedAt).toBeNull();
+    });
+
+    test("leaves linkable a song a page mirrored while the listing was read", async () => {
+        stubPcoPacer();
+        stubLibrary(LIBRARY);
+        await syncPcoSongs(db, () => T1);
+
+        // The next listing starts at T2 and is written at T3. Meanwhile a
+        // song created after the listing passed it is linked from a page,
+        // which mirrors it.
+        const clock = vi.fn<() => Date>().mockReturnValueOnce(T2).mockReturnValue(T3);
+        stubFetchRoutes({
+            [FIRST_PAGE]: () => {
+                upsertPcoSongs(
+                    db,
+                    [
+                        {
+                            id: "1200",
+                            title: "Be Thou My Vision",
+                            author: null,
+                            copyright: null,
+                            ccliNumber: null,
+                            admin: null,
+                            themes: null,
+                            hidden: false,
+                            lastScheduledAt: null,
+                            createdAt: "2026-10-04T13:00:00Z",
+                            updatedAt: "2026-10-04T13:00:00Z",
+                        },
+                    ],
+                    new Date("2026-10-04T13:00:01.000Z")
+                );
+                return json(listPage(LIBRARY));
+            },
+        });
+        await expect(syncPcoSongs(db, clock)).resolves.toMatchObject({ removed: 0 });
+        expect(findPcoSong(db, "1200")?.removedAt).toBeNull();
+
+        const vision = seedSong(db, { hymnId: seedHymn(db, { title: "Be Thou My Vision" }) });
+        expect(linkSong(db, vision, "1200", "manual", T3)).toEqual({ ok: true, changed: true });
     });
 
     test("links a catalog song added since the last sync", async () => {

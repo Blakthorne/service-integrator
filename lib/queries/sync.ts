@@ -32,15 +32,18 @@ export type PcoSongsSyncCounts = {
  * It first reads the whole library, paced (about 4 requests), and only then
  * writes, in one transaction at `now()`: every song is upserted, the songs
  * the listing lacks are marked removed and those that came back unmarked,
- * and the auto-links `chooseAutoLinks` allows are made. A failed or partial
- * read throws before anything is written, and so does a listing with no
- * songs at all while the mirror has some, which is taken for a failure
- * rather than a library emptied at once.
+ * and the auto-links `chooseAutoLinks` allows are made. A song mirrored
+ * since the listing began (a link made from a page while it was read) is not
+ * marked removed: Planning Center may have created it after the listing
+ * passed it. A failed or partial read throws before anything is written, and
+ * so does a listing with no songs at all while the mirror has some, which is
+ * taken for a failure rather than a library emptied at once.
  */
 export async function syncPcoSongs(
     db: DatabaseSync,
     now: () => Date = () => new Date()
 ): Promise<PcoSongsSyncCounts> {
+    const listingStartedAt = now();
     const songs = await fetchSongLibrary();
     return withTransaction(db, () => {
         const at = now();
@@ -53,6 +56,7 @@ export async function syncPcoSongs(
         const removed = markMissingPcoSongsRemoved(
             db,
             songs.map(({ id }) => id),
+            listingStartedAt,
             at
         );
         const index = buildCatalogIndex(listCatalogSongs(db));

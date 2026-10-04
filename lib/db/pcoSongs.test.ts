@@ -105,7 +105,7 @@ describe("upsertPcoSongs", () => {
 
     test("brings back a removed song, counting it as updated", () => {
         upsertPcoSongs(db, [librarySong("101")], T1);
-        markMissingPcoSongsRemoved(db, [], T2);
+        markMissingPcoSongsRemoved(db, [], T2, T2);
         expect(upsertPcoSongs(db, [librarySong("101")], T3)).toEqual({
             added: 0,
             updated: 1,
@@ -151,7 +151,7 @@ describe("upsertPcoSongs", () => {
 describe("markMissingPcoSongsRemoved", () => {
     test("marks the songs a complete listing lacks, and only those", () => {
         upsertPcoSongs(db, [librarySong("101"), librarySong("102"), librarySong("103")], T1);
-        expect(markMissingPcoSongsRemoved(db, ["101", "103", "999"], T2)).toBe(1);
+        expect(markMissingPcoSongsRemoved(db, ["101", "103", "999"], T2, T2)).toBe(1);
         expect(listPcoSongs(db).map(({ id, removedAt }) => [id, removedAt])).toEqual([
             ["101", null],
             ["102", T2.toISOString()],
@@ -159,10 +159,21 @@ describe("markMissingPcoSongsRemoved", () => {
         ]);
     });
 
+    test("leaves alone a song read since the listing began, which may be newer than the listing", () => {
+        upsertPcoSongs(db, [librarySong("101")], T1);
+        // A page mirrored this one at the moment the listing began.
+        upsertPcoSongs(db, [librarySong("102")], T2);
+        expect(markMissingPcoSongsRemoved(db, [], T2, T3)).toBe(1);
+        expect(listPcoSongs(db).map(({ id, removedAt }) => [id, removedAt])).toEqual([
+            ["101", T3.toISOString()],
+            ["102", null],
+        ]);
+    });
+
     test("keeps the first time a song was found removed", () => {
         upsertPcoSongs(db, [librarySong("101")], T1);
-        expect(markMissingPcoSongsRemoved(db, [], T2)).toBe(1);
-        expect(markMissingPcoSongsRemoved(db, [], T3)).toBe(0);
+        expect(markMissingPcoSongsRemoved(db, [], T2, T2)).toBe(1);
+        expect(markMissingPcoSongsRemoved(db, [], T3, T3)).toBe(0);
         expect(findPcoSong(db, "101")?.removedAt).toBe(T2.toISOString());
     });
 });

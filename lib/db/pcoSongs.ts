@@ -135,21 +135,28 @@ export function upsertPcoSongs(
 
 /**
  * Mark removed, at `now`, every song not in `listedIds`, the ids of a
- * *complete* listing of the library: Planning Center no longer has them.
- * Only call it with a whole listing, never with part of one. Songs already
- * marked keep their first `removed_at`. Returns how many it marked.
+ * *complete* listing of the library that began at `listingStartedAt`:
+ * Planning Center no longer has them. Only a song the mirror last read
+ * before the listing began is marked. One read since then (a link made from
+ * a page mirrors a song while a sync's listing is being read) may have been
+ * created after the listing passed it, so its absence proves nothing. Only
+ * call it with a whole listing, never with part of one. Songs already marked
+ * keep their first `removed_at`. Returns how many it marked.
  */
 export function markMissingPcoSongsRemoved(
     db: DatabaseSync,
     listedIds: readonly string[],
+    listingStartedAt: Date,
     now: Date = new Date()
 ): number {
     const { changes } = db
         .prepare(
             `UPDATE pco_songs SET removed_at = ?
-             WHERE removed_at IS NULL AND id NOT IN (SELECT value FROM json_each(?))`
+             WHERE removed_at IS NULL
+               AND synced_at < ?
+               AND id NOT IN (SELECT value FROM json_each(?))`
         )
-        .run(now.toISOString(), JSON.stringify(listedIds));
+        .run(now.toISOString(), listingStartedAt.toISOString(), JSON.stringify(listedIds));
     return Number(changes);
 }
 
