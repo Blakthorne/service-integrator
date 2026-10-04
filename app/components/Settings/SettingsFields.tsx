@@ -114,13 +114,23 @@ interface SettingsFormFooterProps {
  *
  * The refusal sits right above the button, not at the top of the card: a
  * card is taller than a phone's screen, and the button is where the person
- * is looking when they save. Both messages get a key that is new for every
- * response (`formStateKey`), because a screen reader announces an alert or a
- * status when it appears or changes, and a refusal, or a save, repeated word
- * for word would otherwise be silent.
+ * is looking when they save. Focus stays on the button, so a screen reader
+ * has to be told by a live region, and two kinds of message get there
+ * differently:
+ *
+ * - A refusal is an alert with a key that is new for every response
+ *   (`formStateKey`): an alert is announced when it appears, and one repeated
+ *   word for word would otherwise be silent.
+ * - "Saved." is the text of a status region that is always rendered, empty
+ *   until there is news, as the app's other status regions are (Sync now):
+ *   a live region that is added with its text already in it may not be
+ *   announced. The text is cleared while a save is under way, so a second
+ *   save with nothing changed, which says "Saved." again, is a change the
+ *   region announces again.
  */
 export function SettingsFormFooter({ form, saveLabel }: SettingsFormFooterProps) {
     const { state, pending, saved } = form;
+    const status = !pending && saved && state.status === "success" ? state.message : "";
     return (
         <div className="space-y-3">
             {state.status === "error" && (
@@ -134,15 +144,12 @@ export function SettingsFormFooter({ form, saveLabel }: SettingsFormFooterProps)
             )}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <SaveButton pending={pending}>{saveLabel}</SaveButton>
-                {saved && state.status === "success" && (
-                    <p
-                        key={formStateKey(state)}
-                        role="status"
-                        className="text-sm font-medium text-green-700 dark:text-green-400"
-                    >
-                        {state.message}
-                    </p>
-                )}
+                <p
+                    role="status"
+                    className="text-sm font-medium text-green-700 dark:text-green-400"
+                >
+                    {status}
+                </p>
             </div>
         </div>
     );
