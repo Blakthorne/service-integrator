@@ -46,18 +46,28 @@ export function listPage(
     };
 }
 
+/** A route function: builds the Response from the request's init. */
+type RouteHandler = (init: RequestInit | undefined) => Response | Promise<Response>;
+
 /**
- * Stub global fetch with a table of full URLs. A value is the JSON body to
- * return (as a fresh 200 response each call) or a function that builds the
- * Response. A URL missing from the table fails the test.
+ * Stub global fetch with a table of routes. A key is a full URL, which
+ * answers GET only, or "METHOD url" (`POST ${PCO_BASE}/songs`). A value is
+ * the JSON body to return (as a fresh 200 response each call) or a function
+ * that builds the Response from the request init. A request missing from the
+ * table fails the test.
  */
 export function stubFetchRoutes(routes: Record<string, unknown>) {
-    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
-        if (!Object.prototype.hasOwnProperty.call(routes, url)) {
-            throw new Error(`Unexpected fetch: ${url}`);
+    const has = (key: string) => Object.prototype.hasOwnProperty.call(routes, key);
+    const fetchMock = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+        // Matched as sent: fetch upper-cases DELETE and POST but not PATCH,
+        // and a server rejects "patch".
+        const method = init?.method ?? "GET";
+        const key = [`${method} ${url}`, ...(method === "GET" ? [url] : [])].find(has);
+        if (key === undefined) {
+            throw new Error(`Unexpected fetch: ${method} ${url}`);
         }
-        const route = routes[url];
-        return typeof route === "function" ? (route as () => Response)() : json(route);
+        const route = routes[key];
+        return typeof route === "function" ? (route as RouteHandler)(init) : json(route);
     });
     vi.stubGlobal("fetch", fetchMock);
     return fetchMock;
@@ -66,6 +76,26 @@ export function stubFetchRoutes(routes: Record<string, unknown>) {
 /** The URLs a fetch mock was called with, in order. */
 export function calledUrls(fetchMock: ReturnType<typeof vi.fn>): string[] {
     return fetchMock.mock.calls.map(([url]) => String(url));
+}
+
+/** One call a fetch mock received. */
+export interface CalledRequest {
+    method: string;
+    url: string;
+    /** The body parsed from JSON, or undefined when the request had none. */
+    body: unknown;
+}
+
+/** The requests a fetch mock was called with, in order. */
+export function calledRequests(fetchMock: ReturnType<typeof vi.fn>): CalledRequest[] {
+    return fetchMock.mock.calls.map(([url, init]) => {
+        const { method = "GET", body } = (init ?? {}) as RequestInit;
+        return {
+            method,
+            url: String(url),
+            body: body == null ? undefined : JSON.parse(String(body)),
+        };
+    });
 }
 
 export function serviceTypeResource(
