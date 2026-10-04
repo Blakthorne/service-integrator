@@ -1,8 +1,9 @@
 import Link from "next/link";
 import EmptyState from "@/app/components/ui/EmptyState";
+import { entryRowId } from "@/lib/catalog/bookText";
+import { entryNotes } from "@/lib/catalog/entryNotes";
 import type { BookDetail, BookEntry } from "@/lib/domain";
 import { routes } from "@/lib/routes";
-import { entryRowId } from "@/lib/catalog/bookText";
 
 interface BookEntriesTableProps {
     /** The book with its entries, already in browse order. */
@@ -11,24 +12,6 @@ interface BookEntriesTableProps {
 
 const HEADER_CELL =
     "px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider";
-
-/**
- * What a row says beside the hymn: the entry's variant note ("Descant, last
- * chorus only") and its location ("inside back cover"). In a numbered book
- * the label of an entry with no number already says where it is
- * ("G-Front Cover"), so its location is not repeated.
- */
-function notesOf(book: BookDetail, entry: BookEntry): string[] {
-    const notes: string[] = [];
-    if (entry.variantNote) {
-        notes.push(entry.variantNote);
-    }
-    const location = entry.locationLabel?.trim();
-    if (location && !(book.numbered && entry.number === null)) {
-        notes.push(location);
-    }
-    return notes;
-}
 
 /** The first cell: a numbered book's label ("R-396"), or an unnumbered book's position in it. */
 function placementOf(book: BookDetail, entry: BookEntry): string {
@@ -82,7 +65,7 @@ export default function BookEntriesTable({ book }: BookEntriesTableProps) {
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                     {book.entries.map((entry) => {
-                        const notes = notesOf(book, entry);
+                        const notes = entryNotes(book, entry);
                         return (
                             // `relative` makes the row the box the link's
                             // overlay fills; `transform-gpu` does the same in
