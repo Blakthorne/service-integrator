@@ -6,6 +6,7 @@ import {
     type CopyrightItem,
     type CopyrightSong,
 } from "./copyright";
+import { DEFAULT_SETTINGS } from "./settings";
 
 // Characterization tests: they pin what the code did when it was moved out of
 // the components, quirks included. A test marked QUIRK documents behavior that
@@ -446,5 +447,42 @@ describe("buildCopyrightCopyAllText", () => {
         const before = items.map((item) => item.title);
         buildCopyrightCopyAllText(items);
         expect(items.map((item) => item.title)).toEqual(before);
+    });
+});
+
+describe("the CCLI license number comes from the settings", () => {
+    const settings = { ccliLicenseNumber: "7654321" };
+    const amazing = song({ title: "Amazing Grace", author: "John Newton", copyright: "Public Domain" });
+
+    test("formatCopyrightText prints the license number it is given", () => {
+        expect(formatCopyrightText(amazing, settings)).toBe(
+            '"Amazing Grace" Words and Music by John Newton.\n' +
+                "Public Domain.\n" +
+                "Used by permission. CCLI Streaming License 7654321."
+        );
+    });
+
+    test("the default settings print the number it always printed", () => {
+        expect(DEFAULT_SETTINGS.ccliLicenseNumber).toBe("1564484");
+        expect(formatCopyrightText(amazing, DEFAULT_SETTINGS)).toBe(formatCopyrightText(amazing));
+        expect(formatCopyrightText(amazing).split("\n")[2]).toBe(FOOTER);
+    });
+
+    test("only the footer changes", () => {
+        const withDefault = formatCopyrightText(amazing).split("\n");
+        const withSettings = formatCopyrightText(amazing, settings).split("\n");
+        expect(withSettings.slice(0, 2)).toEqual(withDefault.slice(0, 2));
+    });
+
+    test("buildCopyrightCopyAllText gives every block the license number", () => {
+        const holy = song({ title: "Holy, Holy, Holy", author: "Reginald Heber" });
+        const text = buildCopyrightCopyAllText([songItem(amazing, 1), songItem(holy, 2)], settings);
+        expect(text.split("\n\n").map((block) => block.split("\n")[2])).toEqual([
+            "Used by permission. CCLI Streaming License 7654321.",
+            "Used by permission. CCLI Streaming License 7654321.",
+        ]);
+        expect(buildCopyrightCopyAllText([songItem(amazing, 1)], DEFAULT_SETTINGS)).toBe(
+            buildCopyrightCopyAllText([songItem(amazing, 1)])
+        );
     });
 });

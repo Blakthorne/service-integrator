@@ -1,4 +1,5 @@
 import type { PlanItemWithSong, Song } from "./domain";
+import { DEFAULT_SETTINGS, type CopyrightSettings } from "./settings";
 
 /** The song fields the copyright text is built from. */
 export type CopyrightSong = Pick<Song, "title" | "author" | "copyright"> &
@@ -14,13 +15,18 @@ export type CopyrightItem = Pick<PlanItemWithSong, "itemType" | "sequence"> & {
 
 /**
  * Build the attribution block shown (and copied) for a song:
- * `"<title>" <author line>.`, the copyright line, then the CCLI footer.
+ * `"<title>" <author line>.`, the copyright line, then the CCLI footer,
+ * which names the church's license from the settings
+ * (`ccliLicenseNumber`; the default is the number it always printed).
  *
  * Moved verbatim from SongCopyright.tsx; copyright.test.ts pins its behavior,
  * quirks included (for example ".." after an author that already ends in a
  * period). A missing, empty or whitespace-only copyright is "Public Domain.".
  */
-export function formatCopyrightText(song: CopyrightSong): string {
+export function formatCopyrightText(
+    song: CopyrightSong,
+    { ccliLicenseNumber }: CopyrightSettings = DEFAULT_SETTINGS
+): string {
     // PCO can send a null author; treat it like an empty one ("Unknown").
     const author = song.author ?? "";
 
@@ -72,7 +78,7 @@ export function formatCopyrightText(song: CopyrightSong): string {
         }
     }
 
-    return `"${song.title}" ${authorLine}.\n${copyrightLine}\nUsed by permission. CCLI Streaming License 1564484.`;
+    return `"${song.title}" ${authorLine}.\n${copyrightLine}\nUsed by permission. CCLI Streaming License ${ccliLicenseNumber}.`;
 }
 
 /**
@@ -94,16 +100,19 @@ export function getItemCopyrightInfo(
 /**
  * The text the "Copy All" button on the Copyright Information tab copies: the
  * formatted copyright block of every song item, in sequence order, separated
- * by a blank line. Items without a song are skipped (see
- * getItemCopyrightInfo).
+ * by a blank line, each following `settings` (see formatCopyrightText).
+ * Items without a song are skipped (see getItemCopyrightInfo).
  */
-export function buildCopyrightCopyAllText(items: CopyrightItem[]): string {
+export function buildCopyrightCopyAllText(
+    items: CopyrightItem[],
+    settings: CopyrightSettings = DEFAULT_SETTINGS
+): string {
     return items
         .filter((item) => item.itemType === "song")
         .sort((a, b) => a.sequence - b.sequence)
         .map((item) => {
             const info = getItemCopyrightInfo(item);
-            return info ? formatCopyrightText(info) : null;
+            return info ? formatCopyrightText(info, settings) : null;
         })
         .filter((info): info is string => info !== null)
         .join("\n\n");

@@ -5,6 +5,7 @@ import type {
     ServiceType,
 } from "./domain";
 import { formatShortDate } from "./format";
+import { DEFAULT_SETTINGS, defaultScheduleHeaderLabel } from "./settings";
 
 /** What the schedule text reads of a catalog song's entry. */
 export type ScheduleEntry = Pick<LabelledEntry, "label" | "variantNote">;
@@ -30,12 +31,23 @@ export interface ScheduleCopyInput {
     items: ScheduleItem[];
     /** The catalog songs the items' Planning Center songs are linked to. */
     catalog: ScheduleCatalog;
+    /** The plan's service type's name, which picks the header when `headerLabel` is left out. */
     serviceTypeName: ServiceType["name"];
     /**
      * The plan's calendar date as `YYYY-MM-DD` (see `planDateFromSortDate`), or
      * null when it is not known.
      */
     planDate: string | null;
+    /**
+     * The header's label from the settings, resolved for the plan's service
+     * type (`scheduleHeaderLabel`): "Sunday AM", or null for no header. Left
+     * out, the service type's name decides, as it did before settings:
+     * "Sunday Morning" is "Sunday AM", "Sunday Evening" is "Sunday PM", and
+     * any other type gets no header.
+     */
+    headerLabel?: string | null;
+    /** What goes between a song's numbers, from the settings; left out, " / ". */
+    numberSeparator?: string;
 }
 
 /**
@@ -73,55 +85,58 @@ export function scheduleEntries<T extends Pick<LabelledEntry, "variantNote">>(
     return plain.length > 0 ? plain : [...entries];
 }
 
-/** What goes between a song's numbers: "R-396 / G-317". */
-const NUMBER_SEPARATOR = " / ";
-
 /**
  * A song's numbers as the schedule text prints them: the labels of the
- * entries `scheduleEntries` picks, in book order, joined with " / "
- * ("R-396 / G-317"). Each label is the one its book gives the entry (see
- * `formatEntryLabel`), so the Doxology on the front cover of Great Hymns is
- * "G-Front Cover" and an entry of an unnumbered book is the book's short
- * name. No entries give "".
+ * entries `scheduleEntries` picks, in book order, joined with `separator`
+ * (the `numberSeparator` setting, " / " by default: "R-396 / G-317"). Each
+ * label is the one its book gives the entry (see `formatEntryLabel`), so the
+ * Doxology on the front cover of Great Hymns is "G-Front Cover" and an entry
+ * of an unnumbered book is the book's short name. No entries give "".
  */
-export function formatScheduleNumbers(entries: readonly ScheduleEntry[]): string {
+export function formatScheduleNumbers(
+    entries: readonly ScheduleEntry[],
+    separator: string = DEFAULT_SETTINGS.numberSeparator
+): string {
     return scheduleEntries(entries)
         .map((entry) => entry.label)
-        .join(NUMBER_SEPARATOR);
+        .join(separator);
 }
 
 /**
  * The text the "Copy All" button on the Schedule tab copies: an optional
- * "Sunday AM/PM <date>" header followed by one line per song item, in
- * sequence order.
+ * "<label> <date>" header ("Sunday AM 10/4/26") followed by one line per
+ * song item, in sequence order.
  *
  * Each line is the item's title, followed by what its option adds:
  * "numbers" adds the numbers of the catalog song its Planning Center song is
- * linked to (see `formatScheduleNumbers`), "custom" adds the custom text, and
- * "blank" adds nothing; so does "numbers" without numbers, or "custom"
- * without text. The title only names the line: the link, not the title,
- * finds the numbers. serviceSchedule.test.ts pins its behavior, quirks
- * included.
+ * linked to (see `formatScheduleNumbers`, joined with `numberSeparator`),
+ * "custom" adds the custom text, and "blank" adds nothing; so does "numbers"
+ * without numbers, or "custom" without text. The title only names the line:
+ * the link, not the title, finds the numbers. serviceSchedule.test.ts pins
+ * its behavior, quirks included.
  *
- * The header date is the plan's calendar date, formatted from its
- * `YYYY-MM-DD` text (see `formatShortDate`), so it reads the same in every
- * time zone. With no `planDate` the header has no date ("Sunday AM").
+ * The header's label is `headerLabel`, from the settings; there is no header
+ * when it is null or empty. Left out, the label is the default for the
+ * service type's name (`defaultScheduleHeaderLabel`). The header date is the
+ * plan's calendar date, formatted from its `YYYY-MM-DD` text (see
+ * `formatShortDate`), so it reads the same in every time zone. With no
+ * `planDate` the header has no date ("Sunday AM").
  */
 export function buildScheduleCopyText({
     items,
     catalog,
     serviceTypeName,
     planDate,
+    headerLabel,
+    numberSeparator = DEFAULT_SETTINGS.numberSeparator,
 }: ScheduleCopyInput): string {
     let result: string = "";
 
-    if (
-        serviceTypeName === "Sunday Morning" ||
-        serviceTypeName === "Sunday Evening"
-    ) {
+    const label =
+        headerLabel === undefined ? defaultScheduleHeaderLabel(serviceTypeName) : headerLabel;
+    if (label !== null && label !== "") {
         result +=
-            "Sunday" +
-            (serviceTypeName === "Sunday Morning" ? " AM" : " PM") +
+            label +
             (planDate === null ? "" : " " + formatShortDate(planDate)) +
             "\n\n";
     }
@@ -135,7 +150,9 @@ export function buildScheduleCopyText({
             }
             if (item.option === "numbers") {
                 const match = catalogMatchFor(catalog, item.songId);
-                const numbers = match ? formatScheduleNumbers(match.entries) : "";
+                const numbers = match
+                    ? formatScheduleNumbers(match.entries, numberSeparator)
+                    : "";
                 if (numbers.length > 0) {
                     return `${item.title} (${numbers})`;
                 }
