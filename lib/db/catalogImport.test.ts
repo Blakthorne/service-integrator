@@ -103,7 +103,7 @@ describe("applyImportRun with the real seed", () => {
             ({ title }) => title === "Rejoice, the Lord Is King"
         );
         expect(rejoice).toMatchObject({
-            aliases: ["Rejoice – the Lord Is King!"],
+            aliases: ["Rejoice \u2013 the Lord Is King!"],
             tuneName: "DARWALL",
             tuneAliases: ["DARWAL"],
         });

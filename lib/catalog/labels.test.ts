@@ -31,8 +31,8 @@ describe("formatEntryLabel", () => {
         expect(formatEntryLabel(great, entry(null, "DVD insert"))).toBe(
             "G-DVD Insert"
         );
-        expect(formatEntryLabel(great, entry(null, "épilogue"))).toBe(
-            "G-Épilogue"
+        expect(formatEntryLabel(great, entry(null, "\u00E9pilogue"))).toBe(
+            "G-\u00C9pilogue"
         );
     });
 

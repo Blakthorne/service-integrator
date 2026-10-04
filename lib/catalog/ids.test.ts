@@ -28,8 +28,8 @@ describe("parseCatalogId", () => {
         "../1",
         "1/2",
         "abc",
-        "１２３", // full-width digits
-        "١٢", // Arabic-Indic digits
+        "\uFF11\uFF12\uFF13", // full-width digits
+        "\u0661\u0662", // Arabic-Indic digits
         "1".repeat(11),
     ])("rejects %j", (raw) => {
         expect(parseCatalogId(raw)).toBeNull();
@@ -66,9 +66,9 @@ describe("parseBookCode", () => {
         "R/1",
         "../R",
         "%52",
-        "É", // É
-        "Ré", // Ré
-        "Ｒ", // full-width R
+        "\u00C9", // É
+        "R\u00E9", // Ré
+        "\uFF32", // full-width R
     ])("rejects %j", (raw) => {
         expect(parseBookCode(raw)).toBeNull();
     });

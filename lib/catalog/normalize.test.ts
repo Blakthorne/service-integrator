@@ -7,8 +7,8 @@ describe("normalizeTuneName", () => {
         ["Darwall", "DARWALL"],
         ["  ST.   ANNE \t", "ST. ANNE"],
         ["STEPHANOS (Baker)", "STEPHANOS (BAKER)"],
-        ["jüngst", "JÜNGST"], // jüngst
-        ["IL EST NÉ", "IL EST NÉ"],
+        ["j\u00FCngst", "J\u00DCNGST"], // jüngst
+        ["IL EST N\u00C9", "IL EST N\u00C9"],
         ["OLIVE'S BROW", "OLIVE'S BROW"],
         ["", ""],
     ])("%j becomes %j", (name, expected) => {

@@ -79,7 +79,7 @@ function seedCatalog() {
         allPeople: seedHymn(db, { title: "All People That on Earth Do Dwell" }),
         rejoice: seedHymn(db, {
             title: "Rejoice, the Lord Is King",
-            aliases: ["Rejoice – the Lord Is King!"],
+            aliases: ["Rejoice \u2013 the Lord Is King!"],
         }),
         thankYouLord: seedHymn(db, { title: "Thank You, Lord" }),
     };
@@ -286,7 +286,7 @@ describe("listCatalogSongs", () => {
         const rows = new Map(listCatalogSongs(db).map((row) => [row.id, row]));
         expect(labels(rows.get(songs.doxology)!)).toEqual(["R-14", "G-Front Cover"]);
         expect(rows.get(songs.rejoice)).toMatchObject({
-            aliases: ["Rejoice – the Lord Is King!"],
+            aliases: ["Rejoice \u2013 the Lord Is King!"],
             tuneAliases: ["DARWAL"],
         });
         expect(rows.get(songs.thankYouNoTune)).toMatchObject({

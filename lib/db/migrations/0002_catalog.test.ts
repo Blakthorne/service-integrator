@@ -168,9 +168,9 @@ describe("0002_catalog", () => {
                     alias,
                     normalized
                 );
-            add(first, "Rejoice – the Lord Is King!", "rejoice – the lord is king");
+            add(first, "Rejoice \u2013 the Lord Is King!", "rejoice \u2013 the lord is king");
             expect(() =>
-                add(second, "Rejoice – The Lord Is King", "rejoice – the lord is king")
+                add(second, "Rejoice \u2013 The Lord Is King", "rejoice \u2013 the lord is king")
             ).toThrow("UNIQUE constraint failed: hymn_aliases.normalized");
             expect(() => add(999, "Missing", "missing")).toThrow(
                 "FOREIGN KEY constraint failed"

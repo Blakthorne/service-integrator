@@ -91,7 +91,7 @@ describe("seedHymn and seedTune", () => {
     test("store aliases with their normalized forms", () => {
         const hymnId = seedHymn(db, {
             title: "Rejoice, the Lord Is King",
-            aliases: ["Rejoice – the Lord Is King!"],
+            aliases: ["Rejoice \u2013 the Lord Is King!"],
         });
         const tuneId = seedTune(db, { name: "DARWALL", aliases: ["Darwal"] });
         expect(
@@ -99,8 +99,8 @@ describe("seedHymn and seedTune", () => {
         ).toEqual([
             {
                 hymn_id: hymnId,
-                alias: "Rejoice – the Lord Is King!",
-                normalized: "rejoice – the lord is king",
+                alias: "Rejoice \u2013 the Lord Is King!",
+                normalized: "rejoice \u2013 the lord is king",
             },
         ]);
         expect(

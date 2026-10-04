@@ -23,8 +23,8 @@ function valid(): PlannedCatalogRows {
                 title: "Rejoice, the Lord Is King",
                 aliases: [
                     {
-                        alias: "Rejoice – the Lord Is King!",
-                        normalized: "rejoice – the lord is king",
+                        alias: "Rejoice \u2013 the Lord Is King!",
+                        normalized: "rejoice \u2013 the lord is king",
                     },
                 ],
             },
