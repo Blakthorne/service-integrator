@@ -139,6 +139,7 @@ describe("planEmailOutcomeView", () => {
         subject: "Songs for 10/4/26 · Sunday Morning",
         accepted: RECIPIENTS,
         rejected: [],
+        textChanged: false,
     };
 
     test("says who the email went to when the server took it for everyone", () => {
@@ -235,9 +236,11 @@ describe("planEmailOutcomeView", () => {
         }
     );
 
-    test("gives the message of a send refused because the plan's email is being sent already", () => {
-        const message = "This plan's email is being sent already, so it was not sent again.";
-        expect(planEmailOutcomeView({ ok: false, kind: "busy", message })).toMatchObject({
+    test.each([
+        ["busy", "This plan's email is being sent already, so it was not sent again."],
+        ["changed", "The recipients have changed since the preview, so the email was not sent."],
+    ] as const)("gives the message of a send refused as %s, as it is", (kind, message) => {
+        expect(planEmailOutcomeView({ ok: false, kind, message })).toMatchObject({
             tone: "error",
             summary: message,
             delivered: [],

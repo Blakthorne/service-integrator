@@ -32,10 +32,13 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 
 import {
     NO_RECIPIENTS_MESSAGE,
+    RECIPIENTS_CHANGED_MESSAGE,
     SEND_IN_PROGRESS_MESSAGE,
+    SUBJECT_CHANGED_MESSAGE,
     getEmailStatus,
     previewPlanEmail,
     sendPlanEmail,
+    type ExpectedPlanEmail,
 } from "./email";
 
 const MORNING = "1405391";
@@ -89,6 +92,18 @@ function expectedText(title = "Amazing Grace"): string {
         "",
     ].join("\n");
 }
+
+/** The subject of the plan `stubPlan` stubs, with the default template. */
+const SUBJECT = "Songs for 10/4/26 · Sunday Morning";
+
+/** Save `recipients` as the email's recipients, in place of those saved before. */
+function setRecipients(recipients: string[]) {
+    db.prepare("DELETE FROM settings WHERE key = 'emailRecipients'").run();
+    seedSetting(db, "emailRecipients", recipients);
+}
+
+/** What the preview showed of the plan `stubPlan` stubs, and the person confirmed. */
+const PREVIEWED: ExpectedPlanEmail = { to: RECIPIENTS, subject: SUBJECT, text: expectedText() };
 
 /** A stand-in for the SMTP transport, which reports `report` or fails with `failure`. */
 function stubTransport(report?: TransportReport, failure?: unknown) {
@@ -198,12 +213,13 @@ describe("sendPlanEmail", () => {
             rejected: ["music@example.org"],
         });
 
-        await expect(sendPlanEmail(MORNING, PLAN, { transport })).resolves.toEqual({
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toEqual({
             ok: true,
             to: RECIPIENTS,
             subject: "Songs for 10/4/26 · Sunday Morning",
             accepted: ["pastor@example.org"],
             rejected: ["music@example.org"],
+            textChanged: false,
         });
         expect(sendMail).toHaveBeenCalledWith({
             from: "Service Integrator <office@example.org>",
@@ -227,15 +243,70 @@ describe("sendPlanEmail", () => {
         expect(JSON.stringify(write)).not.toContain("Words and Music");
     });
 
-    test("reads the plan afresh and builds the email from it, not from a preview", async () => {
+    test("reads the plan afresh, and sends a text that changed since the preview as it reads now, saying so", async () => {
         stubPlan();
-        await previewPlanEmail(MORNING, PLAN);
+        const preview = await previewPlanEmail(MORNING, PLAN);
         const fetchMock = stubPlan("Amazing Grace (Acoustic)");
         const { transport, sendMail } = stubTransport();
 
-        await sendPlanEmail(MORNING, PLAN, { transport });
+        await expect(sendPlanEmail(MORNING, PLAN, preview, { transport })).resolves.toMatchObject({
+            ok: true,
+            subject: SUBJECT,
+            textChanged: true,
+        });
         expect(calledUrls(fetchMock)).toEqual(expect.arrayContaining([urls.plan, urls.items]));
         expect(sendMail.mock.calls[0][0].text).toBe(expectedText("Amazing Grace (Acoustic)"));
+        expect(recentWrites(db)).toMatchObject([{ kind: "email", ok: true }]);
+    });
+
+    test("refuses, reading and sending nothing, when the recipients are not the preview's", async () => {
+        const fetchMock = stubPlan();
+        const { transport, sendMail } = stubTransport();
+        // The preview showed two recipients; another tab has since left one.
+        setRecipients(["music@example.org"]);
+
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toEqual({
+            ok: false,
+            kind: "changed",
+            message: RECIPIENTS_CHANGED_MESSAGE,
+        });
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(sendMail).not.toHaveBeenCalled();
+        expect(recentWrites(db)).toEqual([]);
+
+        // One recipient more is a change too.
+        setRecipients([...RECIPIENTS, "elders@example.org"]);
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toMatchObject({
+            kind: "changed",
+        });
+        expect(sendMail).not.toHaveBeenCalled();
+    });
+
+    test("takes the preview's recipients in another order or case as the same", async () => {
+        stubPlan();
+        const { transport, sendMail } = stubTransport();
+        const expected = { ...PREVIEWED, to: ["MUSIC@example.org", "pastor@example.org"] };
+
+        await expect(sendPlanEmail(MORNING, PLAN, expected, { transport })).resolves.toMatchObject({
+            ok: true,
+            to: RECIPIENTS,
+            textChanged: false,
+        });
+        expect(sendMail.mock.calls[0][0].to).toEqual(RECIPIENTS);
+    });
+
+    test("refuses, sending nothing, when the subject is not the preview's", async () => {
+        stubPlan();
+        const { transport, sendMail } = stubTransport();
+        seedSetting(db, "emailSubjectTemplate", "Hymns for {date}");
+
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toEqual({
+            ok: false,
+            kind: "changed",
+            message: SUBJECT_CHANGED_MESSAGE,
+        });
+        expect(sendMail).not.toHaveBeenCalled();
+        expect(recentWrites(db)).toEqual([]);
     });
 
     test("refuses, reading and sending nothing, when email is not set up", async () => {
@@ -243,7 +314,7 @@ describe("sendPlanEmail", () => {
         vi.stubEnv("EMAIL_FROM", "");
         const { transport, sendMail } = stubTransport();
 
-        await expect(sendPlanEmail(MORNING, PLAN, { transport })).resolves.toEqual({
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toEqual({
             ok: false,
             kind: "not-configured",
             missing: ["EMAIL_FROM"],
@@ -259,7 +330,7 @@ describe("sendPlanEmail", () => {
         db.prepare("DELETE FROM settings").run();
         const { transport, sendMail } = stubTransport();
 
-        await expect(sendPlanEmail(MORNING, PLAN, { transport })).resolves.toEqual({
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toEqual({
             ok: false,
             kind: "no-recipients",
             message: NO_RECIPIENTS_MESSAGE,
@@ -277,7 +348,7 @@ describe("sendPlanEmail", () => {
         });
         const { transport, sendMail } = stubTransport();
 
-        await expect(sendPlanEmail(MORNING, PLAN, { transport })).resolves.toEqual({
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toEqual({
             ok: false,
             kind: "unavailable",
             message:
@@ -296,7 +367,7 @@ describe("sendPlanEmail", () => {
         );
         const { transport } = stubTransport(undefined, failure);
 
-        const result = await sendPlanEmail(MORNING, PLAN, { transport });
+        const result = await sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport });
         expect(result).toEqual({
             ok: false,
             kind: "failed",
@@ -335,7 +406,7 @@ describe("sendPlanEmail", () => {
         );
         const { transport } = stubTransport();
 
-        await expect(sendPlanEmail(MORNING, PLAN, { transport })).resolves.toMatchObject({ ok: true });
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toMatchObject({ ok: true });
         expect(consoleError).toHaveBeenCalledWith(
             `Failed to record an email (plan ${PLAN}):`,
             expect.any(Error)
@@ -345,10 +416,10 @@ describe("sendPlanEmail", () => {
     test("refuses an id that is not a Planning Center id before anything else", async () => {
         const fetchMock = stubPlan();
         const { transport, sendMail } = stubTransport();
-        await expect(sendPlanEmail("../people", PLAN, { transport })).rejects.toMatchObject({
+        await expect(sendPlanEmail("../people", PLAN, PREVIEWED, { transport })).rejects.toMatchObject({
             name: "InvalidPcoIdError",
         });
-        await expect(sendPlanEmail(MORNING, "1 OR 1", { transport })).rejects.toMatchObject({
+        await expect(sendPlanEmail(MORNING, "1 OR 1", PREVIEWED, { transport })).rejects.toMatchObject({
             name: "InvalidPcoIdError",
         });
         expect(fetchMock).not.toHaveBeenCalled();
@@ -381,8 +452,8 @@ describe("sendPlanEmail, one send per plan at a time", () => {
         const { opened, open } = gate();
         const { transport, sendMail } = heldTransport(opened);
 
-        const first = sendPlanEmail(MORNING, PLAN, { transport });
-        const second = await sendPlanEmail(MORNING, PLAN, { transport });
+        const first = sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport });
+        const second = await sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport });
 
         expect(second).toEqual({ ok: false, kind: "busy", message: SEND_IN_PROGRESS_MESSAGE });
         open();
@@ -390,7 +461,7 @@ describe("sendPlanEmail, one send per plan at a time", () => {
         expect(sendMail).toHaveBeenCalledTimes(1);
         expect(recentWrites(db)).toHaveLength(1);
         // Once it is done, the plan's email can be sent again.
-        await expect(sendPlanEmail(MORNING, PLAN, { transport })).resolves.toMatchObject({
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toMatchObject({
             ok: true,
         });
         expect(sendMail).toHaveBeenCalledTimes(2);
@@ -403,9 +474,9 @@ describe("sendPlanEmail, one send per plan at a time", () => {
         vi.resetModules();
         const copy = await import("./email");
 
-        const first = sendPlanEmail(MORNING, PLAN, { transport });
+        const first = sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport });
 
-        await expect(copy.sendPlanEmail(MORNING, PLAN, { transport })).resolves.toMatchObject({
+        await expect(copy.sendPlanEmail(MORNING, PLAN, PREVIEWED, { transport })).resolves.toMatchObject({
             ok: false,
             kind: "busy",
         });
@@ -429,11 +500,18 @@ describe("sendPlanEmail, one send per plan at a time", () => {
         });
         const { opened, open } = gate();
         const held = heldTransport(opened);
+        // Neither plan has items; the texts the previews showed do not matter here.
+        const EMPTY_PLAN_PREVIEW = { to: RECIPIENTS, subject: SUBJECT, text: "" };
+        const OTHER_PLAN_PREVIEW = {
+            to: RECIPIENTS,
+            subject: "Songs for 10/11/26 · Sunday Morning",
+            text: "",
+        };
 
-        const first = sendPlanEmail(MORNING, PLAN, { transport: held.transport });
+        const first = sendPlanEmail(MORNING, PLAN, EMPTY_PLAN_PREVIEW, { transport: held.transport });
         const { transport } = stubTransport();
 
-        await expect(sendPlanEmail(MORNING, other, { transport })).resolves.toMatchObject({
+        await expect(sendPlanEmail(MORNING, other, OTHER_PLAN_PREVIEW, { transport })).resolves.toMatchObject({
             ok: true,
             subject: "Songs for 10/11/26 · Sunday Morning",
         });
@@ -445,7 +523,7 @@ describe("sendPlanEmail, one send per plan at a time", () => {
         stubPlan();
         vi.spyOn(console, "error").mockImplementation(() => {});
         const failing = stubTransport(undefined, new Error("Connection timeout"));
-        await expect(sendPlanEmail(MORNING, PLAN, failing)).resolves.toMatchObject({
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, failing)).resolves.toMatchObject({
             ok: false,
             kind: "failed",
         });
@@ -456,13 +534,13 @@ describe("sendPlanEmail, one send per plan at a time", () => {
             [urls.items]: listPage([]),
             [urls.categories]: listPage([]),
         });
-        await expect(sendPlanEmail(MORNING, PLAN, stubTransport())).rejects.toMatchObject({
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, stubTransport())).rejects.toMatchObject({
             name: "PcoError",
             status: 500,
         });
 
         stubPlan();
-        await expect(sendPlanEmail(MORNING, PLAN, stubTransport())).resolves.toMatchObject({
+        await expect(sendPlanEmail(MORNING, PLAN, PREVIEWED, stubTransport())).resolves.toMatchObject({
             ok: true,
         });
     });

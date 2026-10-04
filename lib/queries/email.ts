@@ -82,6 +82,16 @@ export type EmailWriteResult =
     /** Not sent: why, with Nodemailer's code and the server's reply code when there are some. */
     | { error: string; code?: string; responseCode?: number };
 
+/**
+ * What the person saw in the Email dialog's preview and confirmed with
+ * Send: `PlanEmailPreview`'s recipients, subject and text, sent back.
+ */
+export interface ExpectedPlanEmail {
+    to: readonly string[];
+    subject: string;
+    text: string;
+}
+
 /** What `sendPlanEmail` did. */
 export type SendPlanEmailResult =
     | {
@@ -93,6 +103,12 @@ export type SendPlanEmailResult =
           accepted: string[];
           /** The recipients the server refused; the email went to the others. */
           rejected: string[];
+          /**
+           * True when the text sent is not the preview's: the plan, its
+           * songs' links or the text settings changed since, and the email
+           * went as it reads now.
+           */
+          textChanged: boolean;
       }
     /** Nothing was sent: email is not set up on the server. */
     | { ok: false; kind: "not-configured"; missing: EmailVariable[]; message: string }
@@ -100,6 +116,12 @@ export type SendPlanEmailResult =
     | { ok: false; kind: "no-recipients" | "unavailable"; message: string }
     /** Nothing was sent: this plan's email is being sent already (another tab, or a repeated request). */
     | { ok: false; kind: "busy"; message: string }
+    /**
+     * Nothing was sent: the recipients or the subject are not the ones the
+     * preview showed (the settings, or the plan's date or service, changed
+     * since), so it would not have gone as the person confirmed.
+     */
+    | { ok: false; kind: "changed"; message: string }
     /** The send failed; the write log records it. */
     | { ok: false; kind: "failed"; message: string };
 
@@ -111,6 +133,25 @@ export function notConfiguredMessage(missing: readonly EmailVariable[]): string 
 /** What `sendPlanEmail` says when no one would get the email. */
 export const NO_RECIPIENTS_MESSAGE =
     "No one would get this email: add its recipients in Settings first.";
+
+/** What `sendPlanEmail` says when the recipients are not the ones the preview showed. */
+export const RECIPIENTS_CHANGED_MESSAGE =
+    "The recipients have changed since the preview, so the email was not sent. Preview it again to see who it would go to now.";
+
+/** What `sendPlanEmail` says when the subject is not the one the preview showed. */
+export const SUBJECT_CHANGED_MESSAGE =
+    "The subject has changed since the preview, so the email was not sent. Preview it again to see it as it would go now.";
+
+/**
+ * Whether two lists name the same recipients: the same addresses, in any
+ * order, without regard to case (the settings never list one twice).
+ */
+function sameRecipients(a: readonly string[], b: readonly string[]): boolean {
+    const set = (addresses: readonly string[]) =>
+        new Set(addresses.map((address) => address.toLowerCase()));
+    const [left, right] = [set(a), set(b)];
+    return left.size === right.size && [...left].every((address) => right.has(address));
+}
 
 /** What `sendPlanEmail` says to a send of a plan whose email is being sent already. */
 export const SEND_IN_PROGRESS_MESSAGE =
@@ -153,17 +194,22 @@ function logWrite(entry: NewWriteLogEntry): void {
 }
 
 /**
- * Send plan `planId`'s email to the recipients in the settings, now.
+ * Send plan `planId`'s email to the recipients in the settings, now, as
+ * the person confirmed it: `expected` is the preview they saw.
  *
  * It refuses, sending nothing, when email is not set up on the server, when
  * the settings name no recipients, and when the settings cannot be read.
  * Otherwise it reads the plan afresh (as `getPlanDetail` reads it for its
- * pages) and builds the email from what it finds, never from a preview,
- * then sends it (unpaced: someone is waiting, and it waits on the SMTP
- * server too). It records a `write_log` row (`email`) whether the send
- * worked or failed: the recipients and the subject it asked for, never the
- * text, and what came of it. `options.transport` stands in for SMTP in
- * tests.
+ * pages) and builds the email from what it finds, never from a preview. It
+ * refuses ("changed"), sending nothing, when the recipients (in any order)
+ * or the subject are not the preview's, which the recipients are checked
+ * against before the plan is read. A text that changed alone (an edit to
+ * the plan) is sent as it reads now, and the result says so
+ * (`textChanged`). It sends unpaced: someone is waiting, and it waits on
+ * the SMTP server too. It records a `write_log` row (`email`) whether the
+ * send worked or failed: the recipients and the subject it asked for,
+ * never the text, and what came of it. `options.transport` stands in for
+ * SMTP in tests.
  *
  * A failed send comes back as a value, with a message fit to show that
  * never holds `SMTP_URL`. Invalid ids, and a plan or service type that
@@ -176,6 +222,7 @@ function logWrite(entry: NewWriteLogEntry): void {
 export async function sendPlanEmail(
     serviceTypeId: string,
     planId: string,
+    expected: ExpectedPlanEmail,
     options: SendEmailOptions = {}
 ): Promise<SendPlanEmailResult> {
     const st = assertPcoId(serviceTypeId);
@@ -186,7 +233,7 @@ export async function sendPlanEmail(
     }
     // Set before the first await, so a call that comes in while this one
     // waits on Planning Center or the mail server finds it.
-    const send = runSend(st, plan, options);
+    const send = runSend(st, plan, expected, options);
     running.set(plan, send);
     try {
         return await send;
@@ -201,6 +248,7 @@ export async function sendPlanEmail(
 async function runSend(
     st: PcoId,
     plan: PcoId,
+    expected: ExpectedPlanEmail,
     options: SendEmailOptions
 ): Promise<SendPlanEmailResult> {
     const status = emailStatus();
@@ -224,14 +272,28 @@ async function runSend(
     if (to.length === 0) {
         return { ok: false, kind: "no-recipients", message: NO_RECIPIENTS_MESSAGE };
     }
+    if (!sameRecipients(to, expected.to)) {
+        return { ok: false, kind: "changed", message: RECIPIENTS_CHANGED_MESSAGE };
+    }
 
     const { subject, text } = buildPlanEmail(await getPlanDetail(st, plan), settings);
+    if (subject !== expected.subject) {
+        return { ok: false, kind: "changed", message: SUBJECT_CHANGED_MESSAGE };
+    }
+    const textChanged = text !== expected.text;
     const payload: EmailWritePayload = { to, subject };
     const target = `plan ${plan}`;
     try {
         const sent = await sendEmail({ to, subject, text }, options);
         logWrite({ kind: "email", target, ok: true, payload, result: sent });
-        return { ok: true, to, subject, accepted: sent.accepted, rejected: sent.rejected };
+        return {
+            ok: true,
+            to,
+            subject,
+            accepted: sent.accepted,
+            rejected: sent.rejected,
+            textChanged,
+        };
     } catch (sendError) {
         // An EmailError's message never holds SMTP_URL, so it is safe to log and show.
         console.error(`Failed to email plan ${st}/${plan}:`, sendError);
