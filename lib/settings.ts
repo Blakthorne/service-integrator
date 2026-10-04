@@ -383,12 +383,17 @@ function parseCreditPhrases(value: unknown): SettingParse<CreditPhrases> {
 }
 
 /**
- * A plain email address, local@domain.tld: no whitespace, and none of the
- * characters that would let one entry name more than one address or add to
- * a header (quotes, commas, semicolons, angle brackets, parentheses,
- * square brackets, backslashes).
+ * A plain email address, local@domain.tld, and nothing a mail library could
+ * read as more. The local part is dot-separated runs of ASCII letters,
+ * digits and ! # $ % & ' * + = ? ^ _ { | } ~ - (RFC 5322's atoms, less / and
+ * the backquote); the domain is two or more dot-separated labels of
+ * letters, digits and inner hyphens. So no whitespace, quote, comma,
+ * semicolon, colon (nodemailer reads "team:x@y.org" as a group named
+ * "team"), angle bracket, parenthesis, square bracket or backslash, no
+ * leading, trailing or doubled dot, and no letter outside ASCII.
  */
-const EMAIL_ADDRESS = /^[^\s@",;<>()[\]\\]+@[^\s@",;<>()[\]\\.]+(?:\.[^\s@",;<>()[\]\\.]+)+$/;
+const EMAIL_ADDRESS =
+    /^[A-Za-z0-9!#$%&'*+=?^_{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+=?^_{|}~-]+)*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
 
 /** One recipient: an address `EMAIL_ADDRESS` matches, trimmed, at most `EMAIL_ADDRESS_MAX_LENGTH` characters. */
 export function parseEmailAddress(value: unknown): SettingParse<string> {

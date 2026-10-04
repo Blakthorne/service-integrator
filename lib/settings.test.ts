@@ -319,6 +319,17 @@ describe("creditPhrases", () => {
 });
 
 describe("emailRecipients", () => {
+    test("takes every plain address: letters, digits, dots between them and the atoms' other characters", () => {
+        for (const address of [
+            "o'brien@example.org",
+            "first.last@sub-domain.example.co.uk",
+            "a_b-c+d=e!f#g$h%i&j*k?l^m{n|o}p~q@example.org",
+            "x@y.zz",
+        ]) {
+            expect([address, parsed("emailRecipients", [address])]).toEqual([address, { value: [address] }]);
+        }
+    });
+
     test("is the addresses in order, each trimmed; none is fine", () => {
         expect(
             parsed("emailRecipients", [" pastor@example.org ", "Music.Director@Example.co.uk", "a+songs@b.c"])
@@ -343,6 +354,17 @@ describe("emailRecipients", () => {
             '"pastor"@example.org',
             "pastor@example.org\nBcc: x@y.org",
             "pastor@[127.0.0.1]",
+            "team:x@y.org",
+            "x@y.org:",
+            "team:;",
+            ".pastor@example.org",
+            "pastor.@example.org",
+            "pas..tor@example.org",
+            "pastor@-example.org",
+            "pastor@example-.org",
+            "pastor@exa_mple.org",
+            "pas/tor@example.org",
+            `jos${String.fromCharCode(0xe9)}@example.org`,
             `${"a".repeat(EMAIL_ADDRESS_MAX_LENGTH - 7)}@b.co.uk`,
         ];
         for (const address of notAddresses) {
