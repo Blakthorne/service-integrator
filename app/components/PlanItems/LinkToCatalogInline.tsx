@@ -54,6 +54,8 @@ export default function LinkToCatalogInline({
     const headingId = useId();
     const [status, setStatus] = useState<LinkStatus | null>(null);
     const [message, setMessage] = useState<string | null>(null);
+    /** Counts the Links tried here, so each refusal is a new alert, announced even when it repeats the last. */
+    const [attempt, setAttempt] = useState(0);
 
     async function link(songId: number) {
         if (status !== null) {
@@ -61,6 +63,7 @@ export default function LinkToCatalogInline({
         }
         setStatus({ songId, state: "linking" });
         setMessage(null);
+        setAttempt((count) => count + 1);
         let result: LinkPcoSongState;
         try {
             result = await onLink(pcoSongId, songId);
@@ -163,7 +166,9 @@ export default function LinkToCatalogInline({
                 </Link>
             </p>
             {message !== null && (
-                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                // Keyed by attempt: a screen reader announces an alert when it
+                // appears, not when the same text is set again.
+                <p key={attempt} role="alert" className="text-sm text-red-600 dark:text-red-400">
                     {message}
                 </p>
             )}
