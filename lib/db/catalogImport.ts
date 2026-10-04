@@ -6,7 +6,12 @@ import {
     parsePlannedRows,
     type PlannedCatalogRows,
 } from "@/lib/import/rows";
-import { finishImportRun, ImportRunError, isImportRunKind } from "./importRuns";
+import {
+    finishImportRun,
+    ImportRunError,
+    isImportRunKind,
+    type ImportRunErrorReason,
+} from "./importRuns";
 import { withTransaction } from "./transaction";
 
 /** The key of a planned song: its hymn's and its tune's keys. */
@@ -114,6 +119,29 @@ function insertRows(db: DatabaseSync, rows: PlannedCatalogRows): ImportCounts {
 }
 
 /**
+ * Why applying run `id` would be refused now, or null when it would go ahead
+ * (unless its rows are damaged): "not-found" for no such run (or one of a
+ * kind this build does not know), "not-preview" for a run already applied or
+ * discarded, "catalog-not-empty" while the catalog has books.
+ */
+export function findApplyRefusal(
+    db: DatabaseSync,
+    id: number
+): ImportRunErrorReason | null {
+    const run = db.prepare("SELECT kind, status FROM import_runs WHERE id = ?").get(id);
+    if (!run || !isImportRunKind(run.kind)) {
+        return "not-found";
+    }
+    if (run.status !== "preview") {
+        return "not-preview";
+    }
+    if (db.prepare("SELECT 1 FROM books LIMIT 1").get()) {
+        return "catalog-not-empty";
+    }
+    return null;
+}
+
+/**
  * Apply a previewed import: insert every row it planned and mark it applied,
  * all in one transaction, so a failure leaves the catalog as it was. Returns
  * what it inserted, which is what the preview's report planned.
@@ -126,21 +154,14 @@ function insertRows(db: DatabaseSync, rows: PlannedCatalogRows): ImportCounts {
  */
 export function applyImportRun(db: DatabaseSync, id: number): ImportCounts {
     return withTransaction(db, () => {
-        const run = db
-            .prepare("SELECT kind, status, rows FROM import_runs WHERE id = ?")
-            .get(id);
-        if (!run || !isImportRunKind(run.kind)) {
-            throw new ImportRunError("not-found");
+        const refusal = findApplyRefusal(db, id);
+        if (refusal !== null) {
+            throw new ImportRunError(refusal);
         }
-        if (run.status !== "preview") {
-            throw new ImportRunError("not-preview");
-        }
-        if (db.prepare("SELECT 1 FROM books LIMIT 1").get()) {
-            throw new ImportRunError("catalog-not-empty");
-        }
+        const stored = db.prepare("SELECT rows FROM import_runs WHERE id = ?").get(id);
         let rows: PlannedCatalogRows;
         try {
-            rows = parsePlannedRows(JSON.parse(String(run.rows)));
+            rows = parsePlannedRows(JSON.parse(String(stored?.rows)));
         } catch (error) {
             if (error instanceof InvalidPlannedRowsError || error instanceof SyntaxError) {
                 throw new ImportRunError("invalid-rows", { cause: error });

@@ -9,7 +9,7 @@ import {
     listCatalogSongs,
     listTunes,
 } from "./catalog";
-import { applyImportRun } from "./catalogImport";
+import { applyImportRun, findApplyRefusal } from "./catalogImport";
 import { createImportRun, findImportRun, ImportRunError } from "./importRuns";
 import { openTestDb, seedBook, seedImportRun } from "./testing";
 
@@ -225,5 +225,23 @@ describe("applyImportRun's refusals", () => {
         expect(() => applyImportRun(db, id)).toThrow(/UNIQUE constraint failed/);
         expect(status(id)).toBe("preview");
         expect(countCatalog(db)).toEqual(EMPTY);
+    });
+});
+
+describe("findApplyRefusal", () => {
+    test("is null for a preview while the catalog is empty", () => {
+        expect(findApplyRefusal(db, seedImportRun(db))).toBeNull();
+    });
+
+    test("names what apply would refuse, without writing", () => {
+        expect(findApplyRefusal(db, 999)).toBe("not-found");
+        expect(findApplyRefusal(db, seedImportRun(db, { kind: "csv" }))).toBe("not-found");
+        expect(findApplyRefusal(db, seedImportRun(db, { status: "applied" }))).toBe(
+            "not-preview"
+        );
+        const preview = seedImportRun(db);
+        seedBook(db);
+        expect(findApplyRefusal(db, preview)).toBe("catalog-not-empty");
+        expect(status(preview)).toBe("preview");
     });
 });
