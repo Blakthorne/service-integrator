@@ -224,7 +224,8 @@ export default function SyncHymnNotesAction({ serviceTypeId, planId }: SyncHymnN
         setAttempt((count) => count + 1);
         let result: SyncHymnNotesState;
         try {
-            result = await syncHymnNotesAction(serviceTypeId, planId);
+            // The plan the preview showed: the sync writes only what it still needs.
+            result = await syncHymnNotesAction(serviceTypeId, planId, status.items);
         } catch (error) {
             console.error("Failed to sync the hymnal notes:", error);
             result = SYNC_NO_ANSWER;
@@ -519,7 +520,12 @@ function PreviewProblem({
     );
 }
 
-/** What the sync did, item by item, the failures first; or why it wrote nothing. */
+/**
+ * What the sync did, item by item, the failures first; or why it wrote
+ * nothing. Items left unwritten, because they changed since the preview or
+ * Planning Center's rate limit stopped the sync, come with Preview again,
+ * which shows what a sync would do now.
+ */
 function ResultsBody({
     result,
     attempt,
@@ -534,9 +540,15 @@ function ResultsBody({
     onPreview: () => void;
 }) {
     if (result.ok) {
+        const unwritten = result.counts.changed + (result.counts.notAttempted ?? 0);
         return (
             <>
-                <Answer answerRef={answerRef} alert={result.counts.failed > 0} quiet attempt={attempt}>
+                <Answer
+                    answerRef={answerRef}
+                    alert={result.counts.failed > 0 || unwritten > 0}
+                    quiet
+                    attempt={attempt}
+                >
                     {resultSummary(result.counts)}
                 </Answer>
                 <NoteRows rows={resultRows(result.items)} label="What the sync did, song by song" />
@@ -544,6 +556,15 @@ function ResultsBody({
                     <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
                         Done
                     </button>
+                    {unwritten > 0 && (
+                        <button
+                            type="button"
+                            onClick={onPreview}
+                            className={`${PRIMARY_BUTTON_CLASS} hover:bg-blue-700 cursor-pointer`}
+                        >
+                            Preview again
+                        </button>
+                    )}
                 </Buttons>
             </>
         );

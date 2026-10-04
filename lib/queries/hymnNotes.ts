@@ -221,15 +221,12 @@ export interface HymnNoteSyncCounts {
     kept: number;
     /** Items with a change that failed. */
     failed: number;
-    /**
-     * Items not written because they changed since the preview. The sync
-     * always counts them; optional in the type only so that results built
-     * before it existed (a test's fixture) still type.
-     */
-    changed?: number;
+    /** Items not written because they changed since the preview. */
+    changed: number;
     /**
      * Items not tried because Planning Center's rate limit stopped the sync
-     * first. Always counted, and optional in the type, as `changed` is.
+     * first. Always counted; optional in the type only so that results built
+     * before it existed (a test's fixture) still type.
      */
     notAttempted?: number;
 }

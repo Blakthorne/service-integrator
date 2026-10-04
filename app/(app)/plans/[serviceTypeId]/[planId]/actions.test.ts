@@ -292,8 +292,13 @@ const SYNCED: HymnNotesSyncResult = {
             error: null,
         },
     ],
-    counts: { created: 1, updated: 0, deleted: 0, unchanged: 0, kept: 0, failed: 0 },
+    counts: { created: 1, updated: 0, deleted: 0, unchanged: 0, kept: 0, failed: 0, changed: 0, notAttempted: 0 },
 };
+
+/** READY's items as the sync gets them once the action has parsed them: ids, actions and writes alone. */
+const PREVIEWED = [
+    { itemId: ITEM, action: "create", changes: [{ kind: "create", content: "R-517 / G-64" }] },
+];
 
 /** Ids that are not Planning Center ids. */
 const NOT_IDS = ["", "abc", "0", "01", " 1", "../1", "1/2", 42, null, undefined, ["1"]];
@@ -355,9 +360,18 @@ describe("previewHymnNotesAction", () => {
 });
 
 describe("syncHymnNotesAction", () => {
-    function sync(overrides: Partial<Record<"serviceTypeId" | "planId", unknown>> = {}) {
+    /** The action called with the plan's ids, any of which `overrides` replaces, and the preview the dialog sends: READY's items. */
+    function sync(
+        overrides: Partial<Record<"serviceTypeId" | "planId", unknown>> = {},
+        previewed: unknown = READY.kind === "ready" ? READY.items : []
+    ) {
         const ids = { serviceTypeId: ST, planId: PLAN, ...overrides };
-        return syncHymnNotesAction(ids.serviceTypeId as string, ids.planId as string);
+        // An action's arguments come from the network, so they may be anything.
+        return syncHymnNotesAction(
+            ids.serviceTypeId as string,
+            ids.planId as string,
+            previewed as Parameters<typeof syncHymnNotesAction>[2]
+        );
     }
 
     test("throws without a session, before it writes anything", async () => {
@@ -373,7 +387,7 @@ describe("syncHymnNotesAction", () => {
 
         await expect(sync()).resolves.toEqual(SYNCED);
         expect(auth).toHaveBeenCalledTimes(1);
-        expect(syncHymnNotes).toHaveBeenCalledWith(ST, PLAN);
+        expect(syncHymnNotes).toHaveBeenCalledWith(ST, PLAN, PREVIEWED);
         expect(revalidatePath.mock.calls).toEqual([[`/plans/${ST}/${PLAN}`, "layout"]]);
     });
 
@@ -397,6 +411,59 @@ describe("syncHymnNotesAction", () => {
             });
         }
         expect(syncHymnNotes).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("holds the sync to the preview it was sent, parsed down to ids, actions and writes", async () => {
+        syncHymnNotes.mockResolvedValue(SYNCED);
+
+        await sync();
+        // The titles, contents and notes left alone the dialog sent are dropped.
+        expect(syncHymnNotes.mock.calls[0][2]).toEqual(PREVIEWED);
+    });
+
+    test("refuses a preview that is not one, before it reads or writes anything", async () => {
+        const item = READY.kind === "ready" ? READY.items[0] : null;
+        for (const previewed of [
+            undefined,
+            null,
+            "[]",
+            { 0: item },
+            [{ ...item, itemId: "../1" }],
+            [{ ...item, action: "rewrite" }],
+            [{ ...item, changes: [{ kind: "update", noteId: "01", from: "x", content: "y" }] }],
+            Array.from({ length: 201 }, (_, i) => ({ ...item, itemId: String(1000 + i) })),
+        ]) {
+            // Called directly: the helper's default would stand in for undefined.
+            await expect(
+                syncHymnNotesAction(ST, PLAN, previewed as Parameters<typeof syncHymnNotesAction>[2])
+            ).resolves.toEqual({
+                ok: false,
+                kind: "failed",
+                message: expect.stringContaining("Preview again"),
+            });
+        }
+        expect(syncHymnNotes).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("returns items that changed since the preview, written or not, and revalidates", async () => {
+        const changed: HymnNotesSyncResult = {
+            ...SYNCED,
+            items: [{ ...(SYNCED.ok ? SYNCED.items[0] : ({} as never)), outcome: "changed", made: [] }],
+            counts: { created: 0, updated: 0, deleted: 0, unchanged: 0, kept: 0, failed: 0, changed: 1, notAttempted: 0 },
+        };
+        syncHymnNotes.mockResolvedValue(changed);
+
+        await expect(sync()).resolves.toEqual(changed);
+        expect(revalidatePath.mock.calls).toEqual([[`/plans/${ST}/${PLAN}`, "layout"]]);
+    });
+
+    test("returns a sync of the plan already running as a refusal, and changes no page", async () => {
+        const busy = { ok: false, kind: "busy", message: "A sync of this plan's hymnal notes is already running." };
+        syncHymnNotes.mockResolvedValue(busy);
+
+        await expect(sync()).resolves.toEqual(busy);
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 

@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { parseCatalogId } from "@/lib/catalog/ids";
 import type { ScheduleSelection } from "@/lib/domain";
-import type { HymnNoteStatus } from "@/lib/hymnNotes";
+import type { HymnNoteStatus, PreviewedHymnNote } from "@/lib/hymnNotes";
 import { parsePcoId } from "@/lib/pco";
+import { parsePreviewedHymnNotes } from "@/lib/previewedHymnNotes";
 import {
     previewHymnNotes,
     syncHymnNotes,
@@ -162,6 +163,10 @@ const NOT_A_PLAN_MESSAGE =
 const PREVIEW_FAILURE_MESSAGE =
     "Planning Center or the database could not be read, so the notes could not be compared. Try again; the server log has the details.";
 
+/** Shown when the preview sent back is not one: a stale or tampered page. */
+const PREVIEW_NOT_USABLE_MESSAGE =
+    "This page sent a preview the sync could not check, so nothing was written. Preview again.";
+
 /** Shown when the sync stopped before writing anything; the log has the details. */
 const SYNC_FAILURE_MESSAGE =
     "Planning Center or the database could not be read, so no note was written. Try again; the server log has the details.";
@@ -204,7 +209,16 @@ export async function previewHymnNotesAction(
  * (`syncHymnNotes`: it reads the plan again first, writes each change to
  * Planning Center and logs it), and say what became of each song item's
  * note. A missing category, or categories that could not be read, refuse
- * the sync with their message, and nothing is written.
+ * the sync with their message, and nothing is written; so does a sync of
+ * the plan that is already running ("busy").
+ *
+ * `previewed` is the plan the dialog's preview showed (its `status.items`).
+ * The sync writes an item only when what it needs now is what the preview
+ * showed, and reports any other "changed", so Confirm writes what the
+ * person saw. It comes from a browser, so it is parsed first
+ * (`parsePreviewedHymnNotes`: every id, every action and kind, and the
+ * lists' lengths); one that does not parse is refused before Planning
+ * Center is read.
  *
  * Once a sync has run, the plan's pages are revalidated, so the song cards'
  * note statuses show what Planning Center has now. It waits on Planning
@@ -215,7 +229,8 @@ export async function previewHymnNotesAction(
  */
 export async function syncHymnNotesAction(
     serviceTypeId: string,
-    planId: string
+    planId: string,
+    previewed: readonly PreviewedHymnNote[]
 ): Promise<SyncHymnNotesState> {
     const session = await auth();
     if (!session) {
@@ -226,9 +241,13 @@ export async function syncHymnNotesAction(
     if (st === null || plan === null) {
         return { ok: false, kind: "failed", message: NOT_A_PLAN_MESSAGE };
     }
+    const preview = parsePreviewedHymnNotes(previewed);
+    if (preview === null) {
+        return { ok: false, kind: "failed", message: PREVIEW_NOT_USABLE_MESSAGE };
+    }
     let result: HymnNotesSyncResult;
     try {
-        result = await syncHymnNotes(st, plan);
+        result = await syncHymnNotes(st, plan, preview);
     } catch (error) {
         console.error(`Failed to sync the hymnal notes of plan ${st}/${plan}:`, error);
         return { ok: false, kind: "failed", message: SYNC_FAILURE_MESSAGE };

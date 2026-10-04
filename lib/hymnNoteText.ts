@@ -278,7 +278,7 @@ export function resultRows(items: readonly HymnNoteSyncItem[]): HymnNoteRow[] {
  */
 export function resultSummary(counts: HymnNoteSyncCounts): string {
     const made = counts.created + counts.updated + counts.deleted;
-    const changed = counts.changed ?? 0;
+    const { changed } = counts;
     const notAttempted = counts.notAttempted ?? 0;
     const sentences: string[] = [];
     if (made > 0) {

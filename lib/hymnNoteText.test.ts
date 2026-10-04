@@ -376,7 +376,7 @@ describe("resultSummary", () => {
         );
     });
 
-    test("reads counts made before they counted changed songs as none", () => {
+    test("reads counts made before they counted songs not tried as none", () => {
         const older: HymnNoteSyncCounts = {
             created: 0,
             updated: 0,
@@ -384,6 +384,7 @@ describe("resultSummary", () => {
             unchanged: 1,
             kept: 0,
             failed: 0,
+            changed: 0,
         };
         expect(resultSummary(older)).toBe("Nothing needed writing. 1 song needed nothing.");
     });
