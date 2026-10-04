@@ -42,11 +42,15 @@ interface CatalogSongsControlsProps {
     books: readonly CatalogBookOption[];
     /** The count line, such as "12 of 921 songs". */
     summary: string;
+    /** How many songs "Export CSV" would write: every song the filters leave, on every page. */
+    exportCount: number;
     onQueryChange: (query: string) => void;
     onBookChange: (book: string) => void;
     onLinkedChange: (linked: CatalogLinked) => void;
     onUsedChange: (used: CatalogUsed) => void;
     onSortChange: (sort: CatalogSort) => void;
+    /** Called to download the songs the filters leave as a CSV file. */
+    onExport: () => void;
 }
 
 const GROUP_LABEL =
@@ -54,7 +58,7 @@ const GROUP_LABEL =
 
 /**
  * The songs list's search, book, Planning Center link and usage filters and
- * sort order, and the count of what they leave.
+ * sort order, the count of what they leave, and the Export CSV button.
  */
 export default function CatalogSongsControls({
     query,
@@ -64,11 +68,13 @@ export default function CatalogSongsControls({
     sort,
     books,
     summary,
+    exportCount,
     onQueryChange,
     onBookChange,
     onLinkedChange,
     onUsedChange,
     onSortChange,
+    onExport,
 }: CatalogSongsControlsProps) {
     const bookOptions: SegmentedOption<string>[] = [
         { value: ALL_BOOKS, label: "All" },
@@ -78,6 +84,9 @@ export default function CatalogSongsControls({
             title: option.name,
         })),
     ];
+    // Like SubmitButton: aria-disabled rather than disabled, so the button
+    // keeps focus when the filters leave nothing to export.
+    const canExport = exportCount > 0;
 
     return (
         <div
@@ -131,12 +140,35 @@ export default function CatalogSongsControls({
                     />
                 </div>
             </div>
-            <p
-                aria-live="polite"
-                className="border-t border-gray-100 dark:border-gray-700 pt-3 text-sm font-medium text-gray-900 dark:text-gray-100"
-            >
-                {summary}
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-gray-100 dark:border-gray-700 pt-3">
+                <p
+                    aria-live="polite"
+                    className="text-sm font-medium text-gray-900 dark:text-gray-100"
+                >
+                    {summary}
+                </p>
+                <button
+                    type="button"
+                    aria-disabled={!canExport}
+                    title={
+                        canExport
+                            ? "Download every song the filters leave, on every page, as a CSV file"
+                            : "No songs to export"
+                    }
+                    onClick={() => {
+                        if (canExport) {
+                            onExport();
+                        }
+                    }}
+                    className={`px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
+                        canExport
+                            ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600"
+                            : "opacity-50 cursor-not-allowed"
+                    }`}
+                >
+                    Export CSV
+                </button>
+            </div>
         </div>
     );
 }
