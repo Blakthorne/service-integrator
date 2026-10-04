@@ -49,6 +49,14 @@ const SEND_NO_ANSWER: SendPlanEmailState = {
         "The server did not answer, so it is not known whether the email was sent. Look at the recent writes in Settings before sending it again.",
 };
 
+/**
+ * What a send's summary adds when the email went, but not word for word as
+ * the preview showed it: the plan, its songs' links or the text settings
+ * changed in between (`textChanged`), and the email went as it reads now.
+ */
+const TEXT_CHANGED_NOTE =
+    "The email's text had changed since the preview, so it went as the plan reads now.";
+
 /** The colours of a send's summary, which says the same in words. */
 const SUMMARY_TONES = {
     success: { alert: false, quiet: false },
@@ -198,15 +206,22 @@ function AddressLine({ label, addresses }: { label: string; addresses: readonly 
     );
 }
 
-/** What the send came to: who got the email, who did not, or why nothing was sent. */
+/**
+ * What the send came to: who got the email, who did not, or why nothing was
+ * sent. When it went with a text other than the preview's, the summary,
+ * which takes focus and is read out, says so too.
+ */
 function EmailResultBody({
     view,
+    textChanged,
     attempt,
     answerRef,
     onClose,
     onPreview,
 }: {
     view: PlanEmailOutcomeView;
+    /** True when the email went with a text other than the preview's. */
+    textChanged: boolean;
     attempt: number;
     answerRef: React.RefObject<HTMLParagraphElement | null>;
     onClose: () => void;
@@ -217,7 +232,7 @@ function EmailResultBody({
     return (
         <>
             <DialogAnswer answerRef={answerRef} alert={alert} quiet={quiet} attempt={attempt}>
-                {view.summary}
+                {sent && textChanged ? `${view.summary} ${TEXT_CHANGED_NOTE}` : view.summary}
             </DialogAnswer>
             {view.setup && (
                 <div className="mt-3">
@@ -359,6 +374,7 @@ function EmailDialogBody({
             return (
                 <EmailResultBody
                     view={planEmailOutcomeView(state.result)}
+                    textChanged={state.result.ok && state.result.textChanged}
                     attempt={attempt}
                     answerRef={answerRef}
                     onClose={onClose}
@@ -381,7 +397,9 @@ interface EmailSummaryActionProps {
  * server, and no recipients, are explained (with the variables to set, and
  * a link to Settings) and offer no Send. Send sends back what the preview
  * showed, and the send is refused, with Preview again, when the recipients
- * or the subject are no longer those (another tab saved the settings).
+ * or the subject are no longer those (another tab saved the settings). A
+ * text that changed alone (an edit to the plan) goes as it reads now, and
+ * the outcome says so.
  *
  * Both steps wait on something slow (Planning Center for the preview, the
  * SMTP server for the send), so each action is called from its click (Email
