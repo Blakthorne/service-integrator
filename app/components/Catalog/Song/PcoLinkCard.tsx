@@ -13,11 +13,18 @@ import type { MirroredPcoSong, SongLinkSource } from "@/lib/domain";
 import { IDLE_FORM, formStateKey } from "@/lib/forms";
 import { routes } from "@/lib/routes";
 import type { CreditSettings } from "@/lib/settings";
-import CatalogCard, { CardField, LINK_CLASS, NoValue } from "../CatalogCard";
+import CatalogCard, { CardField, NoValue } from "../CatalogCard";
 import PcoSongWebLink from "../Reconcile/PcoSongWebLink";
 import AddToPlanAction from "./AddToPlanAction";
 import CreatePcoSongForm, { type CreatedPcoSong } from "./CreatePcoSongForm";
 import { SECONDARY_BUTTON_CLASS, WARNING_CLASS } from "./styles";
+
+/**
+ * The card's links to Reconcile, each in a line of text: underlined, since
+ * their colour alone is under 3:1 against the text around them.
+ */
+const TEXT_LINK_CLASS =
+    "text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300";
 
 /** A catalog song's link to Planning Center, as its page shows it. */
 export interface SongPcoLink {
@@ -128,7 +135,7 @@ function CardNoticeText({
                 {stage === "not-linked" && (
                     <p className="mt-2 text-gray-700 dark:text-gray-300">
                         The song is in Planning Center: do not create it again.{" "}
-                        <Link href={routes.catalogReconcile()} className={LINK_CLASS}>
+                        <Link href={routes.catalogReconcile()} className={TEXT_LINK_CLASS}>
                             Link it on Reconcile
                         </Link>{" "}
                         once the next sync has read it.
@@ -228,7 +235,7 @@ export default function PcoLinkCard({
                         <>
                             <p className="text-gray-700 dark:text-gray-300">
                                 Not in Planning Center.{" "}
-                                <Link href={routes.catalogReconcile()} className={LINK_CLASS}>
+                                <Link href={routes.catalogReconcile()} className={TEXT_LINK_CLASS}>
                                     Link it on Reconcile
                                 </Link>
                                 , or create it in Planning Center below.
