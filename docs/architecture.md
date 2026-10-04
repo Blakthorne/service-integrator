@@ -1,10 +1,10 @@
 # Architecture
 
-How Service Integrator is put together, and how to add to it. Read this before adding a feature, and follow its [conventions](#conventions) and [recipes](#recipes). The plan that produced this structure (decisions, Planning Center spike facts, implementation notes) is `docs/superpowers/plans/2026-10-03-multi-page-routing.md`.
+How Service Integrator is put together, and how to add to it. Read this before adding a feature, and follow its [conventions](#conventions) and [recipes](#recipes). The plan that produced this structure (decisions, Planning Center spike facts, implementation notes) is `docs/superpowers/plans/2026-10-03-multi-page-routing.md`; the song catalog plan, which adds the [database](#database), is `docs/superpowers/plans/2026-10-04-song-catalog.md`.
 
 ## Overview
 
-A Next.js 15 App Router app (React 19, strict TypeScript, Tailwind 4, Auth.js v5, Vitest) that reads Planning Center Online (PCO) Services data and generates song copyright text and service-schedule text. It runs as one long-running `next start` process under PM2, deployed by GitHub Actions on every push to `main`, so in-memory caches are per process and shared by all requests.
+A Next.js 15 App Router app (React 19, strict TypeScript, Tailwind 4, Auth.js v5, Vitest) that reads Planning Center Online (PCO) Services data and generates song copyright text and service-schedule text. It runs as one long-running `next start` process under PM2, deployed by GitHub Actions on every push to `main`, so in-memory caches are per process and shared by all requests. It keeps its own data in a local SQLite file (see [Database](#database)), which that process opens at boot.
 
 | URL | Page | Data |
 |---|---|---|
@@ -14,6 +14,7 @@ A Next.js 15 App Router app (React 19, strict TypeScript, Tailwind 4, Auth.js v5
 | `/plans/{st}/{plan}/schedule` | the plan's Service Schedule tab | the same data, through `usePlan()` |
 | `/plans/{st}/{plan}/items/{itemId}` | one item's song details | the same data, through `usePlan()` |
 | `/unused-hymns` | hymnbook entries never scheduled (`?book=`, `?sort=`, `?page=`) | `getUnusedHymns()`, in the page; Refresh is a server action |
+| `/settings` | the database: whether it opens, its file, migrations and last backup | `getDatabaseStatus()`, in the page (local database only) |
 | `/auth/signin`, `/auth/error` | public sign-in pages | none |
 
 ### Request flow
@@ -31,6 +32,7 @@ browser
 - **Deep links survive sign-in.** The middleware passes the requested path and query as `?callbackUrl=`, and the sign-in page redirects there through `safeCallbackUrl()` (`lib/safeCallbackUrl.ts`), falling back to `/plans`. It accepts only a path with a single leading slash and printable ASCII after it (a non-ASCII character made `redirect()` fail with a 500), and never an auth page (`/auth` and everything under it): the middleware leaves those public, so redirecting a signed-in visitor there would loop. A path that merely starts with those letters, such as `/authors`, is protected like any other page and is accepted; a test reads the middleware's matcher to keep the two in step.
 - **Why `force-dynamic`.** Every page needs the session and live PCO data, and CI builds with no PCO credentials, so nothing may be prerendered at build time. `export const dynamic = "force-dynamic"` in `app/(app)/layout.tsx` covers every `(app)` route. The route table of `npm run build` must show `ƒ (Dynamic)` for each of them (only Next's built-in `/_not-found`, which is outside `(app)`, is static). Never call `connection()` inside `lib/pco`: it throws outside a request.
 - **No app `/api/*` for data.** Server components call `lib/queries` directly, and the browser never calls PCO.
+- **Boot.** When the Node.js server starts, `instrumentation.ts` opens and migrates the database and starts the background jobs (see [Jobs and boot](#jobs-and-boot)). Nothing of this runs during `next build`.
 
 ## Route map
 
@@ -65,10 +67,14 @@ app/
     unused-hymns/
       page.tsx · loading.tsx    server-rendered initial data; book, sort and page live in the URL
       actions.ts                "use server": refreshUnusedHymns, which checks the session
+    settings/page.tsx           server: getDatabaseStatus() → PageHeader + DatabaseCard. No loading or error file:
+                                it reads only the local database, and the query never throws
   components/
     ui/                         shared chrome: PageHeader, Breadcrumbs, LoadingState, ErrorState, EmptyState,
                                 CopyButton, LocalTime, Pagination
-    Navigation.tsx              the top bar; Navigation/NavLinks.tsx renders NAV_ITEMS
+    Navigation.tsx              the top bar; Navigation/NavLinks.tsx renders NAV_ITEMS, and
+                                Navigation/NavUtilityLinks.tsx the icon links beside Sign Out (NAV_UTILITY_ITEMS)
+    Settings/DatabaseCard.tsx   the Settings page's database status
     Plans/PlansList.tsx         the paged list of plans
     PlanItems/                  PlanProvider (+ usePlan), PlanHeader, PlanItemsTable, PlanTabNav, PlanItemDetail,
                                 the tab connectors (CopyrightTab, ScheduleTab) and their views
@@ -88,20 +94,20 @@ app/
 - **Layouts do not re-run on `<Link>` navigation.** The server renders only the segments that change, so switching tabs, or opening an item and coming back, never repeats the `[planId]` layout's PCO fetch. Another plan remounts `PlanProvider` (its key includes the plan). `router.refresh()` does re-run the layout.
 - **Two kinds of "item not found".** An item ID that is not a PCO ID ends in the server's `notFound()`, caught by `items/[itemId]/not-found.tsx`. A valid ID that is not in this plan renders an inline `EmptyState` from the client `PlanItemDetail`, because client code never calls `notFound()`.
 - **List rows.** A row's title is a real `<Link>` stretched over the row (`after:absolute after:inset-0` on the link; `relative transform-gpu` on the `<tr>`, since older Safari ignores `relative` on table rows), so rows work from the keyboard and with cmd-click.
-- **`aria-current`.** A nav item gets `"page"` on its own page and `"true"` elsewhere in its section (`navAriaCurrent` in `lib/routes.ts`), so a plan page announces only its breadcrumb and tab as current.
+- **`aria-current`.** A nav item gets `"page"` on its own page and `"true"` elsewhere in its section (`navAriaCurrent` in `lib/routes.ts`), so a plan page announces only its breadcrumb and tab as current. The icon links beside Sign Out (`NAV_UTILITY_ITEMS`, the Settings gear) use the same function, and are named by their `aria-label`.
 
 ## Data layer
 
 ```text
-page / layout (server) ──► lib/queries ──► lib/pco ──► Planning Center
-        │ serializable props
+page / layout (server) ──► lib/queries ──┬─► lib/pco ──► Planning Center
+        │ serializable props             └─► lib/db  ──► SQLite (DATABASE_PATH)
         ▼
 client components (interaction only) ── URL state via useUrlState
 ```
 
 **Server versus pure modules.**
 
-- **Server-only** modules start with `import "server-only"`, so importing one into a client component fails the build: `lib/pco/*` (except `resources.ts`, which is types only, and the test helpers in `testing.ts`), `lib/queries/*`, and `lib/hymnCatalog.ts`, which wraps `hymns.json` so its ~150 KB never reaches a client bundle.
+- **Server-only** modules start with `import "server-only"`, so importing one into a client component fails the build: `lib/pco/*` (except `resources.ts`, which is types only, and the test helpers in `testing.ts`), `lib/queries/*`, `lib/db/*` (except the SQL text in `migrations/`, `errors.ts` and the test helper `testing.ts`), `lib/jobs.ts`, `lib/boot.ts`, and `lib/hymnCatalog.ts`, which wraps `hymns.json` so its ~150 KB never reaches a client bundle.
 - **Pure** modules are safe on both sides and unit-tested: `lib/domain.ts` (types), `copyright.ts`, `serviceSchedule.ts`, `hymnMatch.ts`, `plansByDate.ts`, `format.ts`, `normalizeTitle.ts`, `unusedHymns.ts`, `scheduleSelections.ts`, `ttlCache.ts`, `routes.ts`, `urlState.ts` and `safeCallbackUrl.ts`. They take what they need as arguments (`matchHymns` gets its index, `buildScheduleCopyText` gets the plan's date string) and import nothing server-only.
 - A client component may `import type` from a server module (the import is erased), never a value.
 
@@ -131,6 +137,7 @@ Getters are wrapped in React `cache()` (calls with the same arguments are dedupe
 
 - `plans.ts` has `getPlansByDate()` (`{ dates, plansByDate, failedServiceTypeIds }`: a service type whose plans fail to load is skipped, logged and reported, and the list shows a quiet warning), `getPlanDetail(st, plan)` (`{ plan, serviceType, items, hymns }`, loaded in parallel) and `getPlanLabels(st, plan)`, the cheap, never-throwing label lookup for `generateMetadata`.
 - `unusedHymns.ts` has `getUnusedHymns({ refresh })`.
+- `system.ts` has `getDatabaseStatus()`: `{ ok: true, path, appliedMigrations, latestMigration, lastBackup, backupDir }`, or `{ ok: false, error }` (logged). It never throws, so Settings shows a broken database instead of failing.
 
 **Domain and hymns.**
 
@@ -143,6 +150,74 @@ Getters are wrapped in React `cache()` (calls with the same arguments are dedupe
 - *Per request:* React `cache()` in the getters, already on.
 - *HTTP, per PCO resource kind:* `PCO_CACHE_POLICY` in `lib/pco/cachePolicy.ts` is the single switch. Replace a kind's `{ cache: "no-store" }` with, for example, `{ next: { revalidate: 300 } }`. Under `force-dynamic` Next 15.5 forces `revalidate: 0` only onto fetches that name no cache option (`node_modules/next/dist/server/lib/patch-fetch.js`), so an explicit entry is honoured. Confirm it in a production build (`npm run build && npm start`) before relying on it, and remember the cache is shared by every user.
 - *In process, for a computed result:* `createTtlCache` (`lib/ttlCache.ts`). `get(key, load)` serves a fresh value, shares one load between concurrent calls and never caches a failure. `refresh(key, load)` replaces the value only when the load succeeds. `invalidate` and `clear` drop entries. It backs `getPlanLabels` (5 minutes) and `getUnusedHymns` (1 hour). It is per process, so a multi-instance or serverless host has one cache per instance. A cache that a server action touches must live on `globalThis` (convention 15).
+
+## Database
+
+The app's own data lives in one SQLite file per server, through Node's built-in `node:sqlite` (unflagged from Node 22.13; no install step and no native binary, so the deploy is unchanged). SQL is hand-written; there is no ORM. Today the database holds `settings` and `sync_runs`; the catalog tables come with later migrations.
+
+```text
+lib/db/
+  index.ts          getDb(); re-exports withTransaction, databasePath and backupDirectory
+  config.ts         databasePath(), backupDirectory(): DATABASE_PATH, DATABASE_BACKUP_DIR and their defaults
+  connection.ts     loadSqlite(); openDatabase(location): the connection settings, no migrations
+  transaction.ts    withTransaction(db, fn)
+  migrate.ts        migrate(db), appliedMigrations(db)
+  migrations/       index.ts (MIGRATIONS, the Migration type), 0001_init.ts, …
+  syncRuns.ts       start, finish and read sync_runs rows
+  backup.ts         backupDatabase(), listBackups(), isBackupDue(), pruneBackups()
+  errors.ts         errorMessage(error)
+  testing.ts        openTestDb(), for tests
+lib/jobs.ts         the background jobs and their scheduler
+lib/boot.ts         boot(): open the database, then start the jobs
+instrumentation.ts  register(): runs boot() when the Node.js server starts
+```
+
+**Opening.** `getDb()` is the only way the app opens the database. On first use it resolves `DATABASE_PATH` (default `./data/service-integrator.sqlite`, relative to the working directory; `/data/` is gitignored), creates its folder, opens it with `openDatabase()`, runs `migrate()`, and caches the connection on globalThis under `Symbol.for("service-integrator.db.v1")`: Next bundles `lib/db` once per layer (instrumentation, server components, server actions), and all of them must share one connection (convention 15). Nothing opens it at import time, so `next build` never does. A failure throws an error that names the file (or says Node 22.13 is needed) and caches nothing, so the next call tries again. Production sets both paths to absolute paths under `~/service-integrator-data/` (`deploy.yml`), outside the folder each deploy extracts into.
+
+**Connection settings** (`openDatabase`, used by `getDb()` and `openTestDb()` alike): `PRAGMA busy_timeout = 5000` first, so the next pragma waits for another connection's lock; `journal_mode = WAL` (stored in the file; an in-memory database stays `memory`); `foreign_keys = ON`.
+
+**Loading `node:sqlite`.** `loadSqlite()` uses `process.getBuiltinModule("node:sqlite")`, not a static import. Webpack and Turbopack handle the import, but Vitest 2 strips the `node:` prefix and fails ("Failed to load url sqlite"), because the module exists only under the prefix. Loading it at first use also turns a Node without it into a clear error from `getDb()`. Import its types with `import type { DatabaseSync } from "node:sqlite"`. Node prints one harmless `ExperimentalWarning` per process when the module loads.
+
+**Node 22.13 API only.** CI and the server run Node 22, so use a `node:sqlite` method or option only if it was added in 22.13 or earlier (`@types/node` tags each with `@since`). Not available there: `isTransaction`, `isOpen`, `location()`, `backup()`, `aggregate()`, the constructor's `timeout` option, `statement.columns()` and `setReturnArrays()`. That is why the busy timeout is a pragma, `withTransaction` tracks nesting itself and backups use `VACUUM INTO`.
+
+**Layering**, as with `lib/pco` and `lib/queries`:
+
+- `lib/db/<area>.ts` holds the SQL, in named functions that take `db: DatabaseSync` first, with mappers from snake_case rows to camelCase types (`toSyncRun` in `syncRuns.ts`). Each is tested on an in-memory database.
+- `lib/queries/<area>.ts` (server-only) calls `getDb()` (and `@/lib/pco`), composes those functions, and is what pages import (convention 3). Pages and components never call `getDb()`.
+- Enumerations such as `sync_runs.kind` are checked in TypeScript (`SYNC_RUN_KINDS`), not by a CHECK, so a new value needs no migration. Readers skip values a newer build wrote.
+
+**Transactions.** `withTransaction(db, fn)` runs `fn` after `BEGIN IMMEDIATE` (which takes the write lock up front, waiting up to the busy timeout), commits when it returns, and rolls back and rethrows when it throws; a failed commit rolls back too. A nested call is a savepoint, so its failure undoes only its own writes. `fn` must be synchronous: one that awaited would let other requests' statements into the transaction and run its own later writes outside it, so a returned promise is refused with a TypeError. Wrap every write of more than one statement in it, and never run BEGIN or COMMIT by hand.
+
+**Migrations.** A migration is a module in `lib/db/migrations/` that default-exports `{ id, sql }`, listed in order in `MIGRATIONS` (`migrations/index.ts`). `migrate(db)` creates `schema_migrations (id, applied_at)`, then applies each migration the database does not record, in order, each in its own transaction with its `schema_migrations` row, so a failure (thrown, naming the migration) leaves the schema as the previous migration left it. A database that records migrations this build does not know (an older build deployed onto a database a newer one migrated) gets a warning in the log, and the app carries on. The rules:
+
+- **Append-only.** Never edit, reorder, rename or remove a committed migration: deployed databases have already run it. Change the schema with a new one.
+- One migration per phase (the plan's Execution table), numbered `0001`, `0002`, … with a snake_case name. A test checks the numbering.
+- Every table is `STRICT` (a test checks), timestamps are ISO 8601 UTC text (`toISOString()`, which sorts by time), and JSON is `TEXT` with a `json_valid` CHECK.
+- The SQL runs inside the migration's transaction: no BEGIN or COMMIT, and `PRAGMA foreign_keys` has no effect. Rebuilding a table that others reference needs foreign keys off, so the first migration that does that must also give `migrate()` a per-migration option for it.
+- `getDb()` migrates only when it first opens the database, so restart `next dev` after adding a migration.
+
+To add one, create `lib/db/migrations/0002_catalog.ts` on the model of `0001_init.ts`, append it to `MIGRATIONS`, and test the new tables through the `lib/db/<area>.ts` functions that use them.
+
+**Tests.** `openTestDb()` (`lib/db/testing.ts`) returns a new in-memory database with the same connection settings and every migration applied; close it in `afterEach`. To test a `lib/queries` module, mock only `getDb` and keep the rest of `lib/db` real, as `lib/queries/system.test.ts` does:
+
+```ts
+const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
+vi.mock("@/lib/db", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/db")>()),
+    getDb,
+}));
+// beforeEach: getDb.mockReturnValue(openTestDb());
+```
+
+**Backups.** `backupDatabase(db, { dir })` (`lib/db/backup.ts`) writes a consistent copy with `VACUUM INTO` to `service-integrator-<UTC time>.sqlite` in `DATABASE_BACKUP_DIR` (default `./data/backups`). It writes a `.partial` file, flushes it to disk and renames it, so a crash never leaves a file that looks like a backup. It then keeps the newest 14 backups and never deletes any other file. To restore one, stop the app, delete the `-wal` and `-shm` files beside the database, copy the backup over `DATABASE_PATH`, and start the app.
+
+### Jobs and boot
+
+- **Boot.** `instrumentation.ts` `register()` runs `boot()` (`lib/boot.ts`) in the Node.js runtime only, and never during `next build` (`NEXT_PHASE`). Keep its `process.env.NEXT_RUNTIME === "nodejs"` check a literal wrapped around the dynamic import: Next replaces it at compile time, which keeps `lib/db` out of the Edge bundle. `boot()` calls `getDb()`, so a broken database shows in the log at once, then `startJobs()`. It never throws: plan pages work without the database, and Settings shows the error.
+- **Jobs** (`lib/jobs.ts`). `JOBS` lists the background jobs. A `Job` is `{ kind, everyMs, atBoot?, isDue?, run }`. `startJobs()` checks each job every `everyMs` (and, with `atBoot`, a minute after boot) and runs it when `isDue(db, now)` says so, or every time without `isDue`. It schedules once per process (a globalThis flag), and its timers are `unref()`ed.
+- **Runs.** `runJob(job)` records a `sync_runs` row (started, then finished with `ok`, `message` and `counts` from what `run` returns, or with the error) and never throws or rejects. A call while a run of the same kind is in progress joins that run. The runs in progress live on globalThis, so an on-demand server action and the scheduler see each other.
+- **The backup job** is checked hourly and a minute after boot, and runs when the newest backup file is a day old, so restarts (every deploy is one) never stretch the gap much past a day. Settings shows its last run.
+- **Add a job** with one entry in `JOBS`, such as `{ kind: "pco-songs", everyMs: HOUR_MS, atBoot: true, run: (db) => syncPcoSongs(db) }`; a new kind joins `SYNC_RUN_KINDS` (no migration). A "Sync now" button is a server action that checks the session and calls `runJob(job)`.
 
 ## State
 
@@ -164,7 +239,7 @@ Getters are wrapped in React `cache()` (calls with the same arguments are dedupe
 
 ## Conventions
 
-1 to 14 are the conventions the routing migration set; 15 and 16 are lessons learned during it.
+1 to 14 are the conventions the routing migration set; 15 and 16 are lessons learned during it; 17 onward come with the song catalog.
 
 1. **Routes.** A route is a folder under `app/(app)/`. `page.tsx` and `layout.tsx` are server components, and client components are for interaction only. Type route props with the generated `PageProps<"/plans/[serviceTypeId]/[planId]">` and `LayoutProps<…>` (available after `next typegen`; route groups are not part of the key; `params` is a Promise).
 2. **Hrefs.** Internal hrefs come only from the builders in `lib/routes.ts`. Each returns a template literal `as const` (`` `/plans/${st}/${id}` as const ``). Annotating the return type as `Route` fails to compile for dynamic paths. `typedRoutes: true` checks every `<Link href>` against the real routes. `NAV_ITEMS` and `PLAN_TABS` live there too, and links out to PCO's web app come from `pcoWebUrls`.
@@ -186,6 +261,7 @@ Getters are wrapped in React `cache()` (calls with the same arguments are dedupe
     - Track an action's pending state in `useState`, not `useTransition`. A transition held open across the action stalls every navigation until it returns.
     - A failed refresh keeps the previous data: `TtlCache.refresh` replaces the stored value only when the load succeeds.
 16. **Non-ASCII in source.** Write non-ASCII characters in regex character classes and matching or normalization keys as `\u` escapes (`/[\u2018\u2019]/`), in tests too. Literal curly quotes were turned into straight quotes, and `normalizeTitle` silently stopped handling them while the test meant to cover it used straight quotes as well. Literal typographic characters in UI strings (·, ©, …) are fine.
+17. **Database.** Only `getDb()` opens the database (tests use `openTestDb()`), and pages reach it only through `lib/queries/*`. SQL lives in `lib/db/<area>.ts`, in named functions that take `db` first, tested on `:memory:`. A write of more than one statement runs in `withTransaction` with a synchronous function. Migrations are append-only: never edit, reorder or remove a committed one; change the schema with a new migration. Use only the `node:sqlite` API of Node 22.13. See [Database](#database).
 
 ## Recipes
 
@@ -306,6 +382,7 @@ Example: a team list for a service type.
   - `stubFetchRoutes({ [url]: body })` replaces global `fetch` with a table of full URLs, and a URL missing from the table fails the test. Each call returns a **fresh** `Response` (`json(body)`), because a body can be read only once.
   - `listPage(data, { next, included, total })` builds a paged JSON:API list, and `serviceTypeResource`, `planResource`, `itemResource` and `songResource` build raw resources. `calledUrls(fetchMock)` returns the URLs requested, in order.
   - Use fake timers for the 429 retry. Test a query module against the stubbed fetch, or mock the barrel with `vi.hoisted` plus `vi.mock("@/lib/pco", …)`; queries import only from the barrel, so the mock applies. For module-level caches, load a fresh copy per test with `vi.resetModules()` and `import(…)`.
+- **The database.** Test `lib/db` functions on `openTestDb()`, a migrated in-memory database, and `lib/queries` modules with only `getDb` mocked to return one (see [Database](#database)). Tests that touch files (`getDb`, backups) use a `mkdtempSync` folder and `vi.stubEnv` for `DATABASE_PATH` and `DATABASE_BACKUP_DIR`. CI runs the tests on Node 22, so run `npx vitest run lib/db` under Node 22 too when you change `lib/db`.
 - **The `server-only` alias.** The real package throws outside a React Server environment, so `vitest.config.mts` aliases `/^server-only$/` to `test/stubs/server-only.ts` (`export {}`), and server modules can be imported in tests. Do not use `resolve.conditions: ["react-server"]` instead: it switches `react` to its server build in every test. `esbuild.jsx: "automatic"` compiles TSX.
 - **Gates.** Run all four before every commit:
 

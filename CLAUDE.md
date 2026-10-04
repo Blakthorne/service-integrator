@@ -9,6 +9,7 @@ Next.js 15 (App Router) app that reads Planning Center Services data and generat
   - Hrefs come only from `lib/routes.ts`. Server pages get data from `lib/queries/*` and never fetch `/api/*`.
   - Validate every ID taken from a URL with `parsePcoId`, and import PCO code only from `@/lib/pco`.
   - Keep logic in `lib/` with tests: there is no jsdom or component-test harness.
+  - Change the database schema only with a new migration in `lib/db/migrations/`: migrations are append-only, so never edit a committed one (convention 17).
   - Use `prefetch={false}` on rows that link to data-heavy routes (the plans list does; the items table prefetches on purpose, since that only reads cached labels), never throw from `generateMetadata`, and write non-ASCII characters in regex character classes and matching or normalization keys as `\u` escapes (literal typographic characters in UI strings, such as ·, © and …, are fine).
 
 ## Before you commit
