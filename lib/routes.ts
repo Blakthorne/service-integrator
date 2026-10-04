@@ -34,6 +34,25 @@ export const routes = {
     catalogBook: (bookCode: string) => `/catalog/books/${bookCode}` as const,
     catalogImport: () => "/catalog/import" as const,
     catalogImportRun: (runId: number) => `/catalog/import/${runId}` as const,
+    catalogReconcile: () => "/catalog/reconcile" as const,
+    /**
+     * The new-song form. With a Planning Center song it is prefilled from
+     * that song and links it on create; `returnTo` (a path that
+     * `safeCallbackUrl` accepts) is where the form goes back to afterwards.
+     */
+    catalogSongNew: (options: { pcoSongId?: string; returnTo?: string } = {}) => {
+        const query = new URLSearchParams();
+        if (options.pcoSongId !== undefined) {
+            query.set("pcoSongId", options.pcoSongId);
+        }
+        if (options.returnTo !== undefined) {
+            query.set("returnTo", options.returnTo);
+        }
+        const search = query.toString();
+        return search === ""
+            ? ("/catalog/songs/new" as const)
+            : (`/catalog/songs/new?${search}` as const);
+    },
 };
 
 /** An entry of the top navigation bar. */
@@ -61,11 +80,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
         href: routes.catalog(),
         label: "Catalog",
         isActive: (pathname) => isAtOrBelow(pathname, routes.catalog()),
-    },
-    {
-        href: routes.unusedHymns(),
-        label: "Unused Hymns",
-        isActive: (pathname) => isAtOrBelow(pathname, routes.unusedHymns()),
     },
 ];
 
@@ -147,6 +161,7 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     { segments: [null, "songs"], label: "Songs", href: routes.catalog() },
     { segments: ["tunes"], label: "Tunes", href: routes.catalogTunes() },
     { segments: ["books"], label: "Books", href: routes.catalogBooks() },
+    { segments: ["reconcile"], label: "Reconcile", href: routes.catalogReconcile() },
     { segments: ["import"], label: "Import", href: routes.catalogImport() },
 ];
 
