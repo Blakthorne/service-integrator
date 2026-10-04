@@ -37,6 +37,19 @@ export interface PcoSingleResponse<T> {
     data: T;
 }
 
+/** One JSON:API error object in an error response. */
+export interface PcoErrorObject {
+    status?: string;
+    title?: string;
+    /** What was wrong, in words meant for people. */
+    detail?: string;
+}
+
+/** The body of an error response, e.g. a 422 for a write that failed validation. */
+export interface PcoErrorResponse {
+    errors: PcoErrorObject[];
+}
+
 export interface PcoServiceTypeAttributes {
     name: string;
     frequency: string;

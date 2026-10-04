@@ -5,7 +5,7 @@
  */
 import "server-only";
 
-export { PcoError, PcoUrlError, pcoAuthHeaders } from "./client";
+export { PcoError, PcoUrlError, PcoValidationError, pcoAuthHeaders } from "./client";
 export {
     InvalidPcoIdError,
     assertPcoId,

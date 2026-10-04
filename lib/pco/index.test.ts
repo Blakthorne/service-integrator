@@ -8,6 +8,12 @@ afterEach(() => {
 });
 
 describe("the barrel", () => {
+    test("exports PcoValidationError, the PcoError for a 422", () => {
+        const error = new barrel.PcoValidationError("/services/v2/songs", ["Title can't be blank"]);
+        expect(error).toBeInstanceOf(barrel.PcoError);
+        expect(error).toMatchObject({ status: 422, details: ["Title can't be blank"] });
+    });
+
     test("leaves out the write plumbing: only modules inside lib/pco write to PCO", () => {
         const exported = Object.keys(barrel);
         expect(exported).toContain("PcoError");

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
     PcoError,
     PcoUrlError,
+    PcoValidationError,
     jsonApi,
     pcoFetch,
     pcoFetchAll,
@@ -780,6 +781,8 @@ describe("pcoMutate", () => {
         const timedOut = new DOMException("The operation was aborted due to timeout", "TimeoutError");
         const fetchMock = stubFetchRoutes({
             [`PATCH ${BASE}/songs/404`]: () => json({ errors: [] }, { status: 404 }),
+            [`PATCH ${BASE}/songs/9`]: () =>
+                json({ errors: [{ detail: "Title can't be blank" }] }, { status: 422 }),
             [`POST ${BASE}/songs`]: () => tooManyRequests(),
             [`DELETE ${BASE}/songs/9`]: () => Promise.reject(timedOut),
         });
@@ -787,6 +790,7 @@ describe("pcoMutate", () => {
         const errors = await Promise.all(
             [
                 pcoMutate("PATCH", "/songs/404", songBody),
+                pcoMutate("PATCH", "/songs/9", songBody),
                 pcoMutate("POST", "/songs", songBody),
                 pcoMutate("DELETE", "/songs/9"),
                 pcoMutate("POST", "/../people/v2/people", songBody),
@@ -802,5 +806,127 @@ describe("pcoMutate", () => {
                 expect(printed).not.toContain(secret);
             }
         }
+    });
+});
+
+describe("validation errors (422)", () => {
+    const songBody = jsonApi("Song", { title: "" });
+    const MESSAGE = "Planning Center API responded with status: 422 (/services/v2/songs)";
+
+    /** Stub POST /songs with a 422 built by `makeResponse`. */
+    function rejectSong(makeResponse: () => Response) {
+        return stubFetchRoutes({ [`POST ${BASE}/songs`]: makeResponse });
+    }
+
+    test("a 422 is a PcoValidationError carrying PCO's errors[].detail", async () => {
+        const fetchMock = rejectSong(() =>
+            json(
+                {
+                    errors: [
+                        {
+                            status: "422",
+                            title: "Unprocessable Entity",
+                            detail: "Title can't be blank",
+                            source: { pointer: "/data/attributes/title" },
+                        },
+                        { status: "422", title: "Unprocessable Entity", detail: "Ccli number is invalid" },
+                    ],
+                },
+                { status: 422 }
+            )
+        );
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(PcoValidationError);
+        expect(error).toBeInstanceOf(PcoError);
+        expect(error).toMatchObject({
+            name: "PcoValidationError",
+            status: 422,
+            path: "/services/v2/songs",
+            details: ["Title can't be blank", "Ccli number is invalid"],
+        });
+        expect((error as Error).message).toBe(
+            `${MESSAGE}: ["Title can't be blank","Ccli number is invalid"]`
+        );
+        // A 422 is never retried.
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+        ["a body that is not JSON", () => new Response("<html>Unprocessable</html>", { status: 422 })],
+        ["an empty body", () => new Response(null, { status: 422 })],
+        ["JSON null", () => json(null, { status: 422 })],
+        ["JSON without errors", () => json({ message: "invalid" }, { status: 422 })],
+        ["errors that is not a list", () => json({ errors: "invalid" }, { status: 422 })],
+    ])("%s gives a PcoValidationError with no details", async (_case, makeResponse) => {
+        rejectSong(makeResponse);
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(PcoValidationError);
+        expect(error).toMatchObject({ status: 422, details: [] });
+        expect((error as Error).message).toBe(MESSAGE);
+    });
+
+    test("keeps only the details that are non-empty strings", async () => {
+        rejectSong(() =>
+            json(
+                {
+                    errors: [
+                        { title: "No detail" },
+                        { detail: "Title can't be blank" },
+                        { detail: 42 },
+                        { detail: "" },
+                        null,
+                        "invalid",
+                    ],
+                },
+                { status: 422 }
+            )
+        );
+        await expect(pcoMutate("POST", "/songs", songBody)).rejects.toMatchObject({
+            details: ["Title can't be blank"],
+        });
+    });
+
+    test("a body that fails while being read gives no details", async () => {
+        const body = new ReadableStream({
+            pull: (controller) => controller.error(new TypeError("terminated")),
+        });
+        rejectSong(() => new Response(body, { status: 422 }));
+        await expect(pcoMutate("POST", "/songs", songBody)).rejects.toMatchObject({
+            name: "PcoValidationError",
+            details: [],
+        });
+    });
+
+    test("quotes the details in the message, so a detail cannot forge a log line", async () => {
+        rejectSong(() => json({ errors: [{ detail: "bad\nFAKE LOG LINE" }] }, { status: 422 }));
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect((error as Error).message).toBe(`${MESSAGE}: ["bad\\nFAKE LOG LINE"]`);
+        expect((error as PcoValidationError).details).toEqual(["bad\nFAKE LOG LINE"]);
+    });
+
+    test("a 422 to a GET is a PcoValidationError too", async () => {
+        stubFetch(() => json({ errors: [{ detail: "Unknown filter" }] }, { status: 422 }));
+        await expect(pcoFetch("/service_types/1/plans", "plans")).rejects.toMatchObject({
+            name: "PcoValidationError",
+            status: 422,
+            details: ["Unknown filter"],
+        });
+    });
+
+    test.each([400, 404, 409, 500])("a %i stays a plain PcoError", async (status) => {
+        rejectSong(() => json({ errors: [{ detail: "Something" }] }, { status }));
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(PcoError);
+        expect(error).not.toBeInstanceOf(PcoValidationError);
+        expect(error).toMatchObject({ name: "PcoError", status });
+        expect(error).not.toHaveProperty("details");
     });
 });

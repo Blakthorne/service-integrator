@@ -1,7 +1,12 @@
 import "server-only";
 import { PCO_CACHE_POLICY, type PcoResourceKind } from "./cachePolicy";
 import { assertPcoId, type PcoId } from "./ids";
-import type { PcoListResponse, PcoResourceIdentifier } from "./resources";
+import type {
+    PcoErrorObject,
+    PcoErrorResponse,
+    PcoListResponse,
+    PcoResourceIdentifier,
+} from "./resources";
 
 const PCO_ORIGIN = "https://api.planningcenteronline.com";
 const SERVICES_PATH = "/services/v2";
@@ -42,6 +47,25 @@ export class PcoError extends Error {
         this.name = "PcoError";
         this.status = status;
         this.path = path;
+    }
+}
+
+/**
+ * PCO refused a request as invalid (422), typically a write whose attributes
+ * failed validation. `details` are PCO's `errors[].detail` strings, possibly
+ * none.
+ */
+export class PcoValidationError extends PcoError {
+    readonly details: readonly string[];
+
+    constructor(path: string, details: readonly string[]) {
+        super(422, path);
+        this.name = "PcoValidationError";
+        this.details = details;
+        if (details.length > 0) {
+            // JSON-quoted, so a detail cannot forge log lines.
+            this.message += `: ${JSON.stringify(details)}`;
+        }
     }
 }
 
@@ -118,6 +142,38 @@ function discardBody(response: Response): void {
     void response.body?.cancel().catch(() => {});
 }
 
+/**
+ * The `errors[].detail` strings of a 422's body. Read defensively: a body that
+ * is not JSON, or not shaped like PCO's errors, gives none.
+ */
+async function validationDetails(response: Response): Promise<string[]> {
+    let body: unknown;
+    try {
+        body = await response.json();
+    } catch {
+        return [];
+    }
+    const errors = (body as Partial<PcoErrorResponse> | null)?.errors;
+    if (!Array.isArray(errors)) {
+        return [];
+    }
+    return errors.flatMap((error: Partial<PcoErrorObject> | null) =>
+        typeof error?.detail === "string" && error.detail !== "" ? [error.detail] : []
+    );
+}
+
+/**
+ * The error for a non-2xx response. A 422's body says what PCO found invalid,
+ * so it is read; any other body is released unread.
+ */
+async function responseError(response: Response, path: string): Promise<PcoError> {
+    if (response.status === 422) {
+        return new PcoValidationError(path, await validationDetails(response));
+    }
+    discardBody(response);
+    return new PcoError(response.status, path);
+}
+
 /** True for what fetch (or a body read) rejects with when its signal fires. */
 function isAbortError(error: unknown): boolean {
     const name = (error as { name?: unknown } | null)?.name;
@@ -166,8 +222,7 @@ async function request(url: URL, init: RequestInit, read: ReadBody): Promise<unk
                 response = await attempt();
             }
             if (!response.ok) {
-                discardBody(response);
-                throw new PcoError(response.status, path);
+                throw await responseError(response, path);
             }
         }
         return await read(response);
@@ -251,7 +306,8 @@ export type PcoMutationMethod = "POST" | "PATCH" | "DELETE";
  * exactly like a GET (PCO answers 429 before processing a request, so a
  * retried POST cannot apply twice), and never cached. Resolves to the JSON
  * response, or null when there is none (204 No Content). Throws PcoUrlError
- * before sending and PcoError on a non-2xx response.
+ * before sending, PcoValidationError on a 422 and PcoError on any other
+ * non-2xx response.
  *
  * Only modules inside lib/pco write to Planning Center, so the barrel does not
  * export this.
