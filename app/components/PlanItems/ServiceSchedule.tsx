@@ -3,7 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import CopyButton from "../ui/CopyButton";
 import { createDebouncedSave } from "@/lib/debouncedSave";
-import type { ChooseOption, SetCustomText } from "@/lib/scheduleSelections";
+import {
+    hasNumbers,
+    type ChooseOption,
+    type SetCustomText,
+} from "@/lib/scheduleSelections";
 import {
     buildScheduleCopyText,
     catalogMatchFor,
@@ -49,9 +53,10 @@ function CustomTextInput({
         )
     );
 
-    // Follow the saved text when it changes elsewhere (picking a hymn version
-    // clears it), unless an edit is still waiting to be saved: the box stays
-    // mounted now, so an older save landing mid-typing must not overwrite it.
+    // Follow the saved text when it changes elsewhere (choosing Numbers or
+    // Leave blank clears it), unless an edit is still waiting to be saved: the
+    // box stays mounted, so an older save landing mid-typing must not
+    // overwrite it.
     useEffect(() => {
         if (!saver.isPending()) {
             setInputValue(item.customText || "");
@@ -104,9 +109,9 @@ function CustomOption({
             <label className="flex items-center space-x-3 cursor-pointer">
                 <input
                     type="radio"
-                    name={`hymn-${item.id}`}
-                    checked={item.selectedOption === "Custom"}
-                    onChange={() => onChooseOption(item.id, "Custom")}
+                    name={`schedule-${item.id}`}
+                    checked={item.option === "custom"}
+                    onChange={() => onChooseOption(item.id, "custom")}
                     className="text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm text-gray-900 dark:text-gray-100">
@@ -122,8 +127,8 @@ function CustomOption({
 }
 
 /**
- * The song's numbers, the choice for a song linked to a catalog song: its
- * tune and numbers, as "NETTLETON (R-553/G-17)".
+ * Numbers, the choice for a song linked to a catalog song in a book: its tune
+ * and numbers, as "NETTLETON (R-553/G-17)".
  */
 function NumbersOption({
     item,
@@ -138,9 +143,9 @@ function NumbersOption({
         <label className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
                 type="radio"
-                name={`hymn-${item.id}`}
-                checked={!item.selectedOption}
-                onChange={() => onChooseOption(item.id, undefined, 0)}
+                name={`schedule-${item.id}`}
+                checked={item.option === "numbers"}
+                onChange={() => onChooseOption(item.id, "numbers")}
                 className="text-blue-600 focus:ring-blue-500"
             />
             <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">
@@ -163,12 +168,9 @@ function LeaveBlankOption({
         <label className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
                 type="radio"
-                name={`option-${item.id}`}
-                checked={
-                    item.selectedOption === "Leave blank" ||
-                    item.selectedOption === undefined
-                }
-                onChange={() => onChooseOption(item.id, "Leave blank")}
+                name={`schedule-${item.id}`}
+                checked={item.option === "blank"}
+                onChange={() => onChooseOption(item.id, "blank")}
                 className="text-blue-600 focus:ring-blue-500"
             />
             <span className="flex-1 text-sm text-gray-900 dark:text-gray-100">
@@ -190,7 +192,7 @@ export interface ServiceScheduleProps {
     serviceTypeName: string;
     /** The plan's calendar date as `YYYY-MM-DD`, or null when it is unknown. */
     planDate: string | null;
-    /** Called when a song's radio button is picked. */
+    /** Called when a song's option is chosen. */
     onChooseOption: ChooseOption;
     /** Called with a song's custom text once typing pauses. */
     onCustomTextChange: SetCustomText;
@@ -247,51 +249,33 @@ export default function ServiceSchedule({
                                             {item.title}
                                         </h3>
                                     </div>
-                                    {!match ? (
-                                        <div className="space-y-2">
-                                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                Song not linked to the catalog
-                                            </p>
-                                            <div>
-                                                <LeaveBlankOption
-                                                    item={item}
-                                                    onChooseOption={
-                                                        onChooseOption
-                                                    }
-                                                />
-                                                <CustomOption
-                                                    item={item}
-                                                    onChooseOption={
-                                                        onChooseOption
-                                                    }
-                                                    onCustomTextChange={
-                                                        onCustomTextChange
-                                                    }
-                                                />
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            <div>
-                                                <NumbersOption
-                                                    item={item}
-                                                    match={match}
-                                                    onChooseOption={
-                                                        onChooseOption
-                                                    }
-                                                />
-                                                <CustomOption
-                                                    item={item}
-                                                    onChooseOption={
-                                                        onChooseOption
-                                                    }
-                                                    onCustomTextChange={
-                                                        onCustomTextChange
-                                                    }
-                                                />
-                                            </div>
-                                        </div>
+                                    {!hasNumbers(item, catalog) && (
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                                            {match
+                                                ? "Linked song is in no book"
+                                                : "Song not linked to the catalog"}
+                                        </p>
                                     )}
+                                    <div>
+                                        {match && hasNumbers(item, catalog) && (
+                                            <NumbersOption
+                                                item={item}
+                                                match={match}
+                                                onChooseOption={onChooseOption}
+                                            />
+                                        )}
+                                        <LeaveBlankOption
+                                            item={item}
+                                            onChooseOption={onChooseOption}
+                                        />
+                                        <CustomOption
+                                            item={item}
+                                            onChooseOption={onChooseOption}
+                                            onCustomTextChange={
+                                                onCustomTextChange
+                                            }
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         );

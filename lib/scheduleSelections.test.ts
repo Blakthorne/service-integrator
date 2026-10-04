@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
-import type { PlanItem, ScheduleSelection } from "./domain";
+import type { PlanItem } from "./domain";
 import {
-    defaultSelection,
+    defaultOption,
+    hasNumbers,
     mergeScheduleSelections,
     scheduleSelectionsReducer,
     type ScheduleOption,
@@ -14,7 +15,8 @@ function planItem(
     id: string,
     title: string,
     itemType: string,
-    sequence: number
+    sequence: number,
+    songId: string | null = null
 ): PlanItem {
     return {
         id,
@@ -27,16 +29,12 @@ function planItem(
         description: null,
         createdAt: "2025-06-01T00:00:00Z",
         updatedAt: "2025-06-01T00:00:00Z",
-        songId: null,
+        songId,
     };
 }
 
-function choose(
-    itemId: string,
-    option: ScheduleOption | undefined,
-    versionIndex?: number
-): ScheduleSelectionsAction {
-    return { type: "chooseOption", itemId, option, versionIndex };
+function choose(itemId: string, option: ScheduleOption): ScheduleSelectionsAction {
+    return { type: "chooseOption", itemId, option };
 }
 
 function text(itemId: string, value: string): ScheduleSelectionsAction {
@@ -50,64 +48,61 @@ function reduceAll(
     return actions.reduce(scheduleSelectionsReducer, state);
 }
 
+const BOTH = [
+    { bookCode: "R", number: 12, variantNote: null },
+    { bookCode: "G", number: 34, variantNote: null },
+];
+
+/**
+ * Planning Center song 20 is linked to a catalog song at R-12 and G-34, and
+ * song 50 to one in no book; songs 30 and 40 are not linked.
+ */
+const CATALOG: ScheduleCatalog = {
+    "20": { entries: BOTH },
+    "50": { entries: [] },
+};
+
 describe("scheduleSelectionsReducer: chooseOption", () => {
-    test("picking a hymn version stores the index and clears the option and custom text", () => {
-        const state = reduceAll([text("1", "x"), choose("1", undefined, 2)]);
-        expect(state["1"]).toStrictEqual({
-            selectedOption: undefined,
-            customText: undefined,
-            selectedVersionIndex: 2,
-        });
+    test("Numbers stores the option and drops the custom text", () => {
+        const state = reduceAll([text("1", "x"), choose("1", "numbers")]);
+        expect(state["1"]).toStrictEqual({ option: "numbers" });
     });
 
-    test("'Custom' starts the custom text at '' and keeps text already typed", () => {
-        expect(reduceAll([choose("1", "Custom")])["1"]).toStrictEqual({
-            selectedOption: "Custom",
+    test("Custom starts the custom text at '' and keeps text already typed", () => {
+        expect(reduceAll([choose("1", "custom")])["1"]).toStrictEqual({
+            option: "custom",
             customText: "",
-            selectedVersionIndex: undefined,
         });
-        expect(
-            reduceAll([text("1", "x"), choose("1", "Custom")])["1"]
-        ).toStrictEqual({
-            selectedOption: "Custom",
+        expect(reduceAll([text("1", "x"), choose("1", "custom")])["1"]).toStrictEqual({
+            option: "custom",
             customText: "x",
-            selectedVersionIndex: undefined,
         });
     });
 
-    test("'Leave blank' clears the custom text", () => {
-        expect(
-            reduceAll([text("1", "x"), choose("1", "Leave blank")])["1"]
-        ).toStrictEqual({
-            selectedOption: "Leave blank",
-            customText: undefined,
-            selectedVersionIndex: undefined,
+    test("Leave blank drops the custom text", () => {
+        expect(reduceAll([text("1", "x"), choose("1", "blank")])["1"]).toStrictEqual({
+            option: "blank",
         });
     });
 
-    test("'Leave blank' and 'Custom' store selectedVersionIndex as an explicit undefined", () => {
-        for (const option of ["Leave blank", "Custom"] as const) {
-            const state = reduceAll([choose("1", undefined, 1), choose("1", option)]);
-            expect(Object.keys(state["1"])).toContain("selectedVersionIndex");
-            expect(state["1"].selectedVersionIndex).toBeUndefined();
-        }
+    test("a later choice replaces an earlier one", () => {
+        expect(
+            reduceAll([choose("1", "custom"), choose("1", "numbers")])["1"]
+        ).toStrictEqual({ option: "numbers" });
+        expect(
+            reduceAll([choose("1", "numbers"), choose("1", "blank")])["1"]
+        ).toStrictEqual({ option: "blank" });
     });
 
-    test("an empty custom text is not kept: 'Custom' turns it back into ''", () => {
-        expect(
-            reduceAll([text("1", ""), choose("1", "Custom")])["1"].customText
-        ).toBe("");
+    test("an empty custom text is not kept: Custom turns it back into ''", () => {
+        expect(reduceAll([text("1", ""), choose("1", "custom")])["1"].customText).toBe("");
     });
 });
 
 describe("scheduleSelectionsReducer: setCustomText", () => {
-    test("sets only the custom text, keeping the other choices", () => {
-        const state = reduceAll([choose("1", "Custom"), text("1", "abc")]);
-        expect(state["1"]).toStrictEqual({
-            selectedOption: "Custom",
-            customText: "abc",
-            selectedVersionIndex: undefined,
-        });
+    test("sets only the custom text, keeping the option", () => {
+        const state = reduceAll([choose("1", "custom"), text("1", "abc")]);
+        expect(state["1"]).toStrictEqual({ option: "custom", customText: "abc" });
     });
 
     test("works before anything is chosen for the item", () => {
@@ -123,7 +118,7 @@ describe("scheduleSelectionsReducer: setCustomText", () => {
 
 describe("scheduleSelectionsReducer: purity", () => {
     test("returns a new state and leaves the previous one untouched", () => {
-        const before = reduceAll([choose("1", "Custom"), text("2", "b")]);
+        const before = reduceAll([choose("1", "custom"), text("2", "b")]);
         const snapshot = JSON.parse(JSON.stringify(before));
         const after = scheduleSelectionsReducer(before, text("1", "a"));
         expect(after).not.toBe(before);
@@ -132,22 +127,34 @@ describe("scheduleSelectionsReducer: purity", () => {
     });
 
     test("other items' selections are kept as they are", () => {
-        const before = reduceAll([choose("2", undefined, 1)]);
-        const after = scheduleSelectionsReducer(before, choose("1", "Custom"));
+        const before = reduceAll([choose("2", "numbers")]);
+        const after = scheduleSelectionsReducer(before, choose("1", "custom"));
         expect(after["2"]).toBe(before["2"]);
     });
 });
 
-describe("defaultSelection", () => {
-    test("a song starts on its first hymn version", () => {
-        expect(defaultSelection({ itemType: "song" })).toStrictEqual({
-            selectedVersionIndex: 0,
-        });
+describe("hasNumbers and defaultOption", () => {
+    test("a song linked to a catalog song in a book has numbers, and starts on them", () => {
+        const item = { itemType: "song", songId: "20" };
+        expect(hasNumbers(item, CATALOG)).toBe(true);
+        expect(defaultOption(item, CATALOG)).toBe("numbers");
     });
 
-    test("other item types (only exactly 'song' counts) have no selections", () => {
+    test.each([
+        ["not linked", "30"],
+        ["linked to a song in no book", "50"],
+        ["without a Planning Center song", null],
+    ])("a song %s has none, and starts blank", (_name, songId) => {
+        const item = { itemType: "song", songId };
+        expect(hasNumbers(item, CATALOG)).toBe(false);
+        expect(defaultOption(item, CATALOG)).toBe("blank");
+    });
+
+    test("other item types (only exactly 'song' counts) have none, and start blank", () => {
         for (const itemType of ["header", "media", "item", "Song", ""]) {
-            expect(defaultSelection({ itemType })).toStrictEqual({});
+            const item = { itemType, songId: "20" };
+            expect(hasNumbers(item, CATALOG)).toBe(false);
+            expect(defaultOption(item, CATALOG)).toBe("blank");
         }
     });
 });
@@ -155,42 +162,60 @@ describe("defaultSelection", () => {
 describe("mergeScheduleSelections", () => {
     const items = [
         planItem("10", "Welcome", "header", 1),
-        planItem("11", "Amazing Grace", "song", 2),
-        planItem("12", "Holy, Holy, Holy", "song", 3),
+        planItem("11", "Amazing Grace", "song", 2, "20"),
+        planItem("12", "Holy, Holy, Holy", "song", 3, "30"),
     ];
 
-    test("with no selections, songs get version 0 and other items are copied as they are", () => {
-        const merged = mergeScheduleSelections(items, {});
+    test("with no selections, a song with numbers starts on them and every other item on Leave blank", () => {
+        const merged = mergeScheduleSelections(items, {}, CATALOG);
         expect(merged).toStrictEqual([
-            { ...items[0] },
-            { ...items[1], selectedVersionIndex: 0 },
-            { ...items[2], selectedVersionIndex: 0 },
+            { ...items[0], option: "blank" },
+            { ...items[1], option: "numbers" },
+            { ...items[2], option: "blank" },
         ]);
     });
 
-    test("an item's selections override its defaults; other items keep theirs", () => {
+    test("an item's choice overrides its default; other items keep theirs", () => {
         const merged = mergeScheduleSelections(
             items,
-            reduceAll([choose("12", undefined, 2)])
+            reduceAll([choose("11", "blank"), choose("12", "custom"), text("12", "x")]),
+            CATALOG
         );
-        expect(merged[1].selectedVersionIndex).toBe(0);
-        expect(merged[2].selectedVersionIndex).toBe(2);
+        expect(merged.map(({ option }) => option)).toEqual(["blank", "blank", "custom"]);
+        expect(merged[2].customText).toBe("x");
     });
 
-    test("an explicit undefined index overrides the default version 0", () => {
-        const merged = mergeScheduleSelections(
-            items,
-            reduceAll([choose("11", "Leave blank")])
+    test("custom text typed before anything is chosen comes with the default option", () => {
+        const merged = mergeScheduleSelections(items, reduceAll([text("11", "x")]), CATALOG);
+        expect(merged[1]).toStrictEqual({ ...items[1], option: "numbers", customText: "x" });
+    });
+
+    test("a song linked while the tab is open turns to its numbers, unless something was chosen", () => {
+        const linkedNow: ScheduleCatalog = { ...CATALOG, "30": { entries: BOTH } };
+        expect(mergeScheduleSelections(items, {}, linkedNow)[2].option).toBe("numbers");
+        expect(
+            mergeScheduleSelections(items, reduceAll([choose("12", "blank")]), linkedNow)[2]
+                .option
+        ).toBe("blank");
+    });
+
+    test("Numbers needs numbers: a song chosen as Numbers that has none shows Leave blank", () => {
+        const selections = reduceAll([choose("11", "numbers"), choose("12", "numbers")]);
+        const unlinked: ScheduleCatalog = {};
+        expect(
+            mergeScheduleSelections(items, selections, unlinked).map(({ option }) => option)
+        ).toEqual(["blank", "blank", "blank"]);
+        // The choice is kept, so the numbers come back with the link.
+        expect(mergeScheduleSelections(items, selections, CATALOG)[1].option).toBe(
+            "numbers"
         );
-        expect(Object.keys(merged[1])).toContain("selectedVersionIndex");
-        expect(merged[1].selectedVersionIndex).toBeUndefined();
     });
 
     test("keeps every item field and the item order, and modifies nothing", () => {
         const selections = reduceAll([text("11", "x")]);
         const itemsBefore = JSON.stringify(items);
         const selectionsBefore = JSON.stringify(selections);
-        const merged = mergeScheduleSelections(items, selections);
+        const merged = mergeScheduleSelections(items, selections, CATALOG);
         expect(merged.map((item) => item.id)).toEqual(["10", "11", "12"]);
         expect(merged[1]).toMatchObject(items[1]);
         expect(merged[1]).not.toBe(items[1]);
@@ -199,149 +224,28 @@ describe("mergeScheduleSelections", () => {
     });
 
     test("selections for items that are not in the list are ignored", () => {
-        const merged = mergeScheduleSelections(items, reduceAll([text("99", "x")]));
-        expect(merged).toStrictEqual(mergeScheduleSelections(items, {}));
-    });
-});
-
-// What the Schedule tab did before the selections moved into the reducer, copied
-// from PlanItems.tsx and ServiceSchedule.tsx. The merged view must match it.
-type LegacyItem = PlanItem & ScheduleSelection;
-
-/** PlanItems.tsx: how the container set up the items it fetched. */
-function legacyInit(items: PlanItem[]): LegacyItem[] {
-    return items.map((item) => ({
-        ...item,
-        selectedVersionIndex: item.itemType === "song" ? 0 : undefined,
-    }));
-}
-
-/** ServiceSchedule.tsx: onChooseOption. */
-function legacyChooseOption(
-    items: LegacyItem[],
-    itemId: string,
-    option: ScheduleOption | undefined,
-    versionIndex?: number
-): LegacyItem[] {
-    return items.map((i) =>
-        i.id === itemId
-            ? {
-                  ...i,
-                  selectedOption: option,
-                  customText:
-                      option === "Custom" ? i.customText || "" : undefined,
-                  selectedVersionIndex: versionIndex,
-              }
-            : i
-    );
-}
-
-/** ServiceSchedule.tsx: CustomTextInput's debounced update. */
-function legacySetCustomText(
-    items: LegacyItem[],
-    itemId: string,
-    value: string
-): LegacyItem[] {
-    return items.map((i) => (i.id === itemId ? { ...i, customText: value } : i));
-}
-
-function legacyApply(
-    items: PlanItem[],
-    actions: ScheduleSelectionsAction[]
-): LegacyItem[] {
-    return actions.reduce(
-        (current, action) =>
-            action.type === "chooseOption"
-                ? legacyChooseOption(
-                      current,
-                      action.itemId,
-                      action.option,
-                      action.versionIndex
-                  )
-                : legacySetCustomText(current, action.itemId, action.text),
-        legacyInit(items)
-    );
-}
-
-describe("the merged view matches what the Schedule tab did before", () => {
-    const items = [
-        planItem("1", "Welcome", "header", 1),
-        planItem("2", "Holy, Holy, Holy", "song", 2),
-        planItem("3", "Unknown Song", "song", 3),
-        planItem("4", "Amazing Grace", "song", 4),
-    ];
-
-    const sequences: [string, ScheduleSelectionsAction[]][] = [
-        ["nothing chosen", []],
-        ["a version", [choose("2", undefined, 1)]],
-        ["Custom, then text", [choose("2", "Custom"), text("2", "x")]],
-        ["text, then Custom", [text("2", "x"), choose("2", "Custom")]],
-        [
-            "Custom with text, then a version, then Custom again",
-            [
-                choose("2", "Custom"),
-                text("2", "x"),
-                choose("2", undefined, 0),
-                choose("2", "Custom"),
-            ],
-        ],
-        [
-            "Leave blank and Custom on a song with no hymn",
-            [
-                choose("3", "Custom"),
-                text("3", "free"),
-                choose("3", "Leave blank"),
-                text("3", "again"),
-            ],
-        ],
-        [
-            "several items at once",
-            [
-                choose("4", undefined, 2),
-                text("2", "a"),
-                choose("3", "Custom"),
-                text("3", "b"),
-                choose("2", "Custom"),
-                text("2", ""),
-            ],
-        ],
-    ];
-
-    test.each(sequences)("%s", (_name, actions) => {
-        const legacy = legacyApply(items, actions);
-        const merged = mergeScheduleSelections(items, reduceAll(actions));
-
-        // Song items match exactly, down to keys that hold undefined.
-        const songs = (list: LegacyItem[]) =>
-            list.filter((item) => item.itemType === "song");
-        expect(songs(merged)).toStrictEqual(songs(legacy));
-        // Other items only differ in that the old code also gave them a
-        // `selectedVersionIndex: undefined` key; nothing reads it.
-        expect(merged).toEqual(legacy);
+        const merged = mergeScheduleSelections(items, reduceAll([text("99", "x")]), CATALOG);
+        expect(merged).toStrictEqual(mergeScheduleSelections(items, {}, CATALOG));
     });
 });
 
 describe("copy text through the merged view", () => {
-    const BOTH = [
-        { bookCode: "R", number: 12, variantNote: null },
-        { bookCode: "G", number: 34, variantNote: null },
-    ];
-    // Multi and Single schedule Planning Center songs 20 and 30, both linked
+    // Multi and Single schedule Planning Center songs 20 and 21, both linked
     // to catalog songs at R-12 and G-34; No Hymn's song 40 is not linked.
     const catalog: ScheduleCatalog = {
         "20": { entries: BOTH },
-        "30": { entries: BOTH },
+        "21": { entries: BOTH },
     };
     const items = [
         planItem("1", "Welcome", "header", 1),
-        { ...planItem("2", "Multi", "song", 2), songId: "20" },
-        { ...planItem("3", "Single", "song", 3), songId: "30" },
-        { ...planItem("4", "No Hymn", "song", 4), songId: "40" },
+        planItem("2", "Multi", "song", 2, "20"),
+        planItem("3", "Single", "song", 3, "21"),
+        planItem("4", "No Hymn", "song", 4, "40"),
     ];
 
     function copyText(actions: ScheduleSelectionsAction[]): string {
         return buildScheduleCopyText({
-            items: mergeScheduleSelections(items, reduceAll(actions)),
+            items: mergeScheduleSelections(items, reduceAll(actions), catalog),
             catalog,
             serviceTypeName: "Sunday Morning",
             planDate: "2025-06-15",
@@ -365,63 +269,51 @@ describe("copy text through the merged view", () => {
         );
     });
 
-    // The version picker is gone: a linked song has one set of numbers.
-    test("picking a version changes nothing", () => {
-        expect(lineFor("Multi", [choose("2", undefined, 1)])).toBe("Multi (R-12/G-34)");
-        expect(lineFor("Multi", [choose("2", undefined, 2)])).toBe("Multi (R-12/G-34)");
-        expect(
-            lineFor("Multi", [choose("2", undefined, 2), choose("2", undefined, 0)])
-        ).toBe("Multi (R-12/G-34)");
+    test("Leave blank drops a linked song's numbers, and Numbers brings them back", () => {
+        expect(lineFor("Multi", [choose("2", "blank")])).toBe("Multi");
+        expect(lineFor("Multi", [choose("2", "blank"), choose("2", "numbers")])).toBe(
+            "Multi (R-12/G-34)"
+        );
     });
 
     test("Custom with no text yet is just the title; typing adds the text", () => {
-        expect(lineFor("Multi", [choose("2", "Custom")])).toBe("Multi");
-        expect(lineFor("Multi", [choose("2", "Custom"), text("2", "x")])).toBe(
+        expect(lineFor("Multi", [choose("2", "custom")])).toBe("Multi");
+        expect(lineFor("Multi", [choose("2", "custom"), text("2", "x")])).toBe(
             "Multi (x)"
         );
     });
 
     test("text typed before choosing Custom shows once Custom is chosen", () => {
         expect(lineFor("Single", [text("3", "x")])).toBe("Single (R-12/G-34)");
-        expect(lineFor("Single", [text("3", "x"), choose("3", "Custom")])).toBe(
+        expect(lineFor("Single", [text("3", "x"), choose("3", "custom")])).toBe(
             "Single (x)"
         );
     });
 
     test("going back to the numbers drops the custom text for good", () => {
-        const backToNumbers = [
-            choose("2", "Custom"),
-            text("2", "x"),
-            choose("2", undefined, 1),
-        ];
+        const backToNumbers = [choose("2", "custom"), text("2", "x"), choose("2", "numbers")];
         expect(lineFor("Multi", backToNumbers)).toBe("Multi (R-12/G-34)");
-        expect(lineFor("Multi", [...backToNumbers, choose("2", "Custom")])).toBe(
-            "Multi"
-        );
+        expect(lineFor("Multi", [...backToNumbers, choose("2", "custom")])).toBe("Multi");
     });
 
     test("a song that is not linked: Custom adds its text, Leave blank drops it", () => {
-        const custom = [choose("4", "Custom"), text("4", "free")];
+        const custom = [choose("4", "custom"), text("4", "free")];
         expect(lineFor("No Hymn", custom)).toBe("No Hymn (free)");
-        expect(lineFor("No Hymn", [...custom, choose("4", "Leave blank")])).toBe(
-            "No Hymn"
-        );
+        expect(lineFor("No Hymn", [...custom, choose("4", "blank")])).toBe("No Hymn");
         expect(
-            lineFor("No Hymn", [...custom, choose("4", "Leave blank"), choose("4", "Custom")])
+            lineFor("No Hymn", [...custom, choose("4", "blank"), choose("4", "custom")])
         ).toBe("No Hymn");
     });
 
     test("each song keeps its own choices", () => {
         expect(
             copyText([
-                choose("2", undefined, 2),
-                choose("3", "Custom"),
+                choose("2", "blank"),
+                choose("3", "custom"),
                 text("3", "mine"),
-                choose("4", "Custom"),
+                choose("4", "custom"),
                 text("4", "free"),
             ])
-        ).toBe(
-            "Sunday AM 6/15/25\n\nMulti (R-12/G-34)\nSingle (mine)\nNo Hymn (free)"
-        );
+        ).toBe("Sunday AM 6/15/25\n\nMulti\nSingle (mine)\nNo Hymn (free)");
     });
 });

@@ -40,12 +40,19 @@ function songItem(
     sequence: number,
     selection: Partial<ScheduleItem> = {}
 ): ScheduleItem {
-    return { title, itemType: "song", sequence, songId: SONG, ...selection };
+    return {
+        title,
+        itemType: "song",
+        sequence,
+        songId: SONG,
+        option: "numbers",
+        ...selection,
+    };
 }
 
 /** A plan item that is not a song, such as a header. */
 function otherItem(title: string, itemType: string, sequence: number): ScheduleItem {
-    return { title, itemType, sequence, songId: null };
+    return { title, itemType, sequence, songId: null, option: "blank" };
 }
 
 /** The copy text under a service type name that gets no header. */
@@ -58,7 +65,7 @@ function textFor(items: ScheduleItem[], catalog: ScheduleCatalog = {}): string {
     });
 }
 
-/** The single line for one song item titled "T" with the given selections. */
+/** The single line for one song item titled "T", on Numbers unless `selection` says otherwise. */
 function lineFor(
     selection: Partial<ScheduleItem>,
     catalog: ScheduleCatalog = {}
@@ -385,7 +392,7 @@ describe("buildScheduleCopyText: which lines appear", () => {
 
     test("does not reorder or modify the items passed in", () => {
         const items = [
-            songItem("B", 2, { selectedOption: "Custom", customText: "x" }),
+            songItem("B", 2, { option: "custom", customText: "x" }),
             otherItem("Welcome", "header", 0),
             songItem("A", 1),
         ];
@@ -397,32 +404,26 @@ describe("buildScheduleCopyText: which lines appear", () => {
 
 describe("buildScheduleCopyText: song that is not linked", () => {
     test("Custom with text appends it in parentheses", () => {
-        expect(lineFor({ selectedOption: "Custom", customText: "x" })).toBe(
-            "T (x)"
-        );
+        expect(lineFor({ option: "custom", customText: "x" })).toBe("T (x)");
     });
 
     test("Custom with empty or missing text is just the title", () => {
-        expect(lineFor({ selectedOption: "Custom", customText: "" })).toBe("T");
-        expect(lineFor({ selectedOption: "Custom" })).toBe("T");
+        expect(lineFor({ option: "custom", customText: "" })).toBe("T");
+        expect(lineFor({ option: "custom" })).toBe("T");
     });
 
     test("'Leave blank' is just the title, even with leftover custom text", () => {
-        expect(lineFor({ selectedOption: "Leave blank" })).toBe("T");
-        expect(
-            lineFor({ selectedOption: "Leave blank", customText: "x" })
-        ).toBe("T");
+        expect(lineFor({ option: "blank" })).toBe("T");
+        expect(lineFor({ option: "blank", customText: "x" })).toBe("T");
     });
 
-    test("no selection is just the title, whatever else the item carries", () => {
-        expect(lineFor({})).toBe("T");
-        expect(lineFor({ customText: "x", selectedVersionIndex: 1 })).toBe("T");
+    test("Numbers is just the title, whatever else the item carries", () => {
+        expect(lineFor({ option: "numbers" })).toBe("T");
+        expect(lineFor({ option: "numbers", customText: "x" })).toBe("T");
     });
 
     test("QUIRK: whitespace-only custom text is printed as-is", () => {
-        expect(lineFor({ selectedOption: "Custom", customText: "   " })).toBe(
-            "T (   )"
-        );
+        expect(lineFor({ option: "custom", customText: "   " })).toBe("T (   )");
     });
 
     test("another Planning Center song's link does not count", () => {
@@ -437,9 +438,8 @@ describe("buildScheduleCopyText: song that is not linked", () => {
 describe("buildScheduleCopyText: song linked to a catalog song", () => {
     const both = linked(BOTH);
 
-    test("prints the song's numbers", () => {
-        expect(lineFor({}, both)).toBe("T (R-12/G-34)");
-        expect(lineFor({ selectedVersionIndex: 0 }, both)).toBe("T (R-12/G-34)");
+    test("Numbers prints the song's numbers", () => {
+        expect(lineFor({ option: "numbers" }, both)).toBe("T (R-12/G-34)");
     });
 
     test("a song in one book prints its one number, and a song in no book just the title", () => {
@@ -448,54 +448,33 @@ describe("buildScheduleCopyText: song linked to a catalog song", () => {
         expect(lineFor({}, linked(NEITHER))).toBe("T");
     });
 
-    // The version picker is gone: a Planning Center song is one hymn to one
-    // tune, so it links to one catalog song with one set of numbers.
-    test("a version index changes nothing, in range or not", () => {
-        for (const selectedVersionIndex of [1, 2, 3, 4]) {
-            expect(lineFor({ selectedVersionIndex }, both)).toBe("T (R-12/G-34)");
-        }
-    });
-
     test("Custom with text replaces the numbers", () => {
-        expect(
-            lineFor(
-                {
-                    selectedOption: "Custom",
-                    customText: "x",
-                    selectedVersionIndex: 2,
-                },
-                both
-            )
-        ).toBe("T (x)");
+        expect(lineFor({ option: "custom", customText: "x" }, both)).toBe("T (x)");
     });
 
     test("Custom with empty or missing text is just the title, not the numbers", () => {
-        expect(
-            lineFor({ selectedOption: "Custom", customText: "" }, both)
-        ).toBe("T");
-        expect(lineFor({ selectedOption: "Custom" }, both)).toBe("T");
+        expect(lineFor({ option: "custom", customText: "" }, both)).toBe("T");
+        expect(lineFor({ option: "custom" }, both)).toBe("T");
     });
 
     test("QUIRK: whitespace-only custom text is printed as-is", () => {
-        expect(
-            lineFor({ selectedOption: "Custom", customText: "   " }, both)
-        ).toBe("T (   )");
+        expect(lineFor({ option: "custom", customText: "   " }, both)).toBe(
+            "T (   )"
+        );
     });
 
-    test("QUIRK: 'Leave blank' still prints the numbers", () => {
-        expect(lineFor({ selectedOption: "Leave blank" }, both)).toBe(
-            "T (R-12/G-34)"
-        );
-        expect(
-            lineFor({ selectedOption: "Leave blank", selectedVersionIndex: 1 }, both)
-        ).toBe("T (R-12/G-34)");
-        expect(lineFor({ selectedOption: "Leave blank" }, linked(NEITHER))).toBe(
-            "T"
-        );
+    // It used to print the numbers: the tab offered Leave blank only to songs
+    // that had none.
+    test("'Leave blank' is just the title", () => {
+        expect(lineFor({ option: "blank" }, both)).toBe("T");
+        expect(lineFor({ option: "blank", customText: "x" }, both)).toBe("T");
+        expect(lineFor({ option: "blank" }, linked(NEITHER))).toBe("T");
     });
 
     test("custom text is ignored unless the option is Custom", () => {
-        expect(lineFor({ customText: "x" }, both)).toBe("T (R-12/G-34)");
+        expect(lineFor({ option: "numbers", customText: "x" }, both)).toBe(
+            "T (R-12/G-34)"
+        );
     });
 
     test("the Doxology prints its front cover as G-0", () => {
@@ -549,12 +528,12 @@ describe("buildScheduleCopyText: finding a song by its link", () => {
             songItem("Beta", 2, { songId: "2" }),
             songItem("Alpha", 1, {
                 songId: "1",
-                selectedOption: "Custom",
+                option: "custom",
                 customText: "mine",
             }),
             songItem("Gamma", 3, {
                 songId: null,
-                selectedOption: "Custom",
+                option: "custom",
                 customText: "free",
             }),
         ];

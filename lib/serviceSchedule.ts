@@ -93,13 +93,17 @@ export function formatScheduleNumbers(entries: readonly ScheduleEntry[]): string
  * "Sunday AM/PM <date>" header followed by one line per song item, in
  * sequence order.
  *
- * A song item whose Planning Center song is linked to a catalog song prints
- * that song's numbers (see `formatScheduleNumbers`) unless Custom is chosen;
- * the item's title only names the line. serviceSchedule.test.ts pins its
- * behavior, quirks included. The header date is the plan's calendar date,
- * formatted from its `YYYY-MM-DD` text (see `formatShortDate`), so it reads
- * the same in every time zone. With no `planDate` the header has no date
- * ("Sunday AM").
+ * Each line is the item's title, followed by what its option adds:
+ * "numbers" adds the numbers of the catalog song its Planning Center song is
+ * linked to (see `formatScheduleNumbers`), "custom" adds the custom text, and
+ * "blank" adds nothing; so does "numbers" without numbers, or "custom"
+ * without text. The title only names the line: the link, not the title,
+ * finds the numbers. serviceSchedule.test.ts pins its behavior, quirks
+ * included.
+ *
+ * The header date is the plan's calendar date, formatted from its
+ * `YYYY-MM-DD` text (see `formatShortDate`), so it reads the same in every
+ * time zone. With no `planDate` the header has no date ("Sunday AM").
  */
 export function buildScheduleCopyText({
     items,
@@ -124,27 +128,15 @@ export function buildScheduleCopyText({
         .filter((item) => item.itemType === "song")
         .sort((a, b) => a.sequence - b.sequence)
         .map((item) => {
-            const match = catalogMatchFor(catalog, item.songId);
-            if (!match) {
-                if (item.selectedOption === "Custom" && item.customText) {
-                    return `${item.title} (${item.customText})`;
-                }
-                return item.title;
-            }
-
-            if (item.selectedOption === "Custom") {
-                if (
-                    item.customText === undefined ||
-                    item.customText === ""
-                ) {
-                    return item.title;
-                }
+            if (item.option === "custom" && item.customText) {
                 return `${item.title} (${item.customText})`;
             }
-
-            const numbers = formatScheduleNumbers(match.entries);
-            if (numbers.length > 0) {
-                return `${item.title} (${numbers})`;
+            if (item.option === "numbers") {
+                const match = catalogMatchFor(catalog, item.songId);
+                const numbers = match ? formatScheduleNumbers(match.entries) : "";
+                if (numbers.length > 0) {
+                    return `${item.title} (${numbers})`;
+                }
             }
             return item.title;
         })

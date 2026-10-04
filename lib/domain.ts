@@ -78,14 +78,16 @@ export interface PlanItem {
 export type PlanItemWithSong = PlanItem & { song: Song | null };
 
 /**
- * The choices made for one song on the Schedule tab. This is UI state, not
- * PCO data, so it is kept apart from PlanItem and combined with it only where
- * a view needs both (`PlanItem & ScheduleSelection`).
+ * The choice made for one song on the Schedule tab: print its numbers from
+ * its catalog link ("numbers"), leave it blank ("blank": just its title), or
+ * print custom text ("custom"). This is UI state, not PCO data, so it is kept
+ * apart from PlanItem and combined with it only where a view needs both
+ * (`PlanItem & ScheduleSelection`).
  */
 export interface ScheduleSelection {
-    selectedOption?: "Leave blank" | "Custom";
+    option: "numbers" | "blank" | "custom";
+    /** What "custom" prints. Kept while Custom is chosen; another choice drops it. */
     customText?: string;
-    selectedVersionIndex?: number;
 }
 
 // ---------------------------------------------------------------------------

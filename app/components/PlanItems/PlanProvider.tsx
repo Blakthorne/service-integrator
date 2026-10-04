@@ -34,9 +34,13 @@ export interface PlanContextValue {
      * by Planning Center song id.
      */
     catalog: Record<string, CatalogMatch>;
-    /** `items` with the Schedule tab's selections merged in (songs default to version 0). */
+    /**
+     * `items` with the Schedule tab's selections merged in: a song with
+     * numbers starts on Numbers, every other item on Leave blank (see
+     * `mergeScheduleSelections`).
+     */
     scheduleItems: (PlanItemWithSong & ScheduleSelection)[];
-    /** Pick a song's hymn version, "Leave blank" or "Custom". Stable across renders. */
+    /** Choose a song's option: Numbers, Leave blank or Custom. Stable across renders. */
     chooseOption: ChooseOption;
     /** Save a song's custom text. Stable across renders. */
     setCustomText: SetCustomText;
@@ -65,14 +69,15 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
     const { plan, serviceType, items, catalog } = detail;
     const [selections, dispatch] = useReducer(scheduleSelectionsReducer, {});
 
+    // The defaults follow the catalog links, so a song linked from the tab
+    // turns to its numbers when the layout re-renders with the new `catalog`.
     const scheduleItems = useMemo(
-        () => mergeScheduleSelections(items, selections),
-        [items, selections]
+        () => mergeScheduleSelections(items, selections, catalog),
+        [items, selections, catalog]
     );
 
     const chooseOption = useCallback<ChooseOption>(
-        (itemId, option, versionIndex) =>
-            dispatch({ type: "chooseOption", itemId, option, versionIndex }),
+        (itemId, option) => dispatch({ type: "chooseOption", itemId, option }),
         []
     );
 
