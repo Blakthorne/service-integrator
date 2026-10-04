@@ -227,6 +227,7 @@ export function planEmailOutcomeView(result: SendPlanEmailResult): PlanEmailOutc
         case "no-recipients":
             return outcome("error", result.message, { settingsLink: true });
         case "unavailable":
+        case "busy":
         case "failed":
             return outcome("error", result.message);
     }

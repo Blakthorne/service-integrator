@@ -30,7 +30,13 @@ vi.mock("@/lib/db", async (importOriginal) => ({
     getDb,
 }));
 
-import { NO_RECIPIENTS_MESSAGE, getEmailStatus, previewPlanEmail, sendPlanEmail } from "./email";
+import {
+    NO_RECIPIENTS_MESSAGE,
+    SEND_IN_PROGRESS_MESSAGE,
+    getEmailStatus,
+    previewPlanEmail,
+    sendPlanEmail,
+} from "./email";
 
 const MORNING = "1405391";
 const PLAN = "81234567";
@@ -101,6 +107,8 @@ let db: DatabaseSync;
 
 beforeEach(() => {
     stubPcoCredentials();
+    // A fresh registry of sends in progress per test (undone by unstubAllGlobals).
+    vi.stubGlobal(Symbol.for("service-integrator.planEmailSends.v1"), new Map());
     vi.stubEnv("SMTP_URL", SMTP_URL);
     vi.stubEnv("EMAIL_FROM", "Service Integrator <office@example.org>");
     db = openTestDb();
@@ -345,6 +353,118 @@ describe("sendPlanEmail", () => {
         });
         expect(fetchMock).not.toHaveBeenCalled();
         expect(sendMail).not.toHaveBeenCalled();
+    });
+});
+
+describe("sendPlanEmail, one send per plan at a time", () => {
+    /** A promise the test opens when it likes: a send that waits on it is held mid-flight. */
+    function gate(): { opened: Promise<void>; open: () => void } {
+        let open = () => {};
+        const opened = new Promise<void>((resolve) => {
+            open = resolve;
+        });
+        return { opened, open };
+    }
+
+    /** A stand-in transport whose sends wait until `opened`. */
+    function heldTransport(opened: Promise<void>) {
+        const sendMail = vi.fn(async (mail: OutgoingMail) => {
+            await opened;
+            return { messageId: "<1@example.org>", accepted: [...mail.to], rejected: [] };
+        });
+        const transport: EmailTransport = { sendMail, close: vi.fn() };
+        return { transport, sendMail };
+    }
+
+    test("refuses a second send of a plan while its first runs, and sends the email once", async () => {
+        stubPlan();
+        const { opened, open } = gate();
+        const { transport, sendMail } = heldTransport(opened);
+
+        const first = sendPlanEmail(MORNING, PLAN, { transport });
+        const second = await sendPlanEmail(MORNING, PLAN, { transport });
+
+        expect(second).toEqual({ ok: false, kind: "busy", message: SEND_IN_PROGRESS_MESSAGE });
+        open();
+        await expect(first).resolves.toMatchObject({ ok: true });
+        expect(sendMail).toHaveBeenCalledTimes(1);
+        expect(recentWrites(db)).toHaveLength(1);
+        // Once it is done, the plan's email can be sent again.
+        await expect(sendPlanEmail(MORNING, PLAN, { transport })).resolves.toMatchObject({
+            ok: true,
+        });
+        expect(sendMail).toHaveBeenCalledTimes(2);
+    });
+
+    test("keeps the sends in progress on globalThis, so another copy of the module sees them", async () => {
+        stubPlan();
+        const { opened, open } = gate();
+        const { transport, sendMail } = heldTransport(opened);
+        vi.resetModules();
+        const copy = await import("./email");
+
+        const first = sendPlanEmail(MORNING, PLAN, { transport });
+
+        await expect(copy.sendPlanEmail(MORNING, PLAN, { transport })).resolves.toMatchObject({
+            ok: false,
+            kind: "busy",
+        });
+        open();
+        await first;
+        expect(sendMail).toHaveBeenCalledTimes(1);
+    });
+
+    test("lets the emails of different plans go together", async () => {
+        const other = "81234599";
+        stubFetchRoutes({
+            [urls.plan]: { data: planResource({ id: PLAN }, { dates: "October 4, 2026" }) },
+            [`${PCO_BASE}/service_types/${MORNING}/plans/${other}`]: {
+                data: planResource({ id: other }, { dates: "October 11, 2026", sort_date: "2026-10-11T08:00:00Z" }),
+            },
+            [urls.serviceType]: { data: serviceTypeResource({ name: "Sunday Morning" }, MORNING) },
+            [urls.items]: listPage([]),
+            [`${PCO_BASE}/service_types/${MORNING}/plans/${other}/items?include=song,item_notes&per_page=100`]:
+                listPage([]),
+            [urls.categories]: listPage([]),
+        });
+        const { opened, open } = gate();
+        const held = heldTransport(opened);
+
+        const first = sendPlanEmail(MORNING, PLAN, { transport: held.transport });
+        const { transport } = stubTransport();
+
+        await expect(sendPlanEmail(MORNING, other, { transport })).resolves.toMatchObject({
+            ok: true,
+            subject: "Songs for 10/11/26 · Sunday Morning",
+        });
+        open();
+        await expect(first).resolves.toMatchObject({ ok: true });
+    });
+
+    test("frees the plan when its send fails, or cannot read the plan", async () => {
+        stubPlan();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const failing = stubTransport(undefined, new Error("Connection timeout"));
+        await expect(sendPlanEmail(MORNING, PLAN, failing)).resolves.toMatchObject({
+            ok: false,
+            kind: "failed",
+        });
+
+        stubFetchRoutes({
+            [urls.plan]: () => json({ errors: [] }, { status: 500 }),
+            [urls.serviceType]: { data: serviceTypeResource({ name: "Sunday Morning" }, MORNING) },
+            [urls.items]: listPage([]),
+            [urls.categories]: listPage([]),
+        });
+        await expect(sendPlanEmail(MORNING, PLAN, stubTransport())).rejects.toMatchObject({
+            name: "PcoError",
+            status: 500,
+        });
+
+        stubPlan();
+        await expect(sendPlanEmail(MORNING, PLAN, stubTransport())).resolves.toMatchObject({
+            ok: true,
+        });
     });
 });
 

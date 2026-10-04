@@ -10,7 +10,7 @@ import {
     type EmailVariable,
     type SendEmailOptions,
 } from "@/lib/email";
-import { assertPcoId } from "@/lib/pco";
+import { assertPcoId, type PcoId } from "@/lib/pco";
 import { buildPlanEmail } from "@/lib/planEmail";
 import { getPlanDetail } from "./plans";
 import { getSettings } from "./settings";
@@ -98,6 +98,8 @@ export type SendPlanEmailResult =
     | { ok: false; kind: "not-configured"; missing: EmailVariable[]; message: string }
     /** Nothing was sent: the settings name no recipients, or could not be read. */
     | { ok: false; kind: "no-recipients" | "unavailable"; message: string }
+    /** Nothing was sent: this plan's email is being sent already (another tab, or a repeated request). */
+    | { ok: false; kind: "busy"; message: string }
     /** The send failed; the write log records it. */
     | { ok: false; kind: "failed"; message: string };
 
@@ -109,6 +111,25 @@ export function notConfiguredMessage(missing: readonly EmailVariable[]): string 
 /** What `sendPlanEmail` says when no one would get the email. */
 export const NO_RECIPIENTS_MESSAGE =
     "No one would get this email: add its recipients in Settings first.";
+
+/** What `sendPlanEmail` says to a send of a plan whose email is being sent already. */
+export const SEND_IN_PROGRESS_MESSAGE =
+    "This plan's email is being sent already, so it was not sent again. Look at the recent writes in Settings to see how that send went.";
+
+/**
+ * The plan emails being sent, by plan id. They live on globalThis, not in a
+ * module constant, because a server action's copy of this module is not the
+ * page's (convention 15), and two tabs sending at once must still see each
+ * other. Bump the version if what is stored here changes.
+ */
+const SENDS_GLOBAL = Symbol.for("service-integrator.planEmailSends.v1");
+
+function sendsInProgress(): Map<string, Promise<SendPlanEmailResult>> {
+    const scope = globalThis as unknown as {
+        [SENDS_GLOBAL]?: Map<string, Promise<SendPlanEmailResult>>;
+    };
+    return (scope[SENDS_GLOBAL] ??= new Map());
+}
 
 /** What the write log records of a failed send. */
 function failureOf(error: unknown): Extract<EmailWriteResult, { error: string }> {
@@ -147,6 +168,10 @@ function logWrite(entry: NewWriteLogEntry): void {
  * A failed send comes back as a value, with a message fit to show that
  * never holds `SMTP_URL`. Invalid ids, and a plan or service type that
  * cannot be read, throw before anything is sent.
+ *
+ * One send per plan runs at a time. A call for a plan whose email is still
+ * being sent is refused ("busy"), and sends nothing: two tabs, or a request
+ * sent twice, would otherwise send the email twice.
  */
 export async function sendPlanEmail(
     serviceTypeId: string,
@@ -155,6 +180,29 @@ export async function sendPlanEmail(
 ): Promise<SendPlanEmailResult> {
     const st = assertPcoId(serviceTypeId);
     const plan = assertPcoId(planId);
+    const running = sendsInProgress();
+    if (running.has(plan)) {
+        return { ok: false, kind: "busy", message: SEND_IN_PROGRESS_MESSAGE };
+    }
+    // Set before the first await, so a call that comes in while this one
+    // waits on Planning Center or the mail server finds it.
+    const send = runSend(st, plan, options);
+    running.set(plan, send);
+    try {
+        return await send;
+    } finally {
+        if (running.get(plan) === send) {
+            running.delete(plan);
+        }
+    }
+}
+
+/** The work of `sendPlanEmail`, for one send of a plan at a time. */
+async function runSend(
+    st: PcoId,
+    plan: PcoId,
+    options: SendEmailOptions
+): Promise<SendPlanEmailResult> {
     const status = emailStatus();
     if (!status.configured) {
         return {

@@ -234,6 +234,16 @@ describe("planEmailOutcomeView", () => {
             });
         }
     );
+
+    test("gives the message of a send refused because the plan's email is being sent already", () => {
+        const message = "This plan's email is being sent already, so it was not sent again.";
+        expect(planEmailOutcomeView({ ok: false, kind: "busy", message })).toMatchObject({
+            tone: "error",
+            summary: message,
+            delivered: [],
+            settingsLink: false,
+        });
+    });
 });
 
 describe("describeEmailTransport", () => {
