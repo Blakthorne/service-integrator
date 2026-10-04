@@ -6,6 +6,7 @@ import {
     type CopyrightItem,
     type CopyrightSong,
 } from "./copyright";
+import { parseCredits } from "./credits";
 import { DEFAULT_SETTINGS } from "./settings";
 
 // Characterization tests: they pin what the code did when it was moved out of
@@ -396,5 +397,90 @@ describe("the CCLI license number comes from the settings", () => {
         expect(buildCopyrightCopyAllText([songItem(amazing, 1)], DEFAULT_SETTINGS)).toBe(
             buildCopyrightCopyAllText([songItem(amazing, 1)])
         );
+    });
+});
+
+describe("the credit line comes from the song's credits and the settings", () => {
+    const ourHelp = song({
+        title: "O God, Our Help",
+        author: "Words: Isaac Watts; Music: William Croft",
+        copyright: "Public Domain",
+    });
+
+    test("an author in the labelled convention prints its credits", () => {
+        expect(formatCopyrightText(ourHelp)).toBe(
+            '"O God, Our Help" Words by Isaac Watts. Music by William Croft.\n' +
+                "Public Domain.\n" +
+                FOOTER
+        );
+        expect(formatCopyrightText(song({ author: "Words & Music: John Newton" })).split("\n")[0]).toBe(
+            '"T" Words and Music by John Newton.'
+        );
+        expect(
+            formatCopyrightText(song({ author: "Words: A, B; Music: C; Arr.: D" })).split("\n")[0]
+        ).toBe('"T" Words by A and B. Music by C. Arr. by D.');
+    });
+
+    test("an author with labels that do not parse prints as it always did", () => {
+        expect(formatCopyrightText(song({ author: "Composer: Lowell Mason" })).split("\n")[0]).toBe(
+            '"T" Words and Music by Composer: Lowell Mason.'
+        );
+    });
+
+    test("parsed credits, when given, are printed instead of the author", () => {
+        const credits = parseCredits("Words: Isaac Watts", DEFAULT_SETTINGS.creditRoles);
+        expect(formatCopyrightText({ ...song({ author: "Someone Else" }), credits }).split("\n")[0]).toBe(
+            '"T" Words by Isaac Watts.'
+        );
+    });
+
+    test("the settings' phrases print for every author, legacy ones included", () => {
+        const settings = {
+            ...DEFAULT_SETTINGS,
+            creditPhrases: { Words: "Text by", Music: "Tune by", "Words & Music": "Text and tune by" },
+        };
+        expect(formatCopyrightText(ourHelp, settings).split("\n")[0]).toBe(
+            '"O God, Our Help" Text by Isaac Watts. Tune by William Croft.'
+        );
+        expect(formatCopyrightText(song({ author: "A and B" }), settings).split("\n")[0]).toBe(
+            '"T" Text by A. Tune by B.'
+        );
+        expect(formatCopyrightText(song({ author: "" }), settings).split("\n")[0]).toBe(
+            '"T" Text and tune by Unknown.'
+        );
+    });
+
+    test("the settings' roles are the labels the author is read with", () => {
+        const settings = { ...DEFAULT_SETTINGS, creditRoles: ["Text", "Tune"] };
+        expect(formatCopyrightText(song({ author: "Text: A; Tune: B" }), settings).split("\n")[0]).toBe(
+            '"T" Text by A. Tune by B.'
+        );
+        expect(formatCopyrightText(song({ author: "Words: A" }), settings).split("\n")[0]).toBe(
+            '"T" Text and Tune by Words: A.'
+        );
+    });
+
+    test("settings without credit roles or phrases use the defaults", () => {
+        expect(formatCopyrightText(ourHelp, { ccliLicenseNumber: "1564484" })).toBe(
+            formatCopyrightText(ourHelp, DEFAULT_SETTINGS)
+        );
+    });
+
+    test("only the credit line changes: the copyright line and footer stay as they were", () => {
+        const settings = { ...DEFAULT_SETTINGS, creditPhrases: { Words: "Text by" } };
+        const plain = formatCopyrightText(ourHelp).split("\n");
+        const withSettings = formatCopyrightText(ourHelp, settings).split("\n");
+        expect(withSettings.slice(1)).toEqual(plain.slice(1));
+    });
+
+    test("Copy All prints every block with the settings, and each song's parsed credits when it carries them", () => {
+        const settings = { ...DEFAULT_SETTINGS, creditPhrases: { ...DEFAULT_SETTINGS.creditPhrases, Words: "Text by" } };
+        const parsed = { ...song({ title: "Parsed", author: "ignored" }), credits: parseCredits("Music: X", DEFAULT_SETTINGS.creditRoles) };
+        const text = buildCopyrightCopyAllText([songItem(ourHelp, 1), songItem(parsed, 2)], settings);
+        expect(text.split("\n\n").map((block) => block.split("\n")[0])).toEqual([
+            '"O God, Our Help" Text by Isaac Watts. Music by William Croft.',
+            '"Parsed" Music by X.',
+        ]);
+        expect(getItemCopyrightInfo(songItem(parsed, 2))?.credits).toEqual(parsed.credits);
     });
 });

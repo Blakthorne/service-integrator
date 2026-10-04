@@ -611,8 +611,11 @@ export function scheduleHeaderLabel(
     return defaultScheduleHeaderLabel(serviceType.name);
 }
 
-/** What the copyright text reads of the settings. */
-export type CopyrightSettings = Pick<AppSettings, "ccliLicenseNumber">;
+/**
+ * What the copyright text reads of the settings: the CCLI license number,
+ * and the credit roles and phrases, which are the defaults when left out.
+ */
+export type CopyrightSettings = Pick<AppSettings, "ccliLicenseNumber"> & Partial<CreditSettings>;
 
 /** What the hymnal notes read of the settings. */
 export type HymnNoteSettings = Pick<AppSettings, "numberSeparator" | "hymnNoteIncludesTune">;
