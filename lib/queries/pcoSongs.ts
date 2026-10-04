@@ -6,11 +6,13 @@ import { findCatalogSong, songLabelOf } from "@/lib/db/catalog";
 import { deriveSongCredits } from "@/lib/db/credits";
 import { errorMessage } from "@/lib/db/errors";
 import { linkSong, type LinkResult } from "@/lib/db/links";
-import { upsertPcoSongs } from "@/lib/db/pcoSongs";
+import { findPcoSong, upsertPcoSongs } from "@/lib/db/pcoSongs";
+import { listSongTagGroups, replaceSongTags } from "@/lib/db/tags";
 import { recordWrite, type NewWriteLogEntry } from "@/lib/db/writeLog";
 import type {
     Credit,
     PcoLibrarySong,
+    PcoTag,
     Plan,
     PlanItem,
     PlanSummary,
@@ -20,9 +22,11 @@ import type {
 import {
     PcoError,
     PcoValidationError,
+    assignSongTags,
     createSong,
     createSongItem,
     fetchSong,
+    fetchSongTags,
     getPlan,
     getServiceTypes,
     getSongArrangements,
@@ -30,13 +34,15 @@ import {
     parsePcoId,
     updateSong,
     type PcoSongChanges,
+    type SongTag,
 } from "@/lib/pco";
 import { getSettings } from "./settings";
 
 /**
  * The app's writes to Planning Center songs and plans: a song's credits
- * (the credit editor), a catalog song created in Planning Center, and a
- * song added to an upcoming plan, with the upcoming plans to choose from.
+ * (the credit editor), a catalog song created in Planning Center, a song
+ * added to an upcoming plan (with the upcoming plans to choose from), and a
+ * song's tags (the tag editor).
  *
  * Each write reads what it changes afresh from Planning Center first
  * (refresh-before-write), writes, then brings the mirror (`pco_songs`) and
@@ -790,4 +796,115 @@ export async function addSongToPlan(
         console.error(`Added song ${songId} to plan ${planIdChecked}, but could not mirror it:`, error);
     }
     return { ok: true, item, plan, arrangement };
+}
+
+// ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+
+/** What `saveSongTags` did. */
+export type SaveSongTagsResult =
+    | {
+          ok: true;
+          /** False when the song had exactly these tags already, so nothing was sent. */
+          changed: boolean;
+          /** The song's whole set of tags now, as sent (or as it was, when unchanged). */
+          tagIds: string[];
+          /**
+           * Tags the song has in Planning Center that the mirror does not
+           * know yet (made since the last tags sync), so nobody could have
+           * chosen to drop them: they were kept.
+           */
+          kept: SongTag[];
+      }
+    | PcoWriteRefusal;
+
+/** The tags as the write log shows them: id and name. */
+function tagSummaries(tags: readonly Pick<PcoTag, "id" | "name">[]) {
+    return tags.map(({ id, name }) => ({ id, name }));
+}
+
+/**
+ * Give mirrored Planning Center song `pcoSongId` the song tags `tagIds`
+ * from the tag editor: the whole set it should have of the mirror's song
+ * tag groups.
+ *
+ * Every id must be a tag of one of the mirror's song tag groups (never an
+ * arrangement group's, which Planning Center would silently ignore), and a
+ * group that takes one tag may have only one chosen. The song's tags are
+ * then read afresh, and, since `assign_tags` replaces all of them, the full
+ * new set is sent: the ids chosen, plus any tag the song has that the
+ * mirror does not know yet, kept as it is (`kept`). Nothing is sent when
+ * the song has exactly that set already. The write is logged (`tags`, with
+ * the tags' names before and after), and the mirror's tags for the song
+ * replaced.
+ *
+ * Refused when the song id is not one, the mirror or Planning Center has
+ * no such song, a tag is not a mirrored song tag or a group has too many,
+ * or Planning Center refuses the write. Throws when Planning Center or the
+ * database fails.
+ */
+export async function saveSongTags(
+    pcoSongId: string,
+    tagIds: readonly string[],
+    now: Date = new Date()
+): Promise<SaveSongTagsResult> {
+    const id = parsePcoId(pcoSongId);
+    if (id === null) {
+        return refusal("not-found", NO_SUCH_PCO_SONG);
+    }
+    const db = getDb();
+    const mirrored = findPcoSong(db, id);
+    if (mirrored === null) {
+        return refusal("not-found", NO_SUCH_PCO_SONG);
+    }
+    const groups = listSongTagGroups(db);
+    const known = new Map(groups.flatMap((group) => group.tags.map((tag) => [tag.id, tag] as const)));
+    const wanted = new Set(tagIds);
+    for (const tagId of wanted) {
+        if (!known.has(tagId)) {
+            return refusal(
+                "invalid",
+                "One of the tags chosen is not a song tag in Planning Center any more. Sync the tags and choose again."
+            );
+        }
+    }
+    for (const group of groups) {
+        if (!group.allowMultiple && group.tags.filter((tag) => wanted.has(tag.id)).length > 1) {
+            return refusal("invalid", `Choose one tag at most of "${group.name}".`);
+        }
+    }
+    // In the mirror's order: by group, then by name.
+    const chosen = [...known.values()].filter((tag) => wanted.has(tag.id));
+
+    const current = await unlessMissing(fetchSongTags(id));
+    if (current === null) {
+        return refusal("not-found", NO_SUCH_PCO_SONG);
+    }
+    const kept = current.filter((tag) => !known.has(tag.id));
+    const next = [...chosen.map((tag) => tag.id), ...kept.map((tag) => tag.id)];
+    const before = new Set(current.map((tag) => tag.id));
+    const changed = next.length !== before.size || next.some((tagId) => !before.has(tagId));
+    if (changed) {
+        const target = `song ${id}`;
+        const payload = {
+            action: "assign",
+            title: mirrored.title,
+            tags: tagSummaries([...chosen, ...kept]),
+            previous: tagSummaries(current),
+        };
+        try {
+            await assignSongTags(id, next);
+        } catch (error) {
+            logWrite(db, { kind: "tags", target, ok: false, payload, result: writeError(error) }, now);
+            const refused = refusedByPco(error, `the tags of "${mirrored.title}"`);
+            if (refused) {
+                return refused;
+            }
+            throw error;
+        }
+        logWrite(db, { kind: "tags", target, ok: true, payload, result: { tagIds: next } }, now);
+    }
+    replaceSongTags(db, id, changed ? next : current.map((tag) => tag.id));
+    return { ok: true, changed, tagIds: changed ? next : current.map((tag) => tag.id), kept };
 }

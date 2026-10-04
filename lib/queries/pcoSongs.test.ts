@@ -2,10 +2,14 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { findSongCredits } from "@/lib/db/credits";
 import { findPcoSong } from "@/lib/db/pcoSongs";
+import { findSongTags } from "@/lib/db/tags";
 import {
     openTestDb,
     seedHymn,
     seedPcoSong,
+    seedPcoSongTag,
+    seedPcoTag,
+    seedPcoTagGroup,
     seedSetting,
     seedSong,
     seedTune,
@@ -25,6 +29,7 @@ import {
     stubFetchRoutes,
     stubPcoCredentials,
     stubPcoPacer,
+    tagResource,
 } from "@/lib/pco/testing";
 
 const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
@@ -41,6 +46,7 @@ import {
     listUpcomingPlans,
     pcoSongTitleFor,
     saveSongCredits,
+    saveSongTags,
     type NewPcoSongForm,
 } from "./pcoSongs";
 
@@ -898,5 +904,190 @@ describe("addSongToPlan", () => {
             `Added song ${SONG} to plan ${PLAN}, but could not mirror it:`,
             expect.any(Error)
         );
+    });
+});
+
+describe("saveSongTags", () => {
+    const tagsUrl = `${PCO_BASE}/songs/${SONG}/tags?per_page=100`;
+    const assignUrl = `${PCO_BASE}/songs/${SONG}/assign_tags`;
+
+    /** The mirror: "Type" (several may be chosen) and "Season" (one), and Amazing Grace tagged Hymn. */
+    function seedTags() {
+        seedPcoSong(db, { id: SONG, title: "Amazing Grace" });
+        const type = seedPcoTagGroup(db, { id: "7", name: "Type" });
+        const season = seedPcoTagGroup(db, { id: "8", name: "Season", allowMultiple: false });
+        const speed = seedPcoTagGroup(db, { id: "9", name: "Speed", tagsFor: "arrangement" });
+        seedPcoTag(db, { id: "71", groupId: type, name: "Hymn" });
+        seedPcoTag(db, { id: "72", groupId: type, name: "Chorus" });
+        seedPcoTag(db, { id: "81", groupId: season, name: "Advent" });
+        seedPcoTag(db, { id: "82", groupId: season, name: "Lent" });
+        seedPcoTag(db, { id: "91", groupId: speed, name: "Fast" });
+        seedPcoSongTag(db, SONG, "71");
+    }
+
+    test("sends the whole new set, logs it with the tags' names, and replaces the mirror's", async () => {
+        seedTags();
+        const fetchMock = stubFetchRoutes({
+            [tagsUrl]: listPage([tagResource("71", { name: "Hymn" }, "7")]),
+            [`POST ${assignUrl}`]: () => new Response(null, { status: 204 }),
+        });
+
+        // In the mirror's order: groups by name (Season, Type), then tags by name.
+        await expect(saveSongTags(SONG, ["71", "72", "81"], T0)).resolves.toEqual({
+            ok: true,
+            changed: true,
+            tagIds: ["81", "72", "71"],
+            kept: [],
+        });
+        expect(writesSent(fetchMock)).toEqual([
+            {
+                method: "POST",
+                url: assignUrl,
+                body: {
+                    data: {
+                        type: "TagAssignment",
+                        attributes: {},
+                        relationships: {
+                            tags: {
+                                data: [
+                                    { type: "Tag", id: "81" },
+                                    { type: "Tag", id: "72" },
+                                    { type: "Tag", id: "71" },
+                                ],
+                            },
+                        },
+                    },
+                },
+            },
+        ]);
+        expect(writes()).toEqual([
+            {
+                kind: "tags",
+                target: `song ${SONG}`,
+                ok: true,
+                payload: {
+                    action: "assign",
+                    title: "Amazing Grace",
+                    tags: [
+                        { id: "81", name: "Advent" },
+                        { id: "72", name: "Chorus" },
+                        { id: "71", name: "Hymn" },
+                    ],
+                    previous: [{ id: "71", name: "Hymn" }],
+                },
+                result: { tagIds: ["81", "72", "71"] },
+            },
+        ]);
+        expect(findSongTags(db, SONG).map(({ id }) => id)).toEqual(["81", "72", "71"]);
+    });
+
+    test("keeps a tag the song has that the mirror does not know yet", async () => {
+        seedTags();
+        const fetchMock = stubFetchRoutes({
+            [tagsUrl]: listPage([tagResource("71", { name: "Hymn" }, "7"), tagResource("73", { name: "New" }, "7")]),
+            [`POST ${assignUrl}`]: () => new Response(null, { status: 204 }),
+        });
+
+        await expect(saveSongTags(SONG, ["72"], T0)).resolves.toEqual({
+            ok: true,
+            changed: true,
+            tagIds: ["72", "73"],
+            kept: [{ id: "73", name: "New", groupId: "7" }],
+        });
+        expect(writesSent(fetchMock)[0].body).toMatchObject({
+            data: { relationships: { tags: { data: [{ type: "Tag", id: "72" }, { type: "Tag", id: "73" }] } } },
+        });
+        // The mirror cannot hold a tag it does not have; the next tags sync brings it.
+        expect(findSongTags(db, SONG).map(({ id }) => id)).toEqual(["72"]);
+    });
+
+    test("an empty set clears the song's tags", async () => {
+        seedTags();
+        const fetchMock = stubFetchRoutes({
+            [tagsUrl]: listPage([tagResource("71", { name: "Hymn" }, "7")]),
+            [`POST ${assignUrl}`]: () => new Response(null, { status: 204 }),
+        });
+        await expect(saveSongTags(SONG, [])).resolves.toMatchObject({ ok: true, changed: true, tagIds: [] });
+        expect(writesSent(fetchMock)[0].body).toMatchObject({
+            data: { relationships: { tags: { data: [] } } },
+        });
+        expect(findSongTags(db, SONG)).toEqual([]);
+    });
+
+    test("sends nothing when the song has exactly that set already, and refreshes the mirror", async () => {
+        seedTags();
+        const fetchMock = stubFetchRoutes({
+            [tagsUrl]: listPage([tagResource("72", { name: "Chorus" }, "7"), tagResource("71", { name: "Hymn" }, "7")]),
+        });
+        await expect(saveSongTags(SONG, ["71", "72"])).resolves.toEqual({
+            ok: true,
+            changed: false,
+            tagIds: ["72", "71"],
+            kept: [],
+        });
+        expect(writesSent(fetchMock)).toEqual([]);
+        expect(writes()).toEqual([]);
+        expect(findSongTags(db, SONG).map(({ id }) => id)).toEqual(["72", "71"]);
+    });
+
+    test("refuses, sending nothing, a tag that is not a mirrored song tag, or two of a group that takes one", async () => {
+        seedTags();
+        const fetchMock = stubFetchRoutes({});
+        const unknown = {
+            ok: false,
+            reason: "invalid",
+            message:
+                "One of the tags chosen is not a song tag in Planning Center any more. Sync the tags and choose again.",
+        };
+        await expect(saveSongTags(SONG, ["71", "99"])).resolves.toEqual(unknown);
+        await expect(saveSongTags(SONG, ["91"])).resolves.toEqual(unknown);
+        await expect(saveSongTags(SONG, ["x"])).resolves.toEqual(unknown);
+        await expect(saveSongTags(SONG, ["81", "82"])).resolves.toEqual({
+            ok: false,
+            reason: "invalid",
+            message: 'Choose one tag at most of "Season".',
+        });
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("refuses a song that is not one, that the mirror lacks, or that Planning Center does not have", async () => {
+        seedTags();
+        let fetchMock = stubFetchRoutes({});
+        await expect(saveSongTags("x", ["71"])).resolves.toMatchObject({ ok: false, reason: "not-found" });
+        await expect(saveSongTags("2002", ["71"])).resolves.toEqual({
+            ok: false,
+            reason: "not-found",
+            message: "There is no such Planning Center song.",
+        });
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        fetchMock = stubFetchRoutes({ [tagsUrl]: () => json({ errors: [] }, { status: 404 }) });
+        await expect(saveSongTags(SONG, ["71"])).resolves.toMatchObject({ ok: false, reason: "not-found" });
+        expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("gives Planning Center's refusal as a value and logs it; throws on a failure, after logging it", async () => {
+        seedTags();
+        stubFetchRoutes({
+            [tagsUrl]: listPage([]),
+            [`POST ${assignUrl}`]: () => VALIDATION_ERROR("is invalid", "tags"),
+        });
+        await expect(saveSongTags(SONG, ["71"])).resolves.toEqual({
+            ok: false,
+            reason: "refused",
+            message: 'Planning Center refused the tags of "Amazing Grace": tags: is invalid',
+            details: ["tags: is invalid"],
+        });
+        expect(findSongTags(db, SONG).map(({ id }) => id)).toEqual(["71"]);
+
+        stubFetchRoutes({
+            [tagsUrl]: listPage([]),
+            [`POST ${assignUrl}`]: () => json({ errors: [] }, { status: 500 }),
+        });
+        await expect(saveSongTags(SONG, ["71"])).rejects.toMatchObject({ status: 500 });
+        expect(writes().map(({ kind, ok }) => [kind, ok])).toEqual([
+            ["tags", false],
+            ["tags", false],
+        ]);
     });
 });
