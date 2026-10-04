@@ -1177,3 +1177,144 @@ describe("what every response tells the pacer", () => {
         expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 });
+
+describe("429s on paced requests", () => {
+    const songBody = jsonApi("Song", { title: "Amazing Grace" });
+
+    /** A 429 with these headers, as PCO sends it. */
+    const throttled = (headers: Record<string, string> = {}) => {
+        const detail = "Rate limit exceeded: 118 of 100 requests per 20 seconds";
+        return json({ errors: [{ code: "429", detail }] }, { status: 429, headers });
+    };
+
+    test("waits out a Retry-After of any length up to 60 s, then retries the same write", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0
+                ? throttled({ "Retry-After": "60" })
+                : json({ data: { id: "9" } }, { status: 201 })
+        );
+
+        const result = pcoMutate("POST", "/songs", songBody, { paced: true });
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(result).resolves.toEqual({ data: { id: "9" } });
+        expect(calledRequests(fetchMock)).toEqual([
+            { method: "POST", url: `${BASE}/songs`, body: songBody },
+            { method: "POST", url: `${BASE}/songs`, body: songBody },
+        ]);
+    });
+
+    test("retries up to 3 times, then throws its PcoError 429", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch(() => throttled({ "Retry-After": "1" }));
+
+        const result = pcoFetch("/songs/9", "songs", { paced: true });
+        const settled = expect(result).rejects.toMatchObject({ name: "PcoError", status: 429 });
+        await vi.advanceTimersByTimeAsync(3_000);
+        await settled;
+        expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    test("past the 60 s cap, throws its PcoError 429 at once and holds paced requests 60 s", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0 ? throttled({ "Retry-After": "61" }) : json({ data: {} })
+        );
+
+        await expect(pcoFetch("/songs/9", "songs", { paced: true })).rejects.toMatchObject({
+            name: "PcoError",
+            status: 429,
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const next = pcoFetch("/songs/10", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(next).resolves.toEqual({ data: {} });
+    });
+
+    test("holds every paced request, not just the one that hit it, while page loads go on", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        let first = true;
+        const fetchMock = stubFetchRoutes({
+            [`${BASE}/songs/1`]: () => {
+                const answer = first ? throttled({ "Retry-After": "10" }) : json({ data: { id: "1" } });
+                first = false;
+                return answer;
+            },
+            [`${BASE}/songs/2`]: { data: { id: "2" } },
+            [`${BASE}/songs/3`]: { data: { id: "3" } },
+        });
+
+        const hit = pcoFetch("/songs/1", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(0);
+        const other = pcoFetch("/songs/2", "songs", { paced: true });
+        await expect(pcoFetch("/songs/3", "songs")).resolves.toEqual({ data: { id: "3" } });
+
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(calledUrls(fetchMock)).toEqual([`${BASE}/songs/1`, `${BASE}/songs/3`]);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(other).resolves.toEqual({ data: { id: "2" } });
+        await expect(hit).resolves.toEqual({ data: { id: "1" } });
+        expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    test("without Retry-After, waits a whole window before retrying", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) => (call === 0 ? throttled() : json({ data: {} })));
+
+        const result = pcoFetch("/songs/9", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(19_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(result).resolves.toEqual({ data: {} });
+    });
+
+    test("trusts Retry-After over the 429's own count, which is past the limit", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0
+                ? throttled({
+                      "Retry-After": "3",
+                      "x-pco-api-request-rate-limit": "100",
+                      "x-pco-api-request-rate-period": "20",
+                      "x-pco-api-request-rate-count": "118",
+                  })
+                : json({ data: {} })
+        );
+
+        const result = pcoFetch("/songs/9", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(3_000);
+        await expect(result).resolves.toEqual({ data: {} });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test("a page load's 429 keeps its single short retry, and holds paced requests too", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0 ? throttled({ "Retry-After": "30" }) : json({ data: {} })
+        );
+
+        // Over 5 s: a page load fails at once, as it always has.
+        await expect(pcoFetch("/songs/9", "songs")).rejects.toMatchObject({ status: 429 });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const paced = pcoFetch("/songs/10", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(paced).resolves.toEqual({ data: {} });
+    });
+});

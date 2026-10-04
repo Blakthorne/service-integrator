@@ -14,6 +14,13 @@ export const DEFAULT_RATE_PERIOD_SECONDS = 20;
  */
 export const PACED_SHARE = 0.8;
 
+/**
+ * The longest a 429 holds paced requests. A paced request that PCO tells to
+ * wait longer fails with its 429 instead, so a sync job never hangs on a long
+ * block.
+ */
+export const MAX_PACED_WAIT_SECONDS = 60;
+
 /** What one PCO response's headers say about the rate limit. */
 export interface RateLimitInfo {
     /** Requests allowed per period: x-pco-api-request-rate-limit. */
@@ -57,6 +64,22 @@ export function readRateLimit(headers: Pick<Headers, "get"> | undefined): RateLi
     };
 }
 
+/**
+ * Retry-After as whole seconds, or undefined when it is missing or anything
+ * else (an HTTP date, a negative number).
+ */
+export function readRetryAfter(headers: Pick<Headers, "get"> | undefined): number | undefined {
+    // Optional chaining: bare test doubles ({ ok, status }) have no headers.
+    const header = headers?.get("Retry-After")?.trim();
+    return header && /^\d+$/.test(header) ? Number(header) : undefined;
+}
+
+/** What the pacer reads from a response; bare test doubles may have neither. */
+export interface ObservedResponse {
+    status?: number;
+    headers?: Pick<Headers, "get">;
+}
+
 /** The limits a pacer works to. */
 export interface PacerLimits {
     /** The advertised limit: requests per period. */
@@ -74,11 +97,13 @@ export interface Pacer {
      */
     acquire(): Promise<void>;
     /**
-     * Learn from the headers of any PCO response, paced or not: adopt its
-     * limit and period, and when its count has reached the budget, hold every
-     * paced caller until the window has rolled over.
+     * Learn from any PCO response, paced or not: adopt its limit and period.
+     * A 429 holds every paced caller until its Retry-After (a whole period
+     * without one, at most MAX_PACED_WAIT_SECONDS); any other response whose
+     * count has reached the budget holds them until the window has rolled
+     * over.
      */
-    observe(headers: Pick<Headers, "get"> | undefined): void;
+    observe(response: ObservedResponse): void;
     /** Hold every paced caller for `ms` from now; a hold is never shortened. */
     pause(ms: number): void;
     limits(): PacerLimits;
@@ -147,11 +172,17 @@ export function createPacer({
             queue = turn.catch(() => {});
             return turn;
         },
-        observe(headers) {
+        observe({ status, headers }) {
             const info = readRateLimit(headers);
             limit = info.limit ?? limit;
             periodMs = info.periodSeconds === undefined ? periodMs : info.periodSeconds * 1000;
-            if (info.count !== undefined && info.count >= budget()) {
+            if (status === 429) {
+                // Retry-After says when the window rolls over, so it wins over
+                // the count, which a 429 always has past the limit.
+                const seconds = readRetryAfter(headers);
+                const waitMs = seconds === undefined ? periodMs : seconds * 1000;
+                pause(Math.min(waitMs, MAX_PACED_WAIT_SECONDS * 1000));
+            } else if (info.count !== undefined && info.count >= budget()) {
                 // PCO does not say when its window started, so only a whole
                 // period from now is sure to be past it.
                 pause(periodMs);

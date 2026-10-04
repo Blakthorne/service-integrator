@@ -1,7 +1,7 @@
 import "server-only";
 import { PCO_CACHE_POLICY, type PcoResourceKind } from "./cachePolicy";
 import { assertPcoId, type PcoId } from "./ids";
-import { pcoPacer } from "./pacer";
+import { MAX_PACED_WAIT_SECONDS, pcoPacer, readRetryAfter } from "./pacer";
 import type {
     PcoErrorObject,
     PcoErrorResponse,
@@ -12,8 +12,11 @@ import type {
 const PCO_ORIGIN = "https://api.planningcenteronline.com";
 const SERVICES_PATH = "/services/v2";
 
-/** A 429 is retried once, but only when PCO asks us to wait at most this long. */
+/** A page load retries a 429 once, and only when PCO asks it to wait at most this long. */
 const MAX_RETRY_AFTER_SECONDS = 5;
+
+/** A paced request retries a 429 up to this many times. */
+const MAX_PACED_RETRIES = 3;
 
 /** pcoFetchAll's default page limit: 5,000 rows at per_page=100. */
 const DEFAULT_MAX_PAGES = 50;
@@ -113,17 +116,29 @@ function servicesUrl(path: string): URL {
 }
 
 /**
- * How long to wait before retrying a 429, or null for no retry: only a
- * Retry-After of whole seconds, at most MAX_RETRY_AFTER_SECONDS, qualifies.
+ * How long to wait before retrying a 429 after `retries` retries, or null to
+ * give up. A page load retries once, and only after a Retry-After of whole
+ * seconds, at most MAX_RETRY_AFTER_SECONDS. A paced request retries up to
+ * MAX_PACED_RETRIES times after its Retry-After of any length, or a whole
+ * window (`periodMs`) without one, unless that is over MAX_PACED_WAIT_SECONDS.
+ * The pacer holds every other paced request as long (Pacer.observe).
  */
-function retryDelayMs(response: Response): number | null {
-    // Optional chaining: bare test doubles ({ ok, status }) have no headers.
-    const header = response.headers?.get("Retry-After")?.trim();
-    if (!header || !/^\d+$/.test(header)) {
-        return null;
+function retryDelayMs(
+    response: Response,
+    retries: number,
+    paced: boolean,
+    periodMs: number
+): number | null {
+    const seconds = readRetryAfter(response.headers);
+    if (!paced) {
+        return retries === 0 && seconds !== undefined && seconds <= MAX_RETRY_AFTER_SECONDS
+            ? seconds * 1000
+            : null;
     }
-    const seconds = Number(header);
-    return seconds <= MAX_RETRY_AFTER_SECONDS ? seconds * 1000 : null;
+    const delayMs = seconds === undefined ? periodMs : seconds * 1000;
+    return retries < MAX_PACED_RETRIES && delayMs <= MAX_PACED_WAIT_SECONDS * 1000
+        ? delayMs
+        : null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -197,17 +212,20 @@ const readOptionalJson: ReadBody = async (response) => {
 export interface PcoRequestOptions {
     /**
      * Wait for the shared pacer (pacer.ts) before each request this call
-     * sends, every page pcoFetchAll follows and a 429 retry included. Sync
-     * jobs pass `paced: true`; page loads leave it off, so they never wait.
+     * sends, every page pcoFetchAll follows and a 429 retry included, and
+     * ride out a 429: up to 3 retries, each after PCO's Retry-After unless
+     * that is over 60 s. Sync jobs pass `paced: true`; page loads leave it
+     * off, so they never wait on the pacer and retry a 429 only once, after
+     * at most 5 s.
      */
     paced?: boolean;
 }
 
 /**
- * One guarded request, retrying a short 429 once. `init` carries what differs
- * between calls (method, body, cache option); the auth headers, the redirect
- * refusal and the timeout are added here, so no caller can leave them out.
- * Resolves to `read` of the 2xx response.
+ * One guarded request, retrying a 429 as retryDelayMs allows. `init` carries
+ * what differs between calls (method, body, cache option); the auth headers,
+ * the redirect refusal and the timeout are added here, so no caller can leave
+ * them out. Resolves to `read` of the 2xx response.
  */
 async function request(
     url: URL,
@@ -232,23 +250,24 @@ async function request(
         // it is sent.
         const response = await (paced ? pacer.acquire().then(send) : send());
         // Every response, paced or not, tells the pacer PCO's current limit
-        // and how much of this window is used.
-        pacer.observe(response.headers);
+        // and how much of this window is used; a 429 holds paced requests.
+        pacer.observe(response);
         return response;
     };
 
     try {
         let response = await attempt();
+        for (let retries = 0; response.status === 429; retries++) {
+            const delay = retryDelayMs(response, retries, paced, pacer.limits().periodMs);
+            if (delay === null) {
+                break;
+            }
+            discardBody(response);
+            await sleep(delay);
+            response = await attempt();
+        }
         if (!response.ok) {
-            const delay = response.status === 429 ? retryDelayMs(response) : null;
-            if (delay !== null) {
-                discardBody(response);
-                await sleep(delay);
-                response = await attempt();
-            }
-            if (!response.ok) {
-                throw await responseError(response, path);
-            }
+            throw await responseError(response, path);
         }
         return await read(response);
     } catch (error) {
@@ -337,9 +356,9 @@ export type PcoMutationMethod = "POST" | "PATCH" | "DELETE";
 
 /**
  * Write to the PCO Services API: `path` as for pcoFetch, `body` (built with
- * jsonApi) sent as JSON. Guarded, timed out and retried once on a short 429
- * exactly like a GET (PCO answers 429 before processing a request, so a
- * retried POST cannot apply twice), and never cached. Resolves to the JSON
+ * jsonApi) sent as JSON. Guarded, timed out and retried on a 429 exactly like
+ * a GET (PCO answers 429 before processing a request, so a retried POST
+ * cannot apply twice), and never cached. Resolves to the JSON
  * response, or null when there is none (204 No Content). Throws PcoUrlError
  * before sending, PcoValidationError on a 422 and PcoError on any other
  * non-2xx response.
