@@ -4,20 +4,34 @@ import {
     EMPTY_NEW_SONG,
     draftFromPcoTitle,
     type EntryEditInput,
+    type HymnAliasInput,
+    type HymnEditInput,
     type MoveDirection,
     type NewEntryInput,
     type NewSongDraft,
+    type TuneAliasInput,
+    type TuneEditInput,
 } from "@/lib/catalog/validation";
 import { getDb } from "@/lib/db";
 import { listBooks, listCatalogSongs, listTunes } from "@/lib/db/catalog";
 import {
     addEntry,
+    addHymnAlias,
+    addTuneAlias,
     deleteEntry,
     editEntry,
+    editHymn,
+    editTune,
     moveEntry,
+    removeHymnAlias,
+    removeTuneAlias,
     type EntryDeleteResult,
     type EntryEditResult,
     type EntryMoveResult,
+    type HymnAliasResult,
+    type HymnEditResult,
+    type TuneAliasResult,
+    type TuneEditResult,
 } from "@/lib/db/catalogEdit";
 import {
     createCatalogSong,
@@ -45,6 +59,12 @@ export type {
     EntryMoveResult,
     EntryProblem,
     EntryProblemReason,
+    HymnAliasResult,
+    HymnEditResult,
+    NameProblemReason,
+    RenameOutcome,
+    TuneAliasResult,
+    TuneEditResult,
 } from "@/lib/db/catalogEdit";
 
 /**
@@ -226,4 +246,46 @@ export function deleteCatalogEntry(entryId: number): EntryDeleteResult {
 /** Move an entry of a book without numbers one place up or down (`moveEntry`). */
 export function moveCatalogEntry(entryId: number, direction: MoveDirection): EntryMoveResult {
     return moveEntry(getDb(), entryId, direction);
+}
+
+// ---------------------------------------------------------------------------
+// Hymns and tunes (the song page's Hymn card, and a tune's page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Change a hymn's title, first line and notes (`editHymn`). A renamed hymn
+ * keeps its old title as another title when a Planning Center song still
+ * matches it, and says so (`aliasKept`).
+ */
+export function editCatalogHymn(input: HymnEditInput): HymnEditResult {
+    return editHymn(getDb(), input);
+}
+
+/** Give a hymn another title (`addHymnAlias`). */
+export function addCatalogHymnAlias(input: HymnAliasInput): HymnAliasResult {
+    return addHymnAlias(getDb(), input);
+}
+
+/** Take another title off a hymn (`removeHymnAlias`). */
+export function removeCatalogHymnAlias(input: HymnAliasInput): HymnAliasResult {
+    return removeHymnAlias(getDb(), input);
+}
+
+/**
+ * Change a tune's name, meter and notes (`editTune`). A renamed tune keeps
+ * its old name as another name when a Planning Center song's title still
+ * names it, and says so (`aliasKept`).
+ */
+export function editCatalogTune(input: TuneEditInput): TuneEditResult {
+    return editTune(getDb(), input);
+}
+
+/** Give a tune another name (`addTuneAlias`). */
+export function addCatalogTuneAlias(input: TuneAliasInput): TuneAliasResult {
+    return addTuneAlias(getDb(), input);
+}
+
+/** Take another name off a tune (`removeTuneAlias`). */
+export function removeCatalogTuneAlias(input: TuneAliasInput): TuneAliasResult {
+    return removeTuneAlias(getDb(), input);
 }

@@ -1,13 +1,22 @@
 import "server-only";
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
 import { formatEntryLabel } from "@/lib/catalog/labels";
+import { normalizeTuneName } from "@/lib/catalog/normalize";
 import type {
     EntryEditInput,
     EntryPart,
     EntryPlacement,
+    HymnAliasInput,
+    HymnEditInput,
+    HymnPart,
     MoveDirection,
     NewEntryInput,
+    TuneAliasInput,
+    TuneEditInput,
+    TunePart,
 } from "@/lib/catalog/validation";
+import { normalizeTitle } from "@/lib/normalizeTitle";
+import { readTuneHint } from "@/lib/reconcile";
 import { songLabelOf } from "./catalog";
 import type { ExistingRow } from "./catalogWrites";
 import { withTransaction } from "./transaction";
@@ -463,4 +472,453 @@ export function moveEntry(
         }
         return { ok: true, changed, position: ids.indexOf(entryId) + 1 };
     });
+}
+
+// ---------------------------------------------------------------------------
+// Hymns and tunes, and their other names
+//
+// A hymn's title and other titles are compared by `normalizeTitle`, a tune's
+// name and other names by `normalizeTuneName`. An other name ("alias") is
+// unique across all hymns (or all tunes): `hymn_aliases.normalized` and
+// `tune_aliases.normalized` say so. A hymn's title is not unique in the
+// schema (two texts can share one), but an edit, like the new-song form,
+// never gives a hymn a title another hymn has as its title or other title:
+// the way to make two hymns one is to merge them (lib/db/catalogMerge.ts).
+// Tunes likewise.
+// ---------------------------------------------------------------------------
+
+/** Why a hymn or tune edit was refused. */
+export type NameProblemReason =
+    /** The hymn is not in the catalog (any more). */
+    | "hymn-not-found"
+    /** The tune is not in the catalog (any more). */
+    | "tune-not-found"
+    /** Another hymn (or tune) has that title (or name), or has it as another title (or name). */
+    | "name-taken"
+    /** The other name is the hymn's own title (or the tune's own name). */
+    | "alias-is-name"
+    /** The hymn (or tune) already has that other name. */
+    | "alias-exists"
+    /** The other name to remove is not one of the hymn's (or tune's). */
+    | "alias-not-found";
+
+/**
+ * What renaming a hymn or tune did to its other names: the old name kept
+ * as another one (see `editHymn`), and another name dropped because it is
+ * the new name now; null for each when nothing was.
+ */
+export interface RenameOutcome {
+    aliasKept: string | null;
+    aliasDropped: string | null;
+}
+
+export type HymnEditResult = EditResult<{ hymnId: number } & RenameOutcome, NameProblemReason, HymnPart>;
+
+export type TuneEditResult = EditResult<{ tuneId: number } & RenameOutcome, NameProblemReason, TunePart>;
+
+/** What adding or removing another title or name did: the other name, as stored. */
+export type HymnAliasResult = EditResult<{ alias: string }, NameProblemReason, "hymn" | "alias">;
+
+export type TuneAliasResult = EditResult<{ alias: string }, NameProblemReason, "tune" | "alias">;
+
+/** A song of hymn `hymnId`, the first by tune name (an unknown tune last), as a row to link to, or null. */
+function firstSongOfHymn(db: DatabaseSync, hymnId: number): CatalogRowRef | null {
+    const row = db
+        .prepare(
+            `SELECT s.id FROM ${SONG_WITH_NAMES}
+             WHERE s.hymn_id = ?
+             ORDER BY t.name IS NULL, t.name COLLATE NOCASE, s.id
+             LIMIT 1`
+        )
+        .get(hymnId);
+    return row ? songRef(db, Number(row.id)) : null;
+}
+
+/** Another hymn or tune that has a name, by its own name or by another one. */
+interface NameHolder {
+    id: number;
+    /** Its own title or name. */
+    name: string;
+    /** The other name of it that matched; null when its own did. */
+    alias: string | null;
+}
+
+/** The kind of row a name belongs to: hymns (titles) or tunes (names), with how each is matched. */
+interface NameKind {
+    table: "hymns" | "tunes";
+    nameColumn: "title" | "name";
+    aliasTable: "hymn_aliases" | "tune_aliases";
+    ownerColumn: "hymn_id" | "tune_id";
+    normalize: (text: string) => string;
+}
+
+const HYMN_NAMES: NameKind = {
+    table: "hymns",
+    nameColumn: "title",
+    aliasTable: "hymn_aliases",
+    ownerColumn: "hymn_id",
+    normalize: normalizeTitle,
+};
+
+const TUNE_NAMES: NameKind = {
+    table: "tunes",
+    nameColumn: "name",
+    aliasTable: "tune_aliases",
+    ownerColumn: "tune_id",
+    normalize: normalizeTuneName,
+};
+
+/**
+ * The hymn or tune other than `exceptId` whose name, or one of whose other
+ * names, is `key` (already normalized), or null. Names are compared in
+ * TypeScript, since the normalizations are not SQL; other names by their
+ * stored form.
+ */
+function nameHolder(db: DatabaseSync, kind: NameKind, key: string, exceptId: number): NameHolder | null {
+    for (const row of db
+        .prepare(`SELECT id, ${kind.nameColumn} AS name FROM ${kind.table} WHERE id <> ? ORDER BY id`)
+        .all(exceptId)) {
+        if (kind.normalize(String(row.name)) === key) {
+            return { id: Number(row.id), name: String(row.name), alias: null };
+        }
+    }
+    const alias = db
+        .prepare(
+            `SELECT a.${kind.ownerColumn} AS owner, a.alias, o.${kind.nameColumn} AS name
+             FROM ${kind.aliasTable} a JOIN ${kind.table} o ON o.id = a.${kind.ownerColumn}
+             WHERE a.normalized = ? AND a.${kind.ownerColumn} <> ?`
+        )
+        .get(key, exceptId);
+    return alias
+        ? { id: Number(alias.owner), name: String(alias.name), alias: String(alias.alias) }
+        : null;
+}
+
+/** A row's other name whose stored form is `key`, or null. */
+function ownAlias(db: DatabaseSync, kind: NameKind, ownerId: number, key: string): string | null {
+    const row = db
+        .prepare(`SELECT alias FROM ${kind.aliasTable} WHERE ${kind.ownerColumn} = ? AND normalized = ?`)
+        .get(ownerId, key);
+    return row ? String(row.alias) : null;
+}
+
+/** Whether any row of the kind has `key` as another name. */
+function aliasTaken(db: DatabaseSync, kind: NameKind, key: string): boolean {
+    return (
+        db.prepare(`SELECT 1 FROM ${kind.aliasTable} WHERE normalized = ?`).get(key) !== undefined
+    );
+}
+
+function addAliasRow(db: DatabaseSync, kind: NameKind, ownerId: number, alias: string): void {
+    db.prepare(
+        `INSERT INTO ${kind.aliasTable} (${kind.ownerColumn}, alias, normalized) VALUES (?, ?, ?)`
+    ).run(ownerId, alias, kind.normalize(alias));
+}
+
+function dropAliasRow(db: DatabaseSync, kind: NameKind, ownerId: number, key: string): void {
+    db.prepare(`DELETE FROM ${kind.aliasTable} WHERE ${kind.ownerColumn} = ? AND normalized = ?`).run(
+        ownerId,
+        key
+    );
+}
+
+/**
+ * The titles of the Planning Center songs a person may still link, as
+ * matching reads them: the mirror's songs neither deleted from Planning
+ * Center nor set aside as not hymnal material (Ignore).
+ */
+function linkablePcoTitles(db: DatabaseSync): string[] {
+    return db
+        .prepare("SELECT title FROM pco_songs WHERE removed_at IS NULL AND ignored_at IS NULL")
+        .all()
+        .map((row) => String(row.title));
+}
+
+/**
+ * Whether a Planning Center song's title matches a hymn titled `key` (by
+ * `normalizeTitle`), as `suggestLinks` reads titles: the whole title, or the
+ * title before a trailing parenthetical that may name the tune ("Abba,
+ * Father (PRITCHARD)").
+ */
+function pcoTitleMatchesHymn(pcoTitle: string, key: string): boolean {
+    const hint = readTuneHint(pcoTitle);
+    return normalizeTitle(pcoTitle) === key || (hint !== null && normalizeTitle(hint.base) === key);
+}
+
+/**
+ * Whether a Planning Center song's title names a tune called `key` (by
+ * `normalizeTuneName`) in a trailing parenthetical, as `tunesNamedBy` reads
+ * one ("Abba, Father (PRITCHARD)").
+ */
+function pcoTitleNamesTune(pcoTitle: string, key: string): boolean {
+    return (readTuneHint(pcoTitle)?.names ?? []).some((name) => normalizeTuneName(name) === key);
+}
+
+/**
+ * The problem with giving a hymn or tune a name that `holder`, another one,
+ * has as its own name or as another name, on `part` of the form, with a
+ * link to it (a hymn's first song, or the tune).
+ */
+function nameTakenProblem<P extends string>(
+    db: DatabaseSync,
+    kind: NameKind,
+    holder: NameHolder,
+    part: P
+): EditProblem<NameProblemReason, P> {
+    const isHymn = kind === HYMN_NAMES;
+    const existing = isHymn
+        ? firstSongOfHymn(db, holder.id)
+        : ({ kind: "tune", tuneId: holder.id, label: holder.name } as const);
+    const message = isHymn
+        ? holder.alias === null
+            ? `The catalog already has a hymn titled "${holder.name}". To make the two one, merge this hymn into it.`
+            : `"${holder.alias}" is another title of "${holder.name}". To make the two one, merge this hymn into it.`
+        : holder.alias === null
+          ? `The catalog already has the tune ${holder.name}. To make the two one, merge this tune into it.`
+          : `${holder.alias} is another name of the tune ${holder.name}. To make the two one, merge this tune into it.`;
+    return problem("name-taken", part, message, existing);
+}
+
+/**
+ * Rename a hymn or tune from `oldName` to `newName` and keep its other names
+ * in step: an other name that is the new name is dropped (the name says it
+ * now), and the old name is kept as another one when a Planning Center
+ * song's title still matches it (`matches`) and no row has it as another
+ * name already. Writes nothing when the two names are the same by the
+ * kind's normalization.
+ */
+function renameAliases(
+    db: DatabaseSync,
+    kind: NameKind,
+    ownerId: number,
+    oldName: string,
+    newName: string,
+    matches: (pcoTitle: string, key: string) => boolean
+): RenameOutcome {
+    const oldKey = kind.normalize(oldName);
+    const newKey = kind.normalize(newName);
+    if (oldKey === newKey) {
+        return { aliasKept: null, aliasDropped: null };
+    }
+    const aliasDropped = ownAlias(db, kind, ownerId, newKey);
+    if (aliasDropped !== null) {
+        dropAliasRow(db, kind, ownerId, newKey);
+    }
+    const keep =
+        !aliasTaken(db, kind, oldKey) &&
+        linkablePcoTitles(db).some((pcoTitle) => matches(pcoTitle, oldKey));
+    if (keep) {
+        addAliasRow(db, kind, ownerId, oldName);
+    }
+    return { aliasKept: keep ? oldName : null, aliasDropped };
+}
+
+/**
+ * Change hymn `hymnId`'s title, first line and notes, in one transaction.
+ *
+ * **Renaming keeps a Planning Center match.** Planning Center songs are
+ * matched to hymns by title (`suggestLinks`), so a rename could leave a
+ * song of the mirror that matched the old title matching nothing. So the
+ * old title is kept as another title of the hymn when a song of the mirror
+ * that a person may still link (not deleted from Planning Center, not
+ * ignored) has a title that matches it, whole or before a trailing
+ * parenthetical, linked or not; otherwise it goes, so fixing a typo leaves
+ * no typo behind. An other title that is the new title is dropped. The
+ * result says which (`aliasKept`, `aliasDropped`).
+ *
+ * Refused, writing nothing, when there is no such hymn, or another hymn has
+ * the new title as its title or another title (merge the two instead).
+ */
+export function editHymn(db: DatabaseSync, input: HymnEditInput): HymnEditResult {
+    return withTransaction(db, (): HymnEditResult => {
+        const row = db.prepare("SELECT title FROM hymns WHERE id = ?").get(input.hymnId);
+        if (!row) {
+            return refused(problem("hymn-not-found", "hymn", "That hymn is not in the catalog."));
+        }
+        const holder = nameHolder(db, HYMN_NAMES, normalizeTitle(input.title), input.hymnId);
+        if (holder) {
+            return refused(nameTakenProblem(db, HYMN_NAMES, holder, "title"));
+        }
+        const outcome = renameAliases(
+            db,
+            HYMN_NAMES,
+            input.hymnId,
+            String(row.title),
+            input.title,
+            pcoTitleMatchesHymn
+        );
+        db.prepare("UPDATE hymns SET title = ?, first_line = ?, notes = ? WHERE id = ?").run(
+            input.title,
+            input.firstLine,
+            input.notes,
+            input.hymnId
+        );
+        return { ok: true, hymnId: input.hymnId, ...outcome };
+    });
+}
+
+/**
+ * Change tune `tuneId`'s name, meter and notes, in one transaction. As
+ * with a hymn's title (`editHymn`), the old name is kept as another name
+ * of the tune when a song of the mirror that a person may still link names
+ * it in a trailing parenthetical ("Abba, Father (PRITCHARD)"), and another
+ * name that is the new name is dropped. Refused, writing nothing, when
+ * there is no such tune, or another tune has the new name as its name or
+ * another name (merge the two instead).
+ */
+export function editTune(db: DatabaseSync, input: TuneEditInput): TuneEditResult {
+    return withTransaction(db, (): TuneEditResult => {
+        const row = db.prepare("SELECT name FROM tunes WHERE id = ?").get(input.tuneId);
+        if (!row) {
+            return refused(problem("tune-not-found", "tune", "That tune is not in the catalog."));
+        }
+        const holder = nameHolder(db, TUNE_NAMES, normalizeTuneName(input.name), input.tuneId);
+        if (holder) {
+            return refused(nameTakenProblem(db, TUNE_NAMES, holder, "name"));
+        }
+        const outcome = renameAliases(
+            db,
+            TUNE_NAMES,
+            input.tuneId,
+            String(row.name),
+            input.name,
+            pcoTitleNamesTune
+        );
+        db.prepare("UPDATE tunes SET name = ?, meter = ?, notes = ? WHERE id = ?").run(
+            input.name,
+            input.meter,
+            input.notes,
+            input.tuneId
+        );
+        return { ok: true, tuneId: input.tuneId, ...outcome };
+    });
+}
+
+/**
+ * Give a hymn or tune another name, in one transaction. Refused, writing
+ * nothing, when there is no such row, the name is its own, it has that
+ * other name already, or another row has it as its name or another name.
+ */
+function addAlias<P extends "hymn" | "tune">(
+    db: DatabaseSync,
+    kind: NameKind,
+    part: P,
+    ownerId: number,
+    alias: string
+): EditResult<{ alias: string }, NameProblemReason, P | "alias"> {
+    type Result = EditResult<{ alias: string }, NameProblemReason, P | "alias">;
+    const isHymn = kind === HYMN_NAMES;
+    return withTransaction(db, (): Result => {
+        const row = db
+            .prepare(`SELECT ${kind.nameColumn} AS name FROM ${kind.table} WHERE id = ?`)
+            .get(ownerId);
+        if (!row) {
+            return refused(
+                problem(
+                    isHymn ? "hymn-not-found" : "tune-not-found",
+                    part,
+                    `That ${part} is not in the catalog.`
+                )
+            );
+        }
+        const key = kind.normalize(alias);
+        if (kind.normalize(String(row.name)) === key) {
+            return refused(
+                problem(
+                    "alias-is-name",
+                    "alias",
+                    isHymn ? `"${alias}" is the hymn's title.` : `${alias} is the tune's name.`
+                )
+            );
+        }
+        const own = ownAlias(db, kind, ownerId, key);
+        if (own !== null) {
+            return refused(
+                problem(
+                    "alias-exists",
+                    "alias",
+                    isHymn
+                        ? `"${own}" is already another title of this hymn.`
+                        : `${own} is already another name of this tune.`
+                )
+            );
+        }
+        const holder = nameHolder(db, kind, key, ownerId);
+        if (holder) {
+            return refused(nameTakenProblem(db, kind, holder, "alias"));
+        }
+        addAliasRow(db, kind, ownerId, alias);
+        return { ok: true, alias };
+    });
+}
+
+/**
+ * Take another name off a hymn or tune, found by its normalized form, in
+ * one transaction. Refused when there is no such row, or it has no such
+ * other name.
+ */
+function removeAlias<P extends "hymn" | "tune">(
+    db: DatabaseSync,
+    kind: NameKind,
+    part: P,
+    ownerId: number,
+    alias: string
+): EditResult<{ alias: string }, NameProblemReason, P | "alias"> {
+    type Result = EditResult<{ alias: string }, NameProblemReason, P | "alias">;
+    const isHymn = kind === HYMN_NAMES;
+    return withTransaction(db, (): Result => {
+        if (!db.prepare(`SELECT 1 FROM ${kind.table} WHERE id = ?`).get(ownerId)) {
+            return refused(
+                problem(
+                    isHymn ? "hymn-not-found" : "tune-not-found",
+                    part,
+                    `That ${part} is not in the catalog.`
+                )
+            );
+        }
+        const key = kind.normalize(alias);
+        const own = ownAlias(db, kind, ownerId, key);
+        if (own === null) {
+            return refused(
+                problem(
+                    "alias-not-found",
+                    "alias",
+                    isHymn
+                        ? `"${alias}" is not another title of this hymn. It may have been removed already.`
+                        : `${alias} is not another name of this tune. It may have been removed already.`
+                )
+            );
+        }
+        dropAliasRow(db, kind, ownerId, key);
+        return { ok: true, alias: own };
+    });
+}
+
+/**
+ * Give hymn `hymnId` another title (by `normalizeTitle`), which Planning
+ * Center songs are then matched by too. Refused when there is no such hymn,
+ * the title is its own, it has it already, or another hymn has it as its
+ * title or another title.
+ */
+export function addHymnAlias(db: DatabaseSync, { hymnId, alias }: HymnAliasInput): HymnAliasResult {
+    return addAlias(db, HYMN_NAMES, "hymn", hymnId, alias);
+}
+
+/** Take another title off hymn `hymnId`. Refused when there is no such hymn, or it has no such title. */
+export function removeHymnAlias(db: DatabaseSync, { hymnId, alias }: HymnAliasInput): HymnAliasResult {
+    return removeAlias(db, HYMN_NAMES, "hymn", hymnId, alias);
+}
+
+/**
+ * Give tune `tuneId` another name (by `normalizeTuneName`). Refused when
+ * there is no such tune, the name is its own, it has it already, or another
+ * tune has it as its name or another name.
+ */
+export function addTuneAlias(db: DatabaseSync, { tuneId, alias }: TuneAliasInput): TuneAliasResult {
+    return addAlias(db, TUNE_NAMES, "tune", tuneId, alias);
+}
+
+/** Take another name off tune `tuneId`. Refused when there is no such tune, or it has no such name. */
+export function removeTuneAlias(db: DatabaseSync, { tuneId, alias }: TuneAliasInput): TuneAliasResult {
+    return removeAlias(db, TUNE_NAMES, "tune", tuneId, alias);
 }

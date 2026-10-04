@@ -2,8 +2,27 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { EntryPlacement, NewEntryInput } from "@/lib/catalog/validation";
 import { findCatalogSong } from "./catalog";
-import { addEntry, deleteEntry, editEntry, moveEntry } from "./catalogEdit";
-import { openTestDb, seedBook, seedEntry, seedHymn, seedSong, seedTune } from "./testing";
+import {
+    addEntry,
+    addHymnAlias,
+    addTuneAlias,
+    deleteEntry,
+    editEntry,
+    editHymn,
+    editTune,
+    moveEntry,
+    removeHymnAlias,
+    removeTuneAlias,
+} from "./catalogEdit";
+import {
+    openTestDb,
+    seedBook,
+    seedEntry,
+    seedHymn,
+    seedPcoSong,
+    seedSong,
+    seedTune,
+} from "./testing";
 
 let db: DatabaseSync;
 
@@ -414,5 +433,322 @@ describe("moveEntry", () => {
             [entries.jesusLovesMe, 2],
             [entries.deepAndWide, 3],
         ]);
+    });
+});
+
+/**
+ * Three hymns and two tunes: "Rejoice - the Lord Is King" (also "Rejoice,
+ * the Lord Is King") to DARWALL (also DARWAL), Amazing Grace to NEW
+ * BRITAIN, and "Is Your All on the Alter?" with no tune.
+ */
+function seedNames() {
+    const tunes = {
+        darwall: seedTune(db, { name: "DARWALL", aliases: ["DARWAL"] }),
+        newBritain: seedTune(db, { name: "NEW BRITAIN", meter: "CM" }),
+    };
+    const hymns = {
+        rejoice: seedHymn(db, {
+            title: "Rejoice - the Lord Is King",
+            aliases: ["Rejoice, the Lord Is King"],
+        }),
+        amazingGrace: seedHymn(db, { title: "Amazing Grace", firstLine: "Amazing grace! how sweet the sound" }),
+        alter: seedHymn(db, { title: "Is Your All on the Alter?" }),
+    };
+    const songs = {
+        rejoice: seedSong(db, { hymnId: hymns.rejoice, tuneId: tunes.darwall }),
+        amazingGrace: seedSong(db, { hymnId: hymns.amazingGrace, tuneId: tunes.newBritain }),
+        alter: seedSong(db, { hymnId: hymns.alter }),
+    };
+    return { tunes, hymns, songs };
+}
+
+function hymnRow(hymnId: number) {
+    return db.prepare("SELECT title, first_line, notes FROM hymns WHERE id = ?").get(hymnId);
+}
+
+function tuneRow(tuneId: number) {
+    return db.prepare("SELECT name, meter, notes FROM tunes WHERE id = ?").get(tuneId);
+}
+
+function hymnAliases(hymnId: number): string[] {
+    return db
+        .prepare("SELECT alias FROM hymn_aliases WHERE hymn_id = ? ORDER BY alias")
+        .all(hymnId)
+        .map((row) => String(row.alias));
+}
+
+function tuneAliases(tuneId: number): string[] {
+    return db
+        .prepare("SELECT alias FROM tune_aliases WHERE tune_id = ? ORDER BY alias")
+        .all(tuneId)
+        .map((row) => String(row.alias));
+}
+
+describe("editHymn", () => {
+    test("changes the title, first line and notes, leaving no old title behind when nothing matches it", () => {
+        const { hymns } = seedNames();
+        expect(
+            editHymn(db, {
+                hymnId: hymns.alter,
+                title: "Is Your All on the Altar?",
+                firstLine: "You have longed for sweet peace",
+                notes: "Elisha Hoffman, 1900",
+            })
+        ).toEqual({ ok: true, hymnId: hymns.alter, aliasKept: null, aliasDropped: null });
+        expect(hymnRow(hymns.alter)).toEqual({
+            title: "Is Your All on the Altar?",
+            first_line: "You have longed for sweet peace",
+            notes: "Elisha Hoffman, 1900",
+        });
+        expect(hymnAliases(hymns.alter)).toEqual([]);
+    });
+
+    test("keeps the old title as another title when a Planning Center song is titled that way", () => {
+        const { hymns } = seedNames();
+        seedPcoSong(db, { title: "Is Your All on the Alter" });
+        expect(
+            editHymn(db, { hymnId: hymns.alter, title: "Is Your All on the Altar?", firstLine: null, notes: null })
+        ).toMatchObject({ ok: true, aliasKept: "Is Your All on the Alter?", aliasDropped: null });
+        expect(hymnAliases(hymns.alter)).toEqual(["Is Your All on the Alter?"]);
+    });
+
+    test("keeps it for a title that matches before a trailing parenthetical, and for a linked song", () => {
+        const { hymns, songs } = seedNames();
+        seedPcoSong(db, { title: "Amazing Grace (NEW BRITAIN)" });
+        expect(
+            editHymn(db, { hymnId: hymns.amazingGrace, title: "Amazing Grace! How Sweet the Sound", firstLine: null, notes: null })
+        ).toMatchObject({ ok: true, aliasKept: "Amazing Grace" });
+
+        const linked = seedPcoSong(db, { title: "Is Your All on the Alter?" });
+        db.prepare("UPDATE songs SET pco_song_id = ? WHERE id = ?").run(linked, songs.alter);
+        expect(
+            editHymn(db, { hymnId: hymns.alter, title: "Is Your All on the Altar?", firstLine: null, notes: null })
+        ).toMatchObject({ ok: true, aliasKept: "Is Your All on the Alter?" });
+    });
+
+    test("does not keep it for a song deleted from Planning Center or ignored", () => {
+        const { hymns } = seedNames();
+        seedPcoSong(db, { title: "Is Your All on the Alter?", removedAt: "2026-10-01T00:00:00.000Z" });
+        seedPcoSong(db, { title: "Is Your All on the Alter", ignoredAt: "2026-10-01T00:00:00.000Z" });
+        expect(
+            editHymn(db, { hymnId: hymns.alter, title: "Is Your All on the Altar?", firstLine: null, notes: null })
+        ).toMatchObject({ ok: true, aliasKept: null });
+        expect(hymnAliases(hymns.alter)).toEqual([]);
+    });
+
+    test("keeps nothing for a title that changes only in case or punctuation", () => {
+        const { hymns } = seedNames();
+        seedPcoSong(db, { title: "Amazing Grace" });
+        expect(
+            editHymn(db, { hymnId: hymns.amazingGrace, title: "amazing grace!", firstLine: null, notes: null })
+        ).toMatchObject({ ok: true, aliasKept: null, aliasDropped: null });
+        expect(hymnRow(hymns.amazingGrace)).toMatchObject({ title: "amazing grace!", first_line: null });
+    });
+
+    test("drops another title that the new title now is", () => {
+        const { hymns } = seedNames();
+        seedPcoSong(db, { title: "Rejoice - the Lord Is King!" });
+        expect(
+            editHymn(db, { hymnId: hymns.rejoice, title: "Rejoice, the Lord Is King", firstLine: null, notes: null })
+        ).toMatchObject({
+            ok: true,
+            aliasKept: "Rejoice - the Lord Is King",
+            aliasDropped: "Rejoice, the Lord Is King",
+        });
+        expect(hymnAliases(hymns.rejoice)).toEqual(["Rejoice - the Lord Is King"]);
+    });
+
+    test("refuses a title another hymn has, or has as another title, pointing at it", () => {
+        const { hymns, songs } = seedNames();
+        expect(
+            editHymn(db, { hymnId: hymns.alter, title: "Amazing  Grace", firstLine: null, notes: null })
+        ).toEqual({
+            ok: false,
+            problems: [
+                {
+                    reason: "name-taken",
+                    part: "title",
+                    message:
+                        'The catalog already has a hymn titled "Amazing Grace". To make the two one, merge this hymn into it.',
+                    existing: { kind: "song", songId: songs.amazingGrace, label: "Amazing Grace (NEW BRITAIN)" },
+                },
+            ],
+        });
+        expect(
+            editHymn(db, { hymnId: hymns.alter, title: "Rejoice, the Lord Is King!", firstLine: null, notes: null })
+        ).toMatchObject({
+            ok: false,
+            problems: [
+                {
+                    reason: "name-taken",
+                    message:
+                        '"Rejoice, the Lord Is King" is another title of "Rejoice - the Lord Is King". To make the two one, merge this hymn into it.',
+                },
+            ],
+        });
+        expect(hymnRow(hymns.alter)).toMatchObject({ title: "Is Your All on the Alter?" });
+    });
+
+    test("refuses a hymn that is not in the catalog", () => {
+        expect(editHymn(db, { hymnId: 999, title: "X", firstLine: null, notes: null })).toEqual({
+            ok: false,
+            problems: [
+                { reason: "hymn-not-found", part: "hymn", message: "That hymn is not in the catalog.", existing: null },
+            ],
+        });
+    });
+});
+
+describe("editTune", () => {
+    test("changes the name, meter and notes", () => {
+        const { tunes } = seedNames();
+        expect(
+            editTune(db, { tuneId: tunes.newBritain, name: "NEW BRITAIN (AMAZING GRACE)", meter: "C.M.", notes: "American" })
+        ).toEqual({ ok: true, tuneId: tunes.newBritain, aliasKept: null, aliasDropped: null });
+        expect(tuneRow(tunes.newBritain)).toEqual({
+            name: "NEW BRITAIN (AMAZING GRACE)",
+            meter: "C.M.",
+            notes: "American",
+        });
+    });
+
+    test("keeps the old name when a Planning Center song names it in a parenthetical", () => {
+        const { tunes } = seedNames();
+        seedPcoSong(db, { title: "Amazing Grace (New Britain)" });
+        expect(
+            editTune(db, { tuneId: tunes.newBritain, name: "AMAZING GRACE", meter: null, notes: null })
+        ).toMatchObject({ ok: true, aliasKept: "NEW BRITAIN" });
+        expect(tuneAliases(tunes.newBritain)).toEqual(["NEW BRITAIN"]);
+    });
+
+    test("drops another name that the new name now is, and refuses a name another tune has", () => {
+        const { tunes } = seedNames();
+        expect(editTune(db, { tuneId: tunes.darwall, name: "Darwal", meter: null, notes: null })).toMatchObject({
+            ok: true,
+            aliasKept: null,
+            aliasDropped: "DARWAL",
+        });
+        expect(tuneAliases(tunes.darwall)).toEqual([]);
+        expect(
+            editTune(db, { tuneId: tunes.darwall, name: "new  britain", meter: null, notes: null })
+        ).toEqual({
+            ok: false,
+            problems: [
+                {
+                    reason: "name-taken",
+                    part: "name",
+                    message: "The catalog already has the tune NEW BRITAIN. To make the two one, merge this tune into it.",
+                    existing: { kind: "tune", tuneId: tunes.newBritain, label: "NEW BRITAIN" },
+                },
+            ],
+        });
+        expect(editTune(db, { tuneId: 999, name: "X", meter: null, notes: null })).toMatchObject({
+            ok: false,
+            problems: [{ reason: "tune-not-found", part: "tune" }],
+        });
+    });
+});
+
+describe("addHymnAlias and removeHymnAlias", () => {
+    test("add another title, and remove it by any spelling of it", () => {
+        const { hymns } = seedNames();
+        expect(addHymnAlias(db, { hymnId: hymns.amazingGrace, alias: "Amazing Grace! How Sweet the Sound" })).toEqual({
+            ok: true,
+            alias: "Amazing Grace! How Sweet the Sound",
+        });
+        expect(hymnAliases(hymns.amazingGrace)).toEqual(["Amazing Grace! How Sweet the Sound"]);
+        expect(removeHymnAlias(db, { hymnId: hymns.amazingGrace, alias: "amazing grace!  how sweet the sound" })).toEqual({
+            ok: true,
+            alias: "Amazing Grace! How Sweet the Sound",
+        });
+        expect(hymnAliases(hymns.amazingGrace)).toEqual([]);
+    });
+
+    test("refuse the hymn's own title, a title it has already, and another hymn's", () => {
+        const { hymns, songs } = seedNames();
+        const refusal = (alias: string) => {
+            const result = addHymnAlias(db, { hymnId: hymns.rejoice, alias });
+            return result.ok ? null : result.problems[0];
+        };
+        expect(refusal("rejoice - the lord is king")).toMatchObject({
+            reason: "alias-is-name",
+            part: "alias",
+            message: '"rejoice - the lord is king" is the hymn\'s title.',
+        });
+        expect(refusal("Rejoice, the Lord Is King!")).toMatchObject({
+            reason: "alias-exists",
+            message: '"Rejoice, the Lord Is King" is already another title of this hymn.',
+        });
+        expect(refusal("Amazing Grace")).toMatchObject({
+            reason: "name-taken",
+            existing: { kind: "song", songId: songs.amazingGrace },
+        });
+        db.prepare("INSERT INTO hymn_aliases (hymn_id, alias, normalized) VALUES (?, 'Grace', 'grace')").run(
+            hymns.amazingGrace
+        );
+        expect(refusal("Grace")).toMatchObject({
+            reason: "name-taken",
+            message: '"Grace" is another title of "Amazing Grace". To make the two one, merge this hymn into it.',
+        });
+        expect(hymnAliases(hymns.rejoice)).toEqual(["Rejoice, the Lord Is King"]);
+    });
+
+    test("refuse a hymn that is not there, and a title it does not have", () => {
+        const { hymns } = seedNames();
+        expect(addHymnAlias(db, { hymnId: 999, alias: "X" })).toMatchObject({
+            ok: false,
+            problems: [{ reason: "hymn-not-found", part: "hymn", message: "That hymn is not in the catalog." }],
+        });
+        expect(removeHymnAlias(db, { hymnId: hymns.alter, alias: "Nothing" })).toEqual({
+            ok: false,
+            problems: [
+                {
+                    reason: "alias-not-found",
+                    part: "alias",
+                    message: '"Nothing" is not another title of this hymn. It may have been removed already.',
+                    existing: null,
+                },
+            ],
+        });
+    });
+});
+
+describe("addTuneAlias and removeTuneAlias", () => {
+    test("add another name, refuse names that are taken, and remove it", () => {
+        const { tunes } = seedNames();
+        expect(addTuneAlias(db, { tuneId: tunes.newBritain, alias: "Amazing Grace" })).toEqual({
+            ok: true,
+            alias: "Amazing Grace",
+        });
+        expect(addTuneAlias(db, { tuneId: tunes.newBritain, alias: "AMAZING GRACE" })).toMatchObject({
+            ok: false,
+            problems: [{ reason: "alias-exists", message: "Amazing Grace is already another name of this tune." }],
+        });
+        expect(addTuneAlias(db, { tuneId: tunes.newBritain, alias: "new britain" })).toMatchObject({
+            ok: false,
+            problems: [{ reason: "alias-is-name", message: "new britain is the tune's name." }],
+        });
+        expect(addTuneAlias(db, { tuneId: tunes.newBritain, alias: "darwal" })).toMatchObject({
+            ok: false,
+            problems: [
+                {
+                    reason: "name-taken",
+                    message: "DARWAL is another name of the tune DARWALL. To make the two one, merge this tune into it.",
+                    existing: { kind: "tune", tuneId: tunes.darwall, label: "DARWALL" },
+                },
+            ],
+        });
+        expect(removeTuneAlias(db, { tuneId: tunes.newBritain, alias: "amazing grace" })).toEqual({
+            ok: true,
+            alias: "Amazing Grace",
+        });
+        expect(removeTuneAlias(db, { tuneId: tunes.newBritain, alias: "Amazing Grace" })).toMatchObject({
+            ok: false,
+            problems: [{ reason: "alias-not-found" }],
+        });
+        expect(addTuneAlias(db, { tuneId: 999, alias: "X" })).toMatchObject({
+            ok: false,
+            problems: [{ reason: "tune-not-found", part: "tune", message: "That tune is not in the catalog." }],
+        });
     });
 });

@@ -3,6 +3,7 @@ import { buildCatalogIndex, type IndexableSong } from "@/lib/reconcile";
 import {
     EMPTY_NEW_SONG,
     MARK_NOTE_MAX_LENGTH,
+    NOTES_MAX_LENGTH,
     VARIANT_NOTE_MAX_LENGTH,
     cleanText,
     draftFromPcoTitle,
@@ -10,9 +11,13 @@ import {
     validateEntryDelete,
     validateEntryEdit,
     validateEntryMove,
+    validateHymnAlias,
+    validateHymnEdit,
     validateNewEntry,
     validateNewSong,
     validateSongMark,
+    validateTuneAlias,
+    validateTuneEdit,
     type NewSongBook,
     type NewSongValues,
 } from "./validation";
@@ -541,6 +546,107 @@ describe("validateEntryEdit, validateEntryDelete and validateEntryMove", () => {
         expect(validateEntryMove(fields({ entryId: "7", direction: "sideways" }))).toEqual({
             ok: false,
             fieldErrors: { direction: { message: "Choose Move up or Move down." } },
+        });
+    });
+});
+
+describe("validateHymnEdit", () => {
+    test("reads the title and first line cleaned, and the notes with their line breaks", () => {
+        expect(
+            validateHymnEdit(
+                fields({
+                    hymnId: "3",
+                    title: "  Amazing   Grace ",
+                    firstLine: " Amazing grace! how sweet the sound ",
+                    notes: "  John Newton, 1779  \r\n\r\n  Stanza 6 by others \n\n",
+                })
+            )
+        ).toEqual({
+            ok: true,
+            input: {
+                hymnId: 3,
+                title: "Amazing Grace",
+                firstLine: "Amazing grace! how sweet the sound",
+                notes: "John Newton, 1779\n\nStanza 6 by others",
+            },
+        });
+    });
+
+    test("reads a blank first line and blank notes as none", () => {
+        expect(validateHymnEdit(fields({ hymnId: "3", title: "Doxology", firstLine: " ", notes: " \n " }))).toEqual({
+            ok: true,
+            input: { hymnId: 3, title: "Doxology", firstLine: null, notes: null },
+        });
+    });
+
+    test("refuses a missing title, one with no letters or digits, and notes that are too long", () => {
+        expect(
+            validateHymnEdit(fields({ hymnId: "0", title: " ", notes: "x".repeat(NOTES_MAX_LENGTH + 1) }))
+        ).toEqual({
+            ok: false,
+            fieldErrors: {
+                hymn: { message: "That hymn is not in the catalog." },
+                title: { message: "Type the hymn's title." },
+                notes: { message: "Notes have at most 2,000 characters." },
+            },
+        });
+        expect(validateHymnEdit(fields({ hymnId: "3", title: "?!" }))).toEqual({
+            ok: false,
+            fieldErrors: { title: { message: "A title needs letters or numbers." } },
+        });
+        expect(validateHymnEdit(fields({ hymnId: "3", title: "x".repeat(201) }))).toEqual({
+            ok: false,
+            fieldErrors: { title: { message: "A title has at most 200 characters." } },
+        });
+    });
+});
+
+describe("validateTuneEdit", () => {
+    test("reads the name, meter and notes", () => {
+        expect(validateTuneEdit(fields({ tuneId: "4", name: " ST.  ANNE ", meter: " C.M. ", notes: "" }))).toEqual({
+            ok: true,
+            input: { tuneId: 4, name: "ST. ANNE", meter: "C.M.", notes: null },
+        });
+    });
+
+    test("refuses a missing name, and one or a meter that is too long", () => {
+        expect(validateTuneEdit(fields({ tuneId: "4", name: "", meter: "8".repeat(51) }))).toEqual({
+            ok: false,
+            fieldErrors: {
+                name: { message: "Type the tune's name." },
+                meter: { message: "A meter has at most 50 characters." },
+            },
+        });
+        expect(validateTuneEdit(fields({ tuneId: "4", name: "X".repeat(101) }))).toEqual({
+            ok: false,
+            fieldErrors: { name: { message: "A tune's name has at most 100 characters." } },
+        });
+    });
+});
+
+describe("validateHymnAlias and validateTuneAlias", () => {
+    test("read the hymn or tune and the other name, cleaned", () => {
+        expect(validateHymnAlias(fields({ hymnId: "3", alias: " Amazing Grace!  How Sweet " }))).toEqual({
+            ok: true,
+            input: { hymnId: 3, alias: "Amazing Grace! How Sweet" },
+        });
+        expect(validateTuneAlias(fields({ tuneId: "4", alias: " darwal " }))).toEqual({
+            ok: true,
+            input: { tuneId: 4, alias: "darwal" },
+        });
+    });
+
+    test("refuse a missing other name, and an id that does not parse", () => {
+        expect(validateHymnAlias(fields({ hymnId: "x", alias: "" }))).toEqual({
+            ok: false,
+            fieldErrors: {
+                hymn: { message: "That hymn is not in the catalog." },
+                alias: { message: "Type the other title." },
+            },
+        });
+        expect(validateTuneAlias(fields({ tuneId: "4", alias: " " }))).toEqual({
+            ok: false,
+            fieldErrors: { alias: { message: "Type the other name." } },
         });
     });
 });

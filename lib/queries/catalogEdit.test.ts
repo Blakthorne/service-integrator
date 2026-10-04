@@ -30,13 +30,19 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 
 import {
     addCatalogEntry,
+    addCatalogHymnAlias,
+    addCatalogTuneAlias,
     createSong,
     deleteCatalogEntry,
     editCatalogEntry,
+    editCatalogHymn,
+    editCatalogTune,
     getMirroredPcoSong,
     getNewSongBooks,
     getNewSongFormData,
     moveCatalogEntry,
+    removeCatalogHymnAlias,
+    removeCatalogTuneAlias,
     unlinkCatalogSong,
 } from "./catalogEdit";
 
@@ -368,5 +374,39 @@ describe("the song page's entries, end to end", () => {
         expect(findCatalogSong(db, song)?.entries.map(({ label, position }) => [label, position])).toEqual([
             ["Chorus Book", 2],
         ]);
+    });
+});
+
+describe("the hymn and tune edits, end to end", () => {
+    test("renames a hymn and a tune, keeping what Planning Center titles still match, and edits their other names", () => {
+        // The mirror has "Abba, Father (PRITCHARD)", which matches the hymn's
+        // old title and names the tune's old name.
+        const { abbaFather, tunes, songs } = seed();
+        expect(
+            editCatalogHymn({ hymnId: abbaFather, title: "Abba Father", firstLine: "Abba, Father, we approach Thee", notes: null })
+        ).toEqual({ ok: true, hymnId: abbaFather, aliasKept: "Abba, Father", aliasDropped: null });
+        expect(
+            editCatalogTune({ tuneId: tunes.pritchard, name: "PRITCHARD TUNE", meter: "8.7.8.7.D", notes: null })
+        ).toMatchObject({ ok: true, aliasKept: "PRITCHARD" });
+        expect(addCatalogHymnAlias({ hymnId: abbaFather, alias: "Abba (Father)" })).toEqual({
+            ok: true,
+            alias: "Abba (Father)",
+        });
+        expect(removeCatalogHymnAlias({ hymnId: abbaFather, alias: "Father, We Adore You" })).toMatchObject({
+            ok: true,
+        });
+        expect(addCatalogTuneAlias({ tuneId: tunes.newBritain, alias: "PRICHARD" })).toMatchObject({
+            ok: false,
+            problems: [{ reason: "name-taken" }],
+        });
+        expect(removeCatalogTuneAlias({ tuneId: tunes.pritchard, alias: "prichard" })).toMatchObject({ ok: true });
+
+        const song = findCatalogSong(db, songs.abbaFatherPritchard);
+        expect(song?.hymn).toMatchObject({
+            title: "Abba Father",
+            firstLine: "Abba, Father, we approach Thee",
+            aliases: ["Abba (Father)", "Abba, Father"],
+        });
+        expect(song?.tune).toMatchObject({ name: "PRITCHARD TUNE", aliases: ["PRITCHARD"] });
     });
 });

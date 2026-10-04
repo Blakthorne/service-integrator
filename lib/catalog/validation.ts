@@ -699,3 +699,156 @@ export function validateEntryMove(
         ({ entry, direction }) => ({ entryId: entry, direction })
     );
 }
+
+// Hymns, tunes and their other names --------------------------------------------
+
+/** The longest first line a hymn takes. */
+export const FIRST_LINE_MAX_LENGTH = 200;
+
+/** The longest meter ("8.7.8.7.D", "C.M.") a tune takes. */
+export const METER_MAX_LENGTH = 50;
+
+/** The longest notes a hymn or tune takes. */
+export const NOTES_MAX_LENGTH = 2_000;
+
+/**
+ * Optional notes, which may run over several lines: line breaks made "\n",
+ * spaces at the ends of each line and blank lines at either end dropped,
+ * null when nothing is left, and refused past `NOTES_MAX_LENGTH` characters.
+ */
+function readNotes(formData: FormData, name: string): PartRead<string | null> {
+    const text = readString(formData, name)
+        .replace(/\r\n?/g, "\n")
+        .split("\n")
+        .map((line) => line.trim())
+        .join("\n")
+        .trim();
+    if (text.length > NOTES_MAX_LENGTH) {
+        return { ok: false, message: `Notes have at most ${formatCount(NOTES_MAX_LENGTH)} characters.` };
+    }
+    return { ok: true, value: text === "" ? null : text };
+}
+
+/** A hymn's title as typed: cleaned, and refused when blank, too long or without letters or digits. */
+function readTitle(formData: FormData, name: string, blank: string): PartRead<string> {
+    const title = cleanText(readString(formData, name));
+    if (title === "") {
+        return { ok: false, message: blank };
+    }
+    if (title.length > TITLE_MAX_LENGTH) {
+        return { ok: false, message: `A title has at most ${TITLE_MAX_LENGTH} characters.` };
+    }
+    if (normalizeTitle(title) === "") {
+        return { ok: false, message: "A title needs letters or numbers." };
+    }
+    return { ok: true, value: title };
+}
+
+/** A tune's name as typed: cleaned, and refused when blank or too long. */
+function readTuneName(formData: FormData, name: string, blank: string): PartRead<string> {
+    const text = cleanText(readString(formData, name));
+    if (text === "") {
+        return { ok: false, message: blank };
+    }
+    if (text.length > TUNE_NAME_MAX_LENGTH) {
+        return {
+            ok: false,
+            message: `A tune's name has at most ${TUNE_NAME_MAX_LENGTH} characters.`,
+        };
+    }
+    return { ok: true, value: text };
+}
+
+/** A hymn's title, first line and notes, as its Edit form gives them. */
+export interface HymnEditInput {
+    hymnId: number;
+    title: string;
+    firstLine: string | null;
+    notes: string | null;
+}
+
+/** The fields the song page's hymn Edit form posts. */
+export const HYMN_FIELDS = ["hymnId", "title", "firstLine", "notes"] as const;
+
+/** The parts of the hymn Edit form, each of which shows at most one error. */
+export type HymnPart = "hymn" | "title" | "firstLine" | "notes";
+
+/** Read the hymn Edit form: the hymn, its title, its first line and its notes. */
+export function validateHymnEdit(formData: FormData): FormCheck<HymnEditInput, HymnPart> {
+    return checkParts(
+        {
+            hymn: readCatalogId(formData, "hymnId", "That hymn is not in the catalog."),
+            title: readTitle(formData, "title", "Type the hymn's title."),
+            firstLine: readOptionalLine(formData, "firstLine", FIRST_LINE_MAX_LENGTH, "A first line"),
+            notes: readNotes(formData, "notes"),
+        },
+        ({ hymn, title, firstLine, notes }) => ({ hymnId: hymn, title, firstLine, notes })
+    );
+}
+
+/** A tune's name, meter and notes, as its Edit form gives them. */
+export interface TuneEditInput {
+    tuneId: number;
+    name: string;
+    meter: string | null;
+    notes: string | null;
+}
+
+/** The fields the tune page's Edit form posts. */
+export const TUNE_FIELDS = ["tuneId", "name", "meter", "notes"] as const;
+
+/** The parts of the tune Edit form, each of which shows at most one error. */
+export type TunePart = "tune" | "name" | "meter" | "notes";
+
+/** Read the tune Edit form: the tune, its name, its meter and its notes. */
+export function validateTuneEdit(formData: FormData): FormCheck<TuneEditInput, TunePart> {
+    return checkParts(
+        {
+            tune: readCatalogId(formData, "tuneId", "That tune is not in the catalog."),
+            name: readTuneName(formData, "name", "Type the tune's name."),
+            meter: readOptionalLine(formData, "meter", METER_MAX_LENGTH, "A meter"),
+            notes: readNotes(formData, "notes"),
+        },
+        ({ tune, name, meter, notes }) => ({ tuneId: tune, name, meter, notes })
+    );
+}
+
+/** The fields a hymn's Add and Remove other title forms post. */
+export const HYMN_ALIAS_FIELDS = ["hymnId", "alias"] as const;
+
+/** The fields a tune's Add and Remove other name forms post. */
+export const TUNE_ALIAS_FIELDS = ["tuneId", "alias"] as const;
+
+/** Another title of a hymn, to add or remove. */
+export interface HymnAliasInput {
+    hymnId: number;
+    alias: string;
+}
+
+/** Another name of a tune, to add or remove. */
+export interface TuneAliasInput {
+    tuneId: number;
+    alias: string;
+}
+
+/** Read a hymn's Add (or Remove) other title form: the hymn, and the title, as `validateHymnEdit` reads one. */
+export function validateHymnAlias(formData: FormData): FormCheck<HymnAliasInput, "hymn" | "alias"> {
+    return checkParts(
+        {
+            hymn: readCatalogId(formData, "hymnId", "That hymn is not in the catalog."),
+            alias: readTitle(formData, "alias", "Type the other title."),
+        },
+        ({ hymn, alias }) => ({ hymnId: hymn, alias })
+    );
+}
+
+/** Read a tune's Add (or Remove) other name form: the tune, and the name, as `validateTuneEdit` reads one. */
+export function validateTuneAlias(formData: FormData): FormCheck<TuneAliasInput, "tune" | "alias"> {
+    return checkParts(
+        {
+            tune: readCatalogId(formData, "tuneId", "That tune is not in the catalog."),
+            alias: readTuneName(formData, "alias", "Type the other name."),
+        },
+        ({ tune, alias }) => ({ tuneId: tune, alias })
+    );
+}
