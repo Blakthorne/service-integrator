@@ -35,6 +35,12 @@ export {
 } from "./planItems";
 export { fetchSongLibrary, getSong } from "./songs";
 export {
+    fetchSongIdsWithTag,
+    fetchSongTagGroups,
+    fetchSongTags,
+    type SongTag,
+} from "./tags";
+export {
     createItemNote,
     deleteItemNote,
     updateItemNote,

@@ -3,6 +3,8 @@ import type {
     ItemNote,
     ItemNoteCategory,
     PcoLibrarySong,
+    PcoTag,
+    PcoTagGroup,
     Plan,
     PlanItem,
     ServiceType,
@@ -16,6 +18,8 @@ import type {
     PcoResourceIdentifier,
     PcoServiceTypeResource,
     PcoSongResource,
+    PcoTagGroupResource,
+    PcoTagResource,
 } from "./resources";
 
 /** Map a raw service type to the domain shape. */
@@ -214,4 +218,59 @@ export function itemNotesByItem(
         );
     }
     return byItem;
+}
+
+/** Map a raw tag of group `groupId` to the domain shape; a missing name becomes "". */
+export function toPcoTag(resource: PcoTagResource, groupId: string): PcoTag {
+    return { id: resource.id, groupId, name: resource.attributes.name ?? "" };
+}
+
+function isTagResource(resource: PcoResourceIdentifier): resource is PcoTagResource {
+    return resource.type === "Tag";
+}
+
+/** By name without regard to case, then by id: the order a group's tags are given in. */
+function byName(a: PcoTag, b: PcoTag): number {
+    const [nameA, nameB] = [a.name.toLowerCase(), b.name.toLowerCase()];
+    if (nameA !== nameB) {
+        return nameA < nameB ? -1 : 1;
+    }
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * Map raw tag groups to the domain shape, in the order given, each with its
+ * tags from the resources included with them (`include=tags`), by name: the
+ * tags its `tags` relationship names, and any whose own `tag_group`
+ * relationship names it. A tag named but not included is left out, and so
+ * is an included one no group claims. A group may have several of its tags
+ * chosen unless Planning Center says `allow_multiple_selections: false`.
+ */
+export function toPcoTagGroups(
+    groups: readonly PcoTagGroupResource[],
+    included: readonly PcoResourceIdentifier[]
+): PcoTagGroup[] {
+    const tags = included.filter(isTagResource);
+    const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+    return groups.map((group) => {
+        const ids = new Set(group.relationships?.tags?.data?.map(({ id }) => id) ?? []);
+        for (const tag of tags) {
+            if (tag.relationships?.tag_group?.data?.id === group.id) {
+                ids.add(tag.id);
+            }
+        }
+        const { name, tags_for, allow_multiple_selections } = group.attributes;
+        return {
+            id: group.id,
+            name: name ?? "",
+            tagsFor: tags_for ?? "",
+            allowMultiple: allow_multiple_selections !== false,
+            tags: [...ids]
+                .flatMap((id) => {
+                    const tag = tagsById.get(id);
+                    return tag ? [toPcoTag(tag, group.id)] : [];
+                })
+                .sort(byName),
+        };
+    });
 }

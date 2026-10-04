@@ -11,6 +11,8 @@ import type {
     PcoPlanResource,
     PcoServiceTypeResource,
     PcoSongResource,
+    PcoTagGroupResource,
+    PcoTagResource,
     PcoToManyRelationship,
 } from "./resources";
 
@@ -285,4 +287,45 @@ export function itemNoteCategoryResource(
 /** An item's `item_notes` relationship naming these notes, for `itemResource`'s relationships. */
 export function noteLinks(...ids: string[]): { item_notes: PcoToManyRelationship<"ItemNote"> } {
     return { item_notes: { data: ids.map((id) => ({ type: "ItemNote" as const, id })) } };
+}
+
+/**
+ * A tag, by default "Hymn", whose `tag_group` relationship names group
+ * `groupId`; a null `groupId` leaves the relationship out.
+ */
+export function tagResource(
+    id: string,
+    attributes: Partial<PcoTagResource["attributes"]> = {},
+    groupId: string | null = null
+): PcoTagResource {
+    return {
+        type: "Tag",
+        id,
+        attributes: { name: "Hymn", ...attributes },
+        ...(groupId === null
+            ? {}
+            : { relationships: { tag_group: { data: { type: "TagGroup" as const, id: groupId } } } }),
+    };
+}
+
+/**
+ * A tag group, by default "Type", for songs, several of whose tags may be
+ * chosen, whose `tags` relationship names `tagIds`.
+ */
+export function tagGroupResource(
+    id: string,
+    attributes: Partial<PcoTagGroupResource["attributes"]> = {},
+    tagIds: readonly string[] = []
+): PcoTagGroupResource {
+    return {
+        type: "TagGroup",
+        id,
+        attributes: {
+            name: "Type",
+            tags_for: "song",
+            allow_multiple_selections: true,
+            ...attributes,
+        },
+        relationships: { tags: { data: tagIds.map((tagId) => ({ type: "Tag" as const, id: tagId })) } },
+    };
 }
