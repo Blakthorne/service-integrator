@@ -62,16 +62,3 @@ export default function NavIcon({ icon }: { icon: NavIconName }) {
     const Icon = ICONS[icon];
     return <Icon />;
 }
-
-/**
- * The classes of a nav link drawn as an icon: a 40 px square on phones (a
- * touch target), 36 px from `sm`, filled when it is the current page or
- * section, like the section links.
- */
-export function navIconLinkClassName(active: boolean): string {
-    return `inline-flex items-center justify-center size-10 sm:size-9 rounded-md transition-colors ${
-        active
-            ? "bg-blue-600 text-white"
-            : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-    }`;
-}

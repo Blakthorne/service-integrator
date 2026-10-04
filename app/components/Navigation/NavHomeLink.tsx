@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_HOME_ITEM, navAriaCurrent } from "@/lib/routes";
-import NavIcon, { navIconLinkClassName } from "./NavIcon";
+import NavIcon from "./NavIcon";
+import { NAV_FOCUS_CLASS, navIconLinkClassName } from "./classes";
 
 /**
  * The link to the dashboard (`NAV_HOME_ITEM`), first in the top bar. From
@@ -33,7 +34,7 @@ export default function NavHomeLink() {
             <Link
                 href={NAV_HOME_ITEM.href}
                 aria-current={ariaCurrent}
-                className="hidden md:flex flex-shrink-0 items-center text-lg font-semibold text-gray-900 dark:text-gray-100"
+                className={`hidden md:flex flex-shrink-0 items-center rounded-md text-lg font-semibold text-gray-900 dark:text-gray-100 ${NAV_FOCUS_CLASS}`}
             >
                 Service Integrator
             </Link>

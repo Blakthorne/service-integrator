@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_UTILITY_ITEMS, navAriaCurrent } from "@/lib/routes";
-import NavIcon, { navIconLinkClassName } from "./NavIcon";
+import NavIcon from "./NavIcon";
+import { navIconLinkClassName } from "./classes";
 
 /**
  * The icon links beside Sign Out (`NAV_UTILITY_ITEMS`). Each is named by its
