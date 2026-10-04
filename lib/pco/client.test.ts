@@ -1102,3 +1102,78 @@ describe("paced requests", () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 });
+
+describe("what every response tells the pacer", () => {
+    /** PCO's rate-limit headers. */
+    const rate = (limit: number, count: number, period = 20) => ({
+        "x-pco-api-request-rate-limit": String(limit),
+        "x-pco-api-request-rate-period": String(period),
+        "x-pco-api-request-rate-count": String(count),
+    });
+
+    test("an unpaced page load sets the budget", async () => {
+        const pacer = stubPcoPacer();
+        stubFetch(() => json({ data: {} }, { headers: rate(10, 1, 30) }));
+
+        await pcoFetch("/service_types/1", "serviceTypes");
+
+        expect(pacer.limits()).toEqual({ limit: 10, periodMs: 30_000, budget: 8 });
+    });
+
+    test("a failed response does too", async () => {
+        const pacer = stubPcoPacer();
+        stubFetch(() => json({ errors: [] }, { status: 404, headers: rate(10, 1) }));
+
+        await expect(pcoFetch("/service_types/1", "serviceTypes")).rejects.toMatchObject({
+            status: 404,
+        });
+        expect(pacer.limits().limit).toBe(10);
+    });
+
+    test("a busy window seen by a page load holds paced requests until it rolls over", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            json({ data: {} }, { headers: rate(100, call === 0 ? 85 : 1) })
+        );
+
+        await pcoFetch("/service_types/1", "serviceTypes");
+        const paced = pcoFetch("/service_types/1", "serviceTypes", { paced: true });
+
+        await vi.advanceTimersByTimeAsync(19_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(paced).resolves.toEqual({ data: {} });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test("a page load never waits, however busy the window", async () => {
+        stubPcoPacer();
+        const fetchMock = stubFetch(() => json({ data: {} }, { headers: rate(10, 25) }));
+
+        for (let i = 0; i < 3; i++) {
+            await pcoFetch("/service_types/1", "serviceTypes");
+        }
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    test("a paced pcoFetchAll slows down as soon as a page lowers the limit", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        // PCO drops to 10 per 20 s; the first page is already the 8th request.
+        const fetchMock = stubFetch((_url, call) => {
+            const links = call === 0 ? { next: `${BASE}/songs?offset=1` } : {};
+            return json(page([{ id: String(call) }], links), {
+                headers: rate(10, call === 0 ? 8 : 1),
+            });
+        });
+
+        const result = pcoFetchAll("/songs", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(19_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(result).resolves.toMatchObject({ data: [{ id: "0" }, { id: "1" }] });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+});

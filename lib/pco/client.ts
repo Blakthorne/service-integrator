@@ -223,17 +223,23 @@ async function request(
         redirect: "error",
     };
     const path = url.pathname + url.search;
+    const pacer = pcoPacer();
     // A fresh timeout for each attempt; it also bounds reading the body.
     const send = () =>
         fetch(url.href, { ...guarded, signal: AbortSignal.timeout(PCO_TIMEOUT_MS) });
-    // A paced attempt waits for its turn, so its timeout starts only once it
-    // is sent.
-    const attempt = paced ? () => pcoPacer().acquire().then(send) : send;
+    const attempt = async (): Promise<Response> => {
+        // A paced attempt waits for its turn, so its timeout starts only once
+        // it is sent.
+        const response = await (paced ? pacer.acquire().then(send) : send());
+        // Every response, paced or not, tells the pacer PCO's current limit
+        // and how much of this window is used.
+        pacer.observe(response.headers);
+        return response;
+    };
 
     try {
         let response = await attempt();
         if (!response.ok) {
-            // Headers are read only here: success mocks are bare { ok, json }.
             const delay = response.status === 429 ? retryDelayMs(response) : null;
             if (delay !== null) {
                 discardBody(response);
