@@ -40,7 +40,7 @@ describe("formRefusal", () => {
 
     test("says an error about a hidden id as the form's message, and still marks the fields", () => {
         expect(
-            formRefusal(
+            formRefusal<"entry" | "placement" | "variantNote">(
                 {
                     entry: { message: "That entry is not in the catalog." },
                     variantNote: { message: "A variant note has at most 100 characters." },
