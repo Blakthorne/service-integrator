@@ -9,7 +9,7 @@ import SubmitButton from "@/app/components/ui/SubmitButton";
 import { formatLastScheduled } from "@/lib/catalog/lastScheduled";
 import { LINK_SOURCE_DESCRIPTIONS, LINK_SOURCE_LABELS } from "@/lib/catalog/linkText";
 import type { MirroredPcoSong, SongLinkSource } from "@/lib/domain";
-import { IDLE_FORM } from "@/lib/forms";
+import { IDLE_FORM, formStateKey } from "@/lib/forms";
 import { routes } from "@/lib/routes";
 import CatalogCard, { CardField, LINK_CLASS, NoValue } from "../CatalogCard";
 import PcoSongWebLink from "../Reconcile/PcoSongWebLink";
@@ -186,7 +186,12 @@ export default function PcoLinkCard({ songId, songLabel, link }: PcoLinkCardProp
                         <input type="hidden" name="songId" value={songId} />
                         <input type="hidden" name="pcoSongId" value={link.pcoSongId} />
                         {state.status === "error" && (
-                            <p role="alert" className="mb-4 text-sm text-red-600 dark:text-red-400">
+                            // A new key per attempt: a repeated refusal is announced again.
+                            <p
+                                key={formStateKey(state)}
+                                role="alert"
+                                className="mb-4 text-sm text-red-600 dark:text-red-400"
+                            >
                                 {state.message}
                             </p>
                         )}

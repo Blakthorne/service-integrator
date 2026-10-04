@@ -7,7 +7,7 @@ import { createSongAction } from "@/app/(app)/catalog/songs/new/actions";
 import SubmitButton from "@/app/components/ui/SubmitButton";
 import type { HymnOption, TuneOption } from "@/lib/catalog/pickers";
 import type { NewSongDraft, NewSongValues } from "@/lib/catalog/validation";
-import { IDLE_FORM, fieldErrorOf } from "@/lib/forms";
+import { IDLE_FORM, fieldErrorOf, formStateKey } from "@/lib/forms";
 import type { NewSongFormBook, NewSongPcoSong } from "@/lib/queries/catalogEdit";
 import { routes } from "@/lib/routes";
 import EntryFields from "./EntryFields";
@@ -71,7 +71,10 @@ export default function SongForm({
             <input type="hidden" name="pcoSongId" value={linkable ? pcoSong.id : ""} />
             <input type="hidden" name="returnTo" value={returnTo ?? ""} />
             {state.status === "error" && (
+                // A new key per attempt, so a refusal repeated word for word
+                // is a new alert, which screen readers announce again.
                 <p
+                    key={formStateKey(state)}
                     role="alert"
                     className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
                 >

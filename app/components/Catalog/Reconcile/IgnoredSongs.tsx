@@ -9,7 +9,7 @@ import SubmitButton from "@/app/components/ui/SubmitButton";
 import { formatCount } from "@/lib/catalog/counts";
 import { unignoredMessage } from "@/lib/catalog/linkText";
 import type { MirroredPcoSong } from "@/lib/domain";
-import { IDLE_FORM } from "@/lib/forms";
+import { IDLE_FORM, formStateKey } from "@/lib/forms";
 import PcoSongWebLink from "./PcoSongWebLink";
 import RowNoticeText from "./RowNoticeText";
 import { useRowNotice } from "./useRowNotice";
@@ -70,7 +70,12 @@ function IgnoredRow({ song, onUnignored }: IgnoredRowProps) {
                 </form>
             </div>
             {state.status === "error" && (
-                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                // A new key per attempt: a repeated refusal is announced again.
+                <p
+                    key={formStateKey(state)}
+                    role="alert"
+                    className="text-sm text-red-600 dark:text-red-400"
+                >
                     {state.message}
                 </p>
             )}

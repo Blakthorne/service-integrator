@@ -78,6 +78,31 @@ export function formSuccess<F extends string = string>(
     return { status: "success", message, values };
 }
 
+/** The key each state object has been given, for `formStateKey`. */
+const stateKeys = new WeakMap<object, number>();
+
+/** The last key given out. */
+let lastStateKey = 0;
+
+/**
+ * A key that is new for every state an action returns, even one word for
+ * word like the last: give it to the state's `role="alert"` message as its
+ * React `key`. Screen readers announce an alert when it appears or its text
+ * changes, so a refusal repeated on the next attempt would otherwise be
+ * silent; with a new key React mounts a new element, which is announced.
+ * Each response is a new object, so the key follows the attempts, and the
+ * same object always has the same key, however often it renders.
+ */
+export function formStateKey(state: object): number {
+    let key = stateKeys.get(state);
+    if (key === undefined) {
+        lastStateKey += 1;
+        key = lastStateKey;
+        stateKeys.set(state, key);
+    }
+    return key;
+}
+
 /** The error of field `name` in `state`, if it has one. */
 export function fieldErrorOf<F extends string>(
     state: FormState<F>,

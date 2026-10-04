@@ -11,7 +11,7 @@ import SubmitButton from "@/app/components/ui/SubmitButton";
 import { undoneMessage } from "@/lib/catalog/linkText";
 import { songOptionLabel } from "@/lib/catalog/pickers";
 import type { AutoLinkedSong } from "@/lib/domain";
-import { IDLE_FORM } from "@/lib/forms";
+import { IDLE_FORM, formStateKey } from "@/lib/forms";
 import { routes } from "@/lib/routes";
 import { LINK_CLASS } from "../CatalogCard";
 import EntryLabels from "../EntryLabels";
@@ -88,7 +88,12 @@ function AutoLinkRow({ link, onUndone }: AutoLinkRowProps) {
                 </form>
             </div>
             {state.status === "error" && (
-                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                // A new key per attempt: a repeated refusal is announced again.
+                <p
+                    key={formStateKey(state)}
+                    role="alert"
+                    className="text-sm text-red-600 dark:text-red-400"
+                >
                     {state.message}
                 </p>
             )}

@@ -4,6 +4,7 @@ import {
     IDLE_FORM,
     fieldErrorOf,
     formError,
+    formStateKey,
     formSuccess,
     readId,
     readOptionalPositiveInteger,
@@ -78,6 +79,20 @@ describe("form states", () => {
         expect(fieldErrorOf(error, "hymn")).toBeUndefined();
         expect(fieldErrorOf<"tune">(formSuccess("Done."), "tune")).toBeUndefined();
         expect(fieldErrorOf<"tune">(IDLE_FORM, "tune")).toBeUndefined();
+    });
+});
+
+describe("formStateKey", () => {
+    test("is the same for one state, however often it is asked", () => {
+        const state = formError("The song was not added.");
+        expect(formStateKey(state)).toBe(formStateKey(state));
+    });
+
+    test("is new for each state, even one word for word like the last", () => {
+        const first = formError("Linked to another song.");
+        const second = formError("Linked to another song.");
+        expect(second).toEqual(first);
+        expect(formStateKey(second)).not.toBe(formStateKey(first));
     });
 });
 
