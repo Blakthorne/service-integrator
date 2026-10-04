@@ -47,12 +47,15 @@ export default function Segmented<T extends string>({
                         aria-pressed={isActive}
                         title={option.title}
                         onClick={() => onChange(option.value)}
-                        // The focus ring is inset: the group's overflow would
-                        // clip one drawn outside the button.
-                        className={`shrink-0 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                        // The focus ring is inset, since the group's overflow
+                        // would clip one drawn outside the button, so it needs
+                        // 3:1 against the button itself: white on the chosen
+                        // one (whose white text is 5.3:1 on blue-600), blue on
+                        // the others.
+                        className={`shrink-0 whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset ${
                             isActive
-                                ? "bg-blue-500 text-white"
-                                : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                ? "bg-blue-600 text-white focus-visible:ring-white"
+                                : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus-visible:ring-blue-600 dark:focus-visible:ring-blue-400"
                         }`}
                     >
                         {option.label}

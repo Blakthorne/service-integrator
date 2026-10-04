@@ -2,10 +2,15 @@
 
 import { useFormStatus } from "react-dom";
 
+/**
+ * Each variant's colours. White text needs 4.5:1 against the button: blue-600
+ * gives 5.3:1, red-600 4.8:1. The focus ring sits outside the button, so it
+ * needs 3:1 against the page: blue-600 on white, blue-400 on dark grey.
+ */
 const VARIANT_CLASSES = {
     primary: {
-        colour: "bg-blue-500 focus:ring-blue-500",
-        hover: "hover:bg-blue-600",
+        colour: "bg-blue-600 focus:ring-blue-600 dark:focus:ring-blue-400",
+        hover: "hover:bg-blue-700",
     },
     danger: {
         colour: "bg-red-600 focus:ring-red-500",

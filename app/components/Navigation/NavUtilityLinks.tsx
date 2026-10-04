@@ -55,7 +55,7 @@ export default function NavUtilityLinks() {
                         aria-current={ariaCurrent}
                         className={`inline-flex items-center justify-center size-10 sm:size-9 rounded-md transition-colors ${
                             ariaCurrent !== undefined
-                                ? "bg-blue-500 text-white"
+                                ? "bg-blue-600 text-white"
                                 : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                         }`}
                     >
