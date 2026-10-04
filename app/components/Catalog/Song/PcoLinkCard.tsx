@@ -6,6 +6,7 @@ import { unlinkSongAction, type LinkActionState } from "@/app/(app)/catalog/reco
 import Dialog from "@/app/components/ui/Dialog";
 import LocalTime from "@/app/components/ui/LocalTime";
 import SubmitButton from "@/app/components/ui/SubmitButton";
+import { buttonClasses } from "@/app/components/ui/buttonClasses";
 import { formatLastScheduled } from "@/lib/catalog/lastScheduled";
 import { LINK_SOURCE_DESCRIPTIONS, LINK_SOURCE_LABELS } from "@/lib/catalog/linkText";
 import { createdSongStage, describeCreatedSong } from "@/lib/catalog/newPcoSong";
@@ -17,7 +18,7 @@ import CatalogCard, { CardField, NoValue } from "../CatalogCard";
 import PcoSongWebLink from "../Reconcile/PcoSongWebLink";
 import AddToPlanAction from "./AddToPlanAction";
 import CreatePcoSongForm, { type CreatedPcoSong } from "./CreatePcoSongForm";
-import { SECONDARY_BUTTON_CLASS, WARNING_CLASS } from "./styles";
+import { WARNING_CLASS } from "./styles";
 
 /**
  * The card's links to Reconcile, each in a line of text: underlined, since
@@ -272,7 +273,7 @@ export default function PcoLinkCard({
                                 ref={unlinkButtonRef}
                                 type="button"
                                 onClick={() => setOpen(true)}
-                                className={SECONDARY_BUTTON_CLASS}
+                                className={buttonClasses("secondary")}
                             >
                                 Unlink
                             </button>
@@ -306,7 +307,7 @@ export default function PcoLinkCard({
                             <button
                                 type="button"
                                 onClick={() => setOpen(false)}
-                                className={SECONDARY_BUTTON_CLASS}
+                                className={buttonClasses("secondary")}
                             >
                                 Cancel
                             </button>

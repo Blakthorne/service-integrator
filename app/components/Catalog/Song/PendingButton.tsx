@@ -1,6 +1,6 @@
 "use client";
 
-import { PRIMARY_BUTTON_CLASS, primaryButtonState } from "./styles";
+import { buttonClasses } from "@/app/components/ui/buttonClasses";
 
 interface PendingButtonProps {
     /** True while its action runs: it says `pendingLabel` and ignores clicks. */
@@ -18,7 +18,8 @@ interface PendingButtonProps {
 /**
  * The primary button of an action that waits on Planning Center: a plain
  * button (`type="button"`) that calls its action from its click, with the
- * pending state passed in (convention 15). Not a submit button, so Enter
+ * pending state passed in (convention 15), and the look of every solid
+ * button (`ui/buttonClasses`). Not a submit button, so Enter
  * in a field never writes to Planning Center: only the button does.
  *
  * While pending it is `aria-disabled`, not `disabled`: a disabled button
@@ -44,7 +45,7 @@ export default function PendingButton({
                     onClick();
                 }
             }}
-            className={`${PRIMARY_BUTTON_CLASS} ${primaryButtonState(pending)}`}
+            className={buttonClasses("primary", pending)}
         >
             {pending ? pendingLabel : children}
         </button>

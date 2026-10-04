@@ -6,6 +6,7 @@ import {
     type CreateInPlanningCenterState,
 } from "@/app/(app)/catalog/songs/[songId]/actions";
 import Dialog from "@/app/components/ui/Dialog";
+import { buttonClasses } from "@/app/components/ui/buttonClasses";
 import { hasCreditNameProblems, previewCredits } from "@/lib/catalog/creditsEditor";
 import {
     CCLI_SONG_NUMBER_HINT,
@@ -28,7 +29,7 @@ import { FieldErrorText, HINT_CLASS, LABEL_CLASS, TextField } from "../SongForm/
 import CreditNamesEditor from "./CreditNamesEditor";
 import CreditsPreviewBox, { Sample } from "./CreditsPreviewBox";
 import PendingButton from "./PendingButton";
-import { ALERT_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS, primaryButtonState } from "./styles";
+import { ALERT_CLASS } from "./styles";
 
 /** A song Planning Center now has, as the action said. */
 export type CreatedPcoSong = Extract<CreateInPlanningCenterState, { ok: true }>;
@@ -81,7 +82,7 @@ function CreateConfirmation({ song, pending, onCancel, onConfirm }: CreateConfir
                         }
                     }}
                     aria-disabled={pending}
-                    className={SECONDARY_BUTTON_CLASS}
+                    className={buttonClasses("secondary", pending)}
                 >
                     Cancel
                 </button>
@@ -297,7 +298,7 @@ export default function CreatePcoSongForm({ songId, title, settings, onCreated }
                         {failure.message}
                     </p>
                 )}
-                <button ref={buttonRef} type="submit" className={`${PRIMARY_BUTTON_CLASS} ${primaryButtonState(false)}`}>
+                <button ref={buttonRef} type="submit" className={buttonClasses("primary")}>
                     Create in Planning Center…
                 </button>
             </form>

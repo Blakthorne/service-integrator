@@ -1,22 +1,8 @@
 /**
- * The looks the song page's Planning Center cards share: their buttons and
- * the boxes that say how an action went. White text is 5.3:1 on blue-600,
- * and a ring drawn outside a button is 3:1 against the card (blue-600 on
- * white, blue-400 on dark grey).
+ * The looks the song page's Planning Center cards share: the small buttons
+ * inside their forms, and the boxes that say how an action went. Their
+ * solid buttons take their look from `ui/buttonClasses`, as every page's do.
  */
-
-/** The main action of a card or a dialog, white on blue-600. Add `primaryButtonState(pending)`. */
-export const PRIMARY_BUTTON_CLASS =
-    "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors";
-
-/** A primary button's hover and pointer, or how it looks while its action runs. */
-export function primaryButtonState(pending: boolean): string {
-    return pending ? "opacity-60 cursor-not-allowed" : "hover:bg-blue-700 cursor-pointer";
-}
-
-/** A quieter action beside the main one: Cancel, Back, Unlink. */
-export const SECONDARY_BUTTON_CLASS =
-    "px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer aria-disabled:opacity-60 aria-disabled:cursor-not-allowed";
 
 /** A small button inside a form (Split into names): white or the dark card's grey. */
 export const SMALL_BUTTON_CLASS =

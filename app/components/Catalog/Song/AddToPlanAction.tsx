@@ -9,6 +9,7 @@ import {
     type UpcomingPlansState,
 } from "@/app/(app)/catalog/songs/[songId]/actions";
 import Dialog from "@/app/components/ui/Dialog";
+import { buttonClasses } from "@/app/components/ui/buttonClasses";
 import {
     ADD_TO_PLAN_NO_ANSWER,
     NO_UPCOMING_PLANS,
@@ -25,13 +26,7 @@ import { pcoWebUrls, routes } from "@/lib/routes";
 import { LINK_CLASS } from "../CatalogCard";
 import { HINT_CLASS } from "../SongForm/Fields";
 import PendingButton from "./PendingButton";
-import {
-    ALERT_CLASS,
-    PRIMARY_BUTTON_CLASS,
-    SECONDARY_BUTTON_CLASS,
-    WARNING_CLASS,
-    primaryButtonState,
-} from "./styles";
+import { ALERT_CLASS, WARNING_CLASS } from "./styles";
 
 /** The plans the picker offers, and how many service types' plans could not be read. */
 interface PlanChoices {
@@ -314,7 +309,7 @@ export default function AddToPlanAction({ pcoSongId, songLabel, pcoTitle }: AddT
                 ref={buttonRef}
                 type="button"
                 onClick={openDialog}
-                className={`${PRIMARY_BUTTON_CLASS} ${primaryButtonState(false)}`}
+                className={buttonClasses("primary")}
             >
                 Add to a plan…
             </button>
@@ -401,7 +396,7 @@ function AddToPlanBody({
         case "loading":
             return (
                 <Buttons>
-                    <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                    <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Cancel
                     </button>
                 </Buttons>
@@ -419,13 +414,13 @@ function AddToPlanBody({
                         {state.failure.message}
                     </p>
                     <Buttons>
-                        <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                        <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                             Close
                         </button>
                         <button
                             type="button"
                             onClick={onRetry}
-                            className={`${PRIMARY_BUTTON_CLASS} ${primaryButtonState(false)}`}
+                            className={buttonClasses("primary")}
                         >
                             Try again
                         </button>
@@ -446,7 +441,7 @@ function AddToPlanBody({
                         </p>
                         {unread && <p className={`mt-3 ${WARNING_CLASS}`}>{unread}</p>}
                         <Buttons>
-                            <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                            <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                                 Close
                             </button>
                         </Buttons>
@@ -462,13 +457,13 @@ function AddToPlanBody({
                         pickerRef={pickerRef}
                     />
                     <Buttons>
-                        <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                        <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                             Cancel
                         </button>
                         <button
                             type="button"
                             onClick={() => onContinue(state.choices)}
-                            className={`${PRIMARY_BUTTON_CLASS} ${primaryButtonState(false)}`}
+                            className={buttonClasses("primary")}
                         >
                             Continue
                         </button>
@@ -501,7 +496,7 @@ function AddToPlanBody({
                                 }
                             }}
                             aria-disabled={state.adding}
-                            className={SECONDARY_BUTTON_CLASS}
+                            className={buttonClasses("secondary", state.adding)}
                         >
                             Back
                         </button>
@@ -535,13 +530,13 @@ function AddToPlanBody({
                         has the song already.
                     </p>
                     <Buttons>
-                        <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                        <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                             Close
                         </button>
                         <button
                             type="button"
                             onClick={() => onConfirmAgain(state.choices, state.plan)}
-                            className={SECONDARY_BUTTON_CLASS}
+                            className={buttonClasses("secondary")}
                         >
                             Back
                         </button>
@@ -572,7 +567,7 @@ function AddToPlanBody({
                                 }
                             }}
                             aria-disabled={state.adding}
-                            className={SECONDARY_BUTTON_CLASS}
+                            className={buttonClasses("secondary", state.adding)}
                         >
                             Close
                         </button>
@@ -612,7 +607,7 @@ function AddToPlanBody({
                         </Link>
                     </p>
                     <Buttons>
-                        <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                        <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                             Done
                         </button>
                     </Buttons>
