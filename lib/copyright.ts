@@ -17,8 +17,8 @@ export type CopyrightItem = Pick<PlanItemWithSong, "itemType" | "sequence"> & {
  * `"<title>" <author line>.`, the copyright line, then the CCLI footer.
  *
  * Moved verbatim from SongCopyright.tsx; copyright.test.ts pins its behavior,
- * quirks included (for example "© ." for an empty copyright and ".." after an
- * author that already ends in a period).
+ * quirks included (for example ".." after an author that already ends in a
+ * period). A missing, empty or whitespace-only copyright is "Public Domain.".
  */
 export function formatCopyrightText(song: CopyrightSong): string {
     // PCO can send a null author; treat it like an empty one ("Unknown").
@@ -47,10 +47,11 @@ export function formatCopyrightText(song: CopyrightSong): string {
         }
     }
 
-    // Format copyright line with conditional © symbol
-    let copyrightLine = song.copyright && song.copyright.trim();
+    // Format copyright line with conditional © symbol. A missing, empty or
+    // whitespace-only copyright counts as public domain.
+    let copyrightLine = song.copyright?.trim();
 
-    if (copyrightLine == null || copyrightLine === undefined) {
+    if (!copyrightLine) {
         copyrightLine = "Public Domain.";
     } else {
         if (!copyrightLine.endsWith(".")) {

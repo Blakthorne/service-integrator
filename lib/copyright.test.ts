@@ -137,16 +137,11 @@ describe("formatCopyrightText: copyright line", () => {
         expect(copyrightLineFor(undefined, "Y")).toBe("Public Domain.");
     });
 
-    test("QUIRK: an empty copyright renders as '© .' (what it should say is a product decision)", () => {
-        expect(copyrightLineFor("")).toBe("© .");
-    });
-
-    test("QUIRK: a whitespace-only copyright also renders as '© .'", () => {
-        expect(copyrightLineFor("   ")).toBe("© .");
-    });
-
-    test("QUIRK: an admin after an empty copyright follows the '© .'", () => {
-        expect(copyrightLineFor("", "Y")).toBe("© . Admin. by Y.");
+    test("an empty or whitespace-only copyright is 'Public Domain.' and ignores the admin, like a missing one", () => {
+        expect(copyrightLineFor("")).toBe("Public Domain.");
+        expect(copyrightLineFor("   ")).toBe("Public Domain.");
+        expect(copyrightLineFor("", "Y")).toBe("Public Domain.");
+        expect(copyrightLineFor("   ", "Y")).toBe("Public Domain.");
     });
 
     test("'public domain' in any case gets no © and ends with exactly one '.'", () => {
