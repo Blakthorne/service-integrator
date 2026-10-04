@@ -14,6 +14,7 @@ import {
     type SyncRunOutcome,
 } from "@/lib/db/syncRuns";
 import { describePcoSongsSync, syncPcoSongs } from "@/lib/queries/sync";
+import { describeTagsSync, syncTags } from "@/lib/queries/tags";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -86,10 +87,33 @@ export const pcoSongsJob: Job = {
 };
 
 /**
- * The jobs `startJobs()` schedules. A new job is one entry here, as the
- * song sync is.
+ * The Planning Center song tag sync, hourly and soon after boot: mirror the
+ * song tag groups, their tags and which songs have each (see `syncTags`).
+ *
+ * It runs after the song sync, so that a song that sync adds gets its tags
+ * at once rather than an hour later. The scheduler checks this job just
+ * after `pcoSongsJob`, which comes before it in `JOBS`, so the song sync
+ * that check started is still in progress: `runJob` joins it, and this job
+ * waits for it to end. With none in progress (on demand), it runs one
+ * first. A song sync that fails does not stop the tags sync: the songs the
+ * mirror lacks get their tags from a later one.
  */
-export const JOBS: readonly Job[] = [backupJob, pcoSongsJob];
+export const tagsJob: Job = {
+    kind: "tags",
+    everyMs: HOUR_MS,
+    atBoot: true,
+    run: async (db) => {
+        await runJob(pcoSongsJob, () => db);
+        const counts = await syncTags(db);
+        return { message: describeTagsSync(counts), counts };
+    },
+};
+
+/**
+ * The jobs `startJobs()` schedules, checked in this order. A new job is one
+ * entry here, as the song sync is.
+ */
+export const JOBS: readonly Job[] = [backupJob, pcoSongsJob, tagsJob];
 
 /**
  * What `runJob` resolves to: the run it started or joined, as recorded
