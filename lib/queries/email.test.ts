@@ -30,7 +30,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
     getDb,
 }));
 
-import { NO_RECIPIENTS_MESSAGE, previewPlanEmail, sendPlanEmail } from "./email";
+import { NO_RECIPIENTS_MESSAGE, getEmailStatus, previewPlanEmail, sendPlanEmail } from "./email";
 
 const MORNING = "1405391";
 const PLAN = "81234567";
@@ -345,5 +345,28 @@ describe("sendPlanEmail", () => {
         });
         expect(fetchMock).not.toHaveBeenCalled();
         expect(sendMail).not.toHaveBeenCalled();
+    });
+});
+
+describe("getEmailStatus", () => {
+    test("says email is set up when both variables are, and connects to nothing", () => {
+        const fetchMock = stubFetchRoutes({});
+        expect(getEmailStatus()).toEqual({ configured: true });
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("lists the variables that are not set, or not usable", () => {
+        vi.stubEnv("SMTP_URL", "");
+        expect(getEmailStatus()).toEqual({ configured: false, missing: ["SMTP_URL"] });
+
+        vi.stubEnv("SMTP_URL", "https://smtp.example.org");
+        vi.stubEnv("EMAIL_FROM", "not-an-address");
+        expect(getEmailStatus()).toEqual({ configured: false, missing: ["SMTP_URL", "EMAIL_FROM"] });
+    });
+
+    test("never gives the URL, or the password in it", () => {
+        vi.stubEnv("EMAIL_FROM", "");
+        expect(JSON.stringify(getEmailStatus())).not.toContain(PASSWORD);
+        expect(JSON.stringify(getEmailStatus())).not.toContain("smtp.example.org");
     });
 });

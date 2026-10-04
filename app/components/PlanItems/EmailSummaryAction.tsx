@@ -14,13 +14,13 @@ import {
     EMAIL_PENDING_TEXT,
     planEmailOutcomeView,
     planEmailPreviewView,
-    type EmailSetupText,
     type PlanEmailOutcomeView,
     type PlanEmailPreviewView,
 } from "@/lib/planEmailText";
 import type { PlanEmailPreview } from "@/lib/queries/email";
 import { routes } from "@/lib/routes";
 import { FormNotice } from "../Catalog/SongForm/Fields";
+import EmailSetupNotice from "../Settings/EmailSetupNotice";
 import {
     DialogAnswer,
     DialogButtons,
@@ -61,28 +61,6 @@ const SUMMARY_TONES = {
     warning: { alert: true, quiet: true },
     error: { alert: true, quiet: false },
 } as const;
-
-/** A notice that email is not set up on the server: which variables, what they hold, what to do. */
-function SetupNotice({ setup }: { setup: EmailSetupText }) {
-    return (
-        <FormNotice tone="warning">
-            <p>{setup.headline}</p>
-            {setup.variables.length > 0 && (
-                <>
-                    <p>Not set, or not usable:</p>
-                    <ul role="list" className="list-disc space-y-1 pl-5">
-                        {setup.variables.map(({ name, help }) => (
-                            <li key={name} className="break-words">
-                                <code className="font-mono font-semibold">{name}</code>: {help}
-                            </li>
-                        ))}
-                    </ul>
-                </>
-            )}
-            <p>{setup.howTo}</p>
-        </FormNotice>
-    );
-}
 
 /** A link to Settings, where the recipients are set. */
 function SettingsLink() {
@@ -163,7 +141,7 @@ function EmailPreviewBody({
             {view.notices.map((notice) => (
                 <div key={notice.kind} className="mt-3">
                     {notice.kind === "not-configured" ? (
-                        <SetupNotice setup={notice.setup} />
+                        <EmailSetupNotice setup={notice.setup} />
                     ) : (
                         <FormNotice tone="warning">
                             <p>{notice.message}</p>
@@ -248,7 +226,7 @@ function EmailResultBody({
             </DialogAnswer>
             {view.setup && (
                 <div className="mt-3">
-                    <SetupNotice setup={view.setup} />
+                    <EmailSetupNotice setup={view.setup} />
                 </div>
             )}
             {view.settingsLink && (

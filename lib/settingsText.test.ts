@@ -25,6 +25,7 @@ import {
     EMAIL_SUBJECT_HINT,
     EMAIL_SUBJECT_SAMPLE_PLAN,
     NO_RECIPIENTS_PREVIEW,
+    creditPairPhraseHint,
     creditPhraseHint,
     creditRoleLegend,
     describeRederivedCredits,
@@ -281,6 +282,16 @@ describe("creditPhraseHint", () => {
         expect(creditPhraseHint("Words")).toBe('Left blank, it reads "Words by".');
         expect(creditPhraseHint("  Arr. ")).toBe('Left blank, it reads "Arr. by".');
         expect(creditPhraseHint("")).toBe('Left blank, it reads "the role by".');
+    });
+});
+
+describe("creditPairPhraseHint", () => {
+    test("says what a blank phrase for the first two roles together prints", () => {
+        expect(creditPairPhraseHint("Words", "Music")).toBe('Left blank, it reads "Words and Music by".');
+        expect(creditPairPhraseHint(" Lyrics ", "Tune")).toBe('Left blank, it reads "Lyrics and Tune by".');
+        expect(creditPairPhraseHint("", " ")).toBe(
+            'Left blank, it reads "the first role and the second role by".'
+        );
     });
 });
 

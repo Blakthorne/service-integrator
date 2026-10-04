@@ -290,6 +290,16 @@ export function creditPhraseHint(role: string): string {
     return `Left blank, it reads "${name === "" ? "the role" : name} by".`;
 }
 
+/**
+ * What a blank phrase for the first two roles together does, under its
+ * field: `Left blank, it reads "Words and Music by".`
+ */
+export function creditPairPhraseHint(firstRole: string, secondRole: string): string {
+    const first = firstRole.trim() === "" ? "the first role" : firstRole.trim();
+    const second = secondRole.trim() === "" ? "the second role" : secondRole.trim();
+    return `Left blank, it reads "${first} and ${second} by".`;
+}
+
 /** The names a credit preview gives each role in turn: no two next to each other are the same. */
 const SAMPLE_CREDIT_NAMES = ["Isaac Watts", "Lowell Mason", "John Doe", "Jane Roe", "Sam Poe"];
 

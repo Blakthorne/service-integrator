@@ -6,6 +6,7 @@ import {
     EmailError,
     emailStatus,
     sendEmail,
+    type EmailStatus,
     type EmailVariable,
     type SendEmailOptions,
 } from "@/lib/email";
@@ -20,6 +21,16 @@ import { getSettings } from "./settings";
  * records without the email's text. The email is `buildPlanEmail`'s
  * (lib/planEmail.ts), and lib/email.ts sends it.
  */
+
+/**
+ * Whether email is set up on the server, for Settings' Email card:
+ * `{ configured: true }`, or the variables (`SMTP_URL`, `EMAIL_FROM`) that
+ * are not set or not usable. Reads only the environment: it connects to
+ * nothing and gives no value.
+ */
+export function getEmailStatus(): EmailStatus {
+    return emailStatus();
+}
 
 /** What the Email dialog shows before anything is sent. */
 export interface PlanEmailPreview {
