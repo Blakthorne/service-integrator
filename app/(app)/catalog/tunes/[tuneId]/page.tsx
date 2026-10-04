@@ -33,7 +33,7 @@ export default async function CatalogTunePage({ params }: CatalogTunePageProps) 
     const tune = getCatalogTune(tuneId) ?? notFound();
 
     return (
-        <>
+        <div className="w-full max-w-4xl mx-auto">
             <PageHeader
                 title={tune.name}
                 description={tune.meter ?? undefined}
@@ -63,6 +63,6 @@ export default async function CatalogTunePage({ params }: CatalogTunePageProps) 
                     />
                 </CatalogCard>
             </div>
-        </>
+        </div>
     );
 }

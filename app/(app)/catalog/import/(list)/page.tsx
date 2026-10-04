@@ -21,7 +21,7 @@ export default function ImportPage() {
     const counts = getCatalogCounts();
 
     return (
-        <div className="font-sans">
+        <div className="font-sans w-full max-w-4xl mx-auto">
             <PageHeader
                 title="Import"
                 description="Seed the catalog from hymns.json, and review each run."

@@ -104,20 +104,23 @@ export default async function ImportRunPage({
 
     return (
         <div className="font-sans">
-            <PageHeader
-                title={label}
-                description={
-                    <>
-                        {run.sourceName} · previewed <LocalTime iso={run.at} />{" "}
-                        <ImportStatusBadge status={run.status} />
-                    </>
-                }
-                breadcrumbs={[
-                    { label: "Catalog", href: routes.catalog() },
-                    { label: "Import", href: routes.catalogImport() },
-                    { label },
-                ]}
-            />
+            {/* The header is as wide as the section nav; the report is wider. */}
+            <div className="w-full max-w-4xl mx-auto">
+                <PageHeader
+                    title={label}
+                    description={
+                        <>
+                            {run.sourceName} · previewed <LocalTime iso={run.at} />{" "}
+                            <ImportStatusBadge status={run.status} />
+                        </>
+                    }
+                    breadcrumbs={[
+                        { label: "Catalog", href: routes.catalog() },
+                        { label: "Import", href: routes.catalogImport() },
+                        { label },
+                    ]}
+                />
+            </div>
             <div className="w-full max-w-5xl mx-auto space-y-6">
                 <RunNotice run={run} applyRefusal={applyRefusal} />
                 <SeedReport report={run.report} sourceName={run.sourceName} />

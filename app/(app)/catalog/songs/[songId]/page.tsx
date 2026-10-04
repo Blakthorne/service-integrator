@@ -36,7 +36,7 @@ export default async function CatalogSongPage({ params }: CatalogSongPageProps) 
     const tune = song.tune;
 
     return (
-        <>
+        <div className="w-full max-w-4xl mx-auto">
             <PageHeader
                 title={song.hymn.title}
                 description={
@@ -51,6 +51,6 @@ export default async function CatalogSongPage({ params }: CatalogSongPageProps) 
                 ]}
             />
             <SongDetailView song={song} books={books} />
-        </>
+        </div>
     );
 }

@@ -14,7 +14,7 @@ export default function BooksPage() {
     const books = getCatalogBooks();
 
     return (
-        <div className="font-sans">
+        <div className="font-sans w-full max-w-4xl mx-auto">
             <PageHeader
                 title="Books"
                 description="The hymnals and other books the catalog indexes."

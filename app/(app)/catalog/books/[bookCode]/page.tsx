@@ -36,7 +36,7 @@ export default async function BookPage({
     const hasNumbers = rows.some((row) => row.number !== null);
 
     return (
-        <div className="font-sans">
+        <div className="font-sans w-full max-w-4xl mx-auto">
             <PageHeader
                 title={book.name}
                 description={`${book.code} · ${book.numbered ? "Numbered" : "Not numbered"} · ${formatEntryCount(rows.length)}`}

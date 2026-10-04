@@ -20,7 +20,7 @@ export default function CatalogTunesPage() {
     const tunes = getCatalogTunes().map(toCatalogTuneRow);
 
     return (
-        <>
+        <div className="w-full max-w-4xl mx-auto">
             <PageHeader
                 title="Tunes"
                 description="Every tune in the catalog, with how many songs use it."
@@ -48,6 +48,6 @@ export default function CatalogTunesPage() {
                     <CatalogTunesView tunes={tunes} />
                 </Suspense>
             )}
-        </>
+        </div>
     );
 }

@@ -27,7 +27,7 @@ export default function CatalogPage() {
     }));
 
     return (
-        <>
+        <div className="w-full max-w-4xl mx-auto">
             <PageHeader
                 title="Catalog"
                 description="Every song in the hymnals: search by title, tune or number."
@@ -51,6 +51,6 @@ export default function CatalogPage() {
                     <CatalogSongsView songs={songs} books={books} />
                 </Suspense>
             )}
-        </>
+        </div>
     );
 }
