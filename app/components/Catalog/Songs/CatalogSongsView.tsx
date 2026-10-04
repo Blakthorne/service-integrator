@@ -134,7 +134,7 @@ export default function CatalogSongsView({
             bookCodes
         );
         downloadCsv(
-            catalogCsvFilename({ q, book, linked, used }, new Date()),
+            catalogCsvFilename({ q, book, linked, used, mark }, new Date()),
             catalogSongsCsv(matching, books)
         );
     }

@@ -75,30 +75,30 @@ const withDescant = song("Come, Thou Almighty King", "ITALIAN HYMN", [
 const notInABook = song("Unplaced Hymn", "SOMEWHERE", []);
 
 describe("catalogSongsCsvRecords", () => {
-    test("starts with the header: title, tune, a column for each book, linked, last scheduled", () => {
+    test("starts with the header: title, tune, a column for each book, linked, last scheduled, to learn", () => {
         expect(catalogSongsCsvRecords([], BOOKS)).toEqual([
-            ["Title", "Tune", "Rejoice Hymns", "Great Hymns of the Faith", "Chorus Book", "Linked", "Last scheduled"],
+            ["Title", "Tune", "Rejoice Hymns", "Great Hymns of the Faith", "Chorus Book", "Linked", "Last scheduled", "To learn"],
         ]);
     });
 
     test("has a header with no book columns when there are no books", () => {
         expect(catalogSongsCsvRecords([amazingGrace], [])).toEqual([
-            ["Title", "Tune", "Linked", "Last scheduled"],
-            ["Amazing Grace", "NEW BRITAIN", "yes", "2026-09-27"],
+            ["Title", "Tune", "Linked", "Last scheduled", "To learn"],
+            ["Amazing Grace", "NEW BRITAIN", "yes", "2026-09-27", "no"],
         ]);
     });
 
     test("has a record for each song, in the order given", () => {
         expect(catalogSongsCsvRecords([comeThouFount, amazingGrace], BOOKS).slice(1)).toEqual([
-            ["Come, Thou Fount of Every Blessing", "NETTLETON", "", "G-60", "", "yes", ""],
-            ["Amazing Grace", "NEW BRITAIN", "R-108", "G-247", "", "yes", "2026-09-27"],
+            ["Come, Thou Fount of Every Blessing", "NETTLETON", "", "G-60", "", "yes", "", "no"],
+            ["Amazing Grace", "NEW BRITAIN", "R-108", "G-247", "", "yes", "2026-09-27", "no"],
         ]);
     });
 
     test("leaves the tune empty when it is unknown, and a book empty when the song is not in it", () => {
         expect(catalogSongsCsvRecords([doxology, notInABook], BOOKS).slice(1)).toEqual([
-            ["Doxology", "", "", "G-Front Cover", "", "no", ""],
-            ["Unplaced Hymn", "SOMEWHERE", "", "", "", "no", ""],
+            ["Doxology", "", "", "G-Front Cover", "", "no", "", "no"],
+            ["Unplaced Hymn", "SOMEWHERE", "", "", "", "no", "", "no"],
         ]);
     });
 
@@ -111,6 +111,7 @@ describe("catalogSongsCsvRecords", () => {
             "Chorus Book",
             "no",
             "",
+            "no",
         ]);
     });
 
@@ -125,10 +126,15 @@ describe("catalogSongsCsvRecords", () => {
                 record.slice(2)
             )
         ).toEqual([
-            ["Linked", "Last scheduled"],
-            ["yes", ""],
-            ["yes", "2026-01-04"],
+            ["Linked", "Last scheduled", "To learn"],
+            ["yes", "", "no"],
+            ["yes", "2026-01-04", "no"],
         ]);
+    });
+
+    test("writes whether the song is marked to learn", () => {
+        const marked = song("Be Thou My Vision", "SLANE", [], { marks: ["to-learn"] });
+        expect(catalogSongsCsvRecords([marked], [])[1]).toEqual(["Be Thou My Vision", "SLANE", "no", "", "yes"]);
     });
 });
 
@@ -136,9 +142,9 @@ describe("catalogSongsCsv", () => {
     test("writes the records as CSV: quoted where it must be, with CRLF line ends", () => {
         expect(catalogSongsCsv([comeThouFount, doxology], BOOKS)).toBe(
             [
-                "Title,Tune,Rejoice Hymns,Great Hymns of the Faith,Chorus Book,Linked,Last scheduled",
-                '"Come, Thou Fount of Every Blessing",NETTLETON,,G-60,,yes,',
-                "Doxology,,,G-Front Cover,,no,",
+                "Title,Tune,Rejoice Hymns,Great Hymns of the Faith,Chorus Book,Linked,Last scheduled,To learn",
+                '"Come, Thou Fount of Every Blessing",NETTLETON,,G-60,,yes,,no',
+                "Doxology,,,G-Front Cover,,no,,no",
                 "",
             ].join("\r\n")
         );
@@ -146,14 +152,14 @@ describe("catalogSongsCsv", () => {
 
     test("writes just the header for no songs", () => {
         expect(catalogSongsCsv([], BOOKS)).toBe(
-            "Title,Tune,Rejoice Hymns,Great Hymns of the Faith,Chorus Book,Linked,Last scheduled\r\n"
+            "Title,Tune,Rejoice Hymns,Great Hymns of the Faith,Chorus Book,Linked,Last scheduled,To learn\r\n"
         );
     });
 
     test("guards a title that a spreadsheet would run as a formula", () => {
         const formula = song("=HYPERLINK(\"http://example.com\")", "-TUNE", []);
         expect(catalogSongsCsv([formula], []).split("\r\n")[1]).toBe(
-            "\"'=HYPERLINK(\"\"http://example.com\"\")\",'-TUNE,no,"
+            "\"'=HYPERLINK(\"\"http://example.com\"\")\",'-TUNE,no,,no"
         );
     });
 });
@@ -190,13 +196,18 @@ describe("catalogCsvFilename", () => {
         expect(filename({ book: "CB", used: "never" })).toBe("catalog-cb-unused-2026-10-04.csv");
     });
 
+    test("names the mark the list keeps", () => {
+        expect(filename({ mark: "to-learn" })).toBe("catalog-to-learn-2026-10-04.csv");
+        expect(filename({ mark: "all" })).toBe("catalog-2026-10-04.csv");
+    });
+
     test("says search for a search", () => {
         expect(filename({ q: "amazing" })).toBe("catalog-search-2026-10-04.csv");
     });
 
     test("puts every filter in use in the name, always in the same order", () => {
-        expect(filename({ q: "grace", book: "R", linked: "yes", used: "never" })).toBe(
-            "catalog-r-linked-unused-search-2026-10-04.csv"
+        expect(filename({ q: "grace", book: "R", linked: "yes", used: "never", mark: "to-learn" })).toBe(
+            "catalog-r-linked-unused-to-learn-search-2026-10-04.csv"
         );
     });
 
