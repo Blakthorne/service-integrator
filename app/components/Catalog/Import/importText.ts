@@ -6,6 +6,7 @@ import type {
     SeedMerge,
     SeedSkippedEntry,
     SeedSongWithoutTune,
+    SeedSplitPair,
 } from "@/lib/domain";
 
 /**
@@ -42,8 +43,35 @@ export const PLANNED_VERBS: Record<ImportRunStatus, string> = {
 export const NO_TUNE_REASONS: Record<SeedSongWithoutTune["reason"], string> = {
     "no-tune": "The file gives no tune",
     "ambiguous-split-pair": "Several candidate tunes",
+    "split-pair-conflict": "The one song it could join already has an entry in this book",
     "variant-without-tune": "A variant whose hymn has no single tune",
 };
+
+/** What the review calls each outcome of a split pair. */
+export const SPLIT_PAIR_LABELS: Record<SeedSplitPair["outcome"], string> = {
+    merged: "Merged",
+    ambiguous: "Ambiguous",
+    conflict: "Conflict",
+};
+
+/**
+ * A split pair's tunes, worded for its outcome: the one it joined, the
+ * several it could have joined, or the one it would have joined but for the
+ * entry its song already has in that book.
+ */
+export function describeSplitPairTunes(
+    pair: Pick<SeedSplitPair, "outcome" | "tunes">
+): string {
+    const tunes = pair.tunes.join(" · ");
+    switch (pair.outcome) {
+        case "merged":
+            return `Joined ${tunes}`;
+        case "ambiguous":
+            return `Candidates: ${tunes}`;
+        case "conflict":
+            return `Would have joined ${tunes}`;
+    }
+}
 
 /** What each kind of fix on the seed's merge list does. */
 export const MERGE_KINDS: Record<SeedMerge["kind"], string> = {

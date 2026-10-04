@@ -10,10 +10,12 @@ import type {
 } from "@/lib/domain";
 import {
     countOf,
+    describeSplitPairTunes,
     formatCount,
     MERGE_KINDS,
     NO_TUNE_REASONS,
     SKIP_REASONS,
+    SPLIT_PAIR_LABELS,
 } from "./importText";
 
 interface SeedReportProps {
@@ -251,18 +253,14 @@ const SPLIT_PAIR_COLUMNS: Column<SeedSplitPair>[] = [
     { header: "Entry", cell: (pair) => pair.label },
     {
         header: "Outcome",
-        cell: (pair) =>
-            pair.outcome === "merged" ? (
-                <Pill tone="green">Merged</Pill>
-            ) : (
-                <Pill tone="amber">Ambiguous</Pill>
-            ),
+        cell: (pair) => (
+            // Only a merge needs no decision: the others stay songs without a tune.
+            <Pill tone={pair.outcome === "merged" ? "green" : "amber"}>
+                {SPLIT_PAIR_LABELS[pair.outcome]}
+            </Pill>
+        ),
     },
-    {
-        header: "Rejoice tunes",
-        cell: (pair) =>
-            `${pair.outcome === "merged" ? "Joined " : "Candidates: "}${pair.tunes.join(" · ")}`,
-    },
+    { header: "Rejoice tunes", cell: describeSplitPairTunes },
 ];
 
 const VARIANT_COLUMNS: Column<SeedVariant>[] = [
@@ -342,7 +340,7 @@ export default function SeedReport({ report, sourceName }: SeedReportProps) {
             <Section
                 title="Split pairs"
                 count={report.splitPairs.length}
-                description="A Great Hymns record with no tune whose hymn has tunes in Rejoice Hymns. With one tune the entry joins that song; with several it stays a song without a tune, for you to settle."
+                description="A Great Hymns record with no tune whose hymn has tunes in Rejoice Hymns. With one tune the entry joins that song (merged). It stays a song without a tune, for you to settle, when there are several tunes (ambiguous) or when the one song already has an entry in Great Hymns (conflict)."
             >
                 <ReportTable
                     caption="Split pairs"
