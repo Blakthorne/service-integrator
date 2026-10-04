@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { findSongCredits } from "@/lib/db/credits";
 import { findPcoSong } from "@/lib/db/pcoSongs";
-import { findSongTags } from "@/lib/db/tags";
+import { findSongTags, replaceListedSongTags } from "@/lib/db/tags";
 import {
     openTestDb,
     seedHymn,
@@ -50,6 +50,7 @@ import {
     saveSongTags,
     type NewPcoSongForm,
 } from "./pcoSongs";
+import { syncPcoSongs } from "./sync";
 
 const SONG = "1001";
 const ST = "1405391";
@@ -129,6 +130,11 @@ describe("saveSongCredits", () => {
         { role: "Music", names: ["William Croft"] },
     ];
     const AUTHOR = "Words: Isaac Watts; Music: William Croft";
+    /** The credits edited from a page that showed the mirror's stale "Isaac Wats". */
+    const WATS_AND_X = [
+        { role: "Words", names: ["Isaac Wats"] },
+        { role: "Arr.", names: ["X"] },
+    ];
 
     test("writes the credits to the song's author in the convention, logs it, and mirrors the song", async () => {
         const fetchMock = stubFetchRoutes({
@@ -327,14 +333,14 @@ describe("saveSongCredits", () => {
         expect(findPcoSong(db, SONG)).toBeNull();
     });
 
-    test("gives Planning Center's refusal as a value, logs it, and leaves the mirror alone", async () => {
-        seedPcoSong(db, { id: SONG, author: "Isaac Watts" });
+    test("gives Planning Center's refusal as a value, logs it, and mirrors the song as it was read", async () => {
+        seedPcoSong(db, { id: SONG, title: "Old title", author: "Isaac Watts" });
         stubFetchRoutes({
             [urls.song()]: { data: songResource(SONG, { title: "O God, Our Help", author: "Isaac Watts" }) },
             [`PATCH ${urls.song()}`]: () => VALIDATION_ERROR("is too long", "author"),
         });
 
-        await expect(saveSongCredits(SONG, "Isaac Watts", OUR_HELP)).resolves.toEqual({
+        await expect(saveSongCredits(SONG, "Isaac Watts", OUR_HELP, T0)).resolves.toEqual({
             ok: false,
             reason: "refused",
             message: 'Planning Center refused the credits of "O God, Our Help": author: is too long',
@@ -349,8 +355,56 @@ describe("saveSongCredits", () => {
                 result: { error: "author: is too long", status: 422, details: ["author: is too long"] },
             },
         ]);
-        expect(findPcoSong(db, SONG)?.author).toBe("Isaac Watts");
-        expect(findSongCredits(db, SONG)).toBeNull();
+        // Planning Center changed nothing: the mirror takes the song as read.
+        expect(findPcoSong(db, SONG)).toMatchObject({
+            title: "O God, Our Help",
+            author: "Isaac Watts",
+            syncedAt: T0.toISOString(),
+        });
+        expect(findSongCredits(db, SONG)?.status).toBe("legacy");
+    });
+
+    test("an author refreshed by a refusal stays through a sync whose listing began before it", async () => {
+        seedPcoSong(db, { id: SONG, title: "O God, Our Help", author: "Isaac Wats", syncedAt: "2026-10-04T11:00:00.000Z" });
+        const listing = `${PCO_BASE}/songs?per_page=100`;
+        stubFetchRoutes({
+            [urls.song()]: { data: songResource(SONG, { title: "O God, Our Help", author: AUTHOR }) },
+            // The sync's listing, read before the author was corrected, comes
+            // back after the credit editor's refusal mirrored the correction.
+            [listing]: async () => {
+                await expect(saveSongCredits(SONG, "Isaac Wats", WATS_AND_X, T0)).resolves.toMatchObject({
+                    reason: "changed",
+                });
+                return json(listPage([songResource(SONG, { title: "O God, Our Help", author: "Isaac Wats" })]));
+            },
+        });
+        const clock = vi
+            .fn<() => Date>()
+            .mockReturnValueOnce(new Date("2026-10-04T11:59:00.000Z"))
+            .mockReturnValue(new Date("2026-10-04T12:01:00.000Z"));
+
+        await syncPcoSongs(db, clock);
+
+        expect(findPcoSong(db, SONG)).toMatchObject({ author: AUTHOR, syncedAt: T0.toISOString() });
+        expect(findSongCredits(db, SONG)).toEqual({ status: "ok", credits: OUR_HELP });
+    });
+
+    test("still refuses when the mirror cannot take the song as read, and logs that", async () => {
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        stubFetchRoutes({
+            [urls.song()]: () => {
+                db.exec("DROP TABLE pco_song_credits");
+                return json({ data: songResource(SONG, { author: AUTHOR }) });
+            },
+        });
+        await expect(saveSongCredits(SONG, "Isaac Wats", WATS_AND_X)).resolves.toMatchObject({
+            ok: false,
+            reason: "changed",
+        });
+        expect(consoleError).toHaveBeenCalledWith(
+            `Failed to bring the mirror up to date with Planning Center song ${SONG} as it is now:`,
+            expect.any(Error)
+        );
     });
 
     test("throws when Planning Center fails, after logging the failed write", async () => {
@@ -1299,6 +1353,12 @@ describe("saveSongTags", () => {
         );
     }
 
+    /** When the mirror last wrote the song's tags. */
+    function tagsWrittenAt(): string | null {
+        const row = db.prepare("SELECT written_at FROM pco_song_tags_written WHERE pco_song_id = ?").get(SONG);
+        return row ? String(row.written_at) : null;
+    }
+
     const HYMN = tagResource("71", { name: "Hymn" }, "7");
     const CHORUS = tagResource("72", { name: "Chorus" }, "7");
     const ADVENT = tagResource("81", { name: "Advent" }, "8");
@@ -1357,6 +1417,7 @@ describe("saveSongTags", () => {
             },
         ]);
         expect(findSongTags(db, SONG).map(({ id }) => id)).toEqual(["81", "72"]);
+        expect(tagsWrittenAt()).toBe(T0.toISOString());
     });
 
     test("keeps a tag set in Planning Center since the page loaded, which the person never saw", async () => {
@@ -1465,7 +1526,7 @@ describe("saveSongTags", () => {
         seedTags();
         // The editor showed no season; Advent was set in Planning Center since, and the person picks Lent.
         const fetchMock = stubTags(HYMN, ADVENT);
-        await expect(saveSongTags(SONG, ["71"], ["71", "82"])).resolves.toEqual({
+        await expect(saveSongTags(SONG, ["71"], ["71", "82"], T0)).resolves.toEqual({
             ok: false,
             reason: "changed",
             message:
@@ -1473,6 +1534,19 @@ describe("saveSongTags", () => {
         });
         expect(writesSent(fetchMock)).toEqual([]);
         expect(writes()).toEqual([]);
+        // The mirror takes the tags as read, so a reload shows Advent.
+        expect(findSongTags(db, SONG).map(({ id }) => id)).toEqual(["81", "71"]);
+        expect(tagsWrittenAt()).toBe(T0.toISOString());
+
+        // A tags sync whose listing began before then, and lists the song
+        // with Hymn alone, leaves them as read.
+        replaceListedSongTags(
+            db,
+            new Map([["71", [SONG]]]),
+            new Date("2026-10-04T11:59:00.000Z"),
+            new Date("2026-10-04T12:01:00.000Z")
+        );
+        expect(findSongTags(db, SONG).map(({ id }) => id)).toEqual(["81", "71"]);
 
         // Changing the season the editor showed is a change the person made.
         const changed = stubTags(HYMN, ADVENT);
@@ -1517,13 +1591,15 @@ describe("saveSongTags", () => {
             [tagsUrl]: listPage([]),
             [`POST ${assignUrl}`]: () => VALIDATION_ERROR("is invalid", "tags"),
         });
-        await expect(saveSongTags(SONG, [], ["71"])).resolves.toEqual({
+        await expect(saveSongTags(SONG, [], ["72"], T0)).resolves.toEqual({
             ok: false,
             reason: "refused",
             message: 'Planning Center refused the tags of "Amazing Grace": tags: is invalid',
             details: ["tags: is invalid"],
         });
-        expect(findSongTags(db, SONG).map(({ id }) => id)).toEqual(["71"]);
+        // Planning Center changed nothing: the mirror takes the tags as read (none).
+        expect(findSongTags(db, SONG)).toEqual([]);
+        expect(tagsWrittenAt()).toBe(T0.toISOString());
 
         stubFetchRoutes({
             [tagsUrl]: listPage([]),

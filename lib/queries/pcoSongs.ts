@@ -178,6 +178,22 @@ function mirrorSongs(
     });
 }
 
+/**
+ * Bring the mirror up to date with a fresh read that a refused write made,
+ * so that the page shows what Planning Center has now once reloaded, and
+ * the next sync does not undo it (a page's write is stamped `now`, which a
+ * sync whose listing began earlier leaves alone). Only a refusal follows,
+ * so a mirror that cannot be written is logged and does not turn the
+ * refusal into a failure.
+ */
+function refreshMirror(write: () => void, what: string): void {
+    try {
+        write();
+    } catch (error) {
+        console.error(`Failed to bring the mirror up to date with ${what}:`, error);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The credit editor
 // ---------------------------------------------------------------------------
@@ -226,8 +242,10 @@ function sameAuthor(a: string | null, b: string | null): boolean {
  * author is written in the convention (`renderCredits`, a PATCH of
  * `author` alone) and the write logged (`song`, with the author before and
  * after). Last, the mirror gets the song as Planning Center has it now,
- * and its credits are derived afresh, a refused song's too, so that the
- * page shows its author as it is now once reloaded.
+ * and its credits are derived afresh: a refused save's song too, as it was
+ * read ("changed", or a 422, which changed nothing), so that the page shows
+ * its author as it is now once reloaded, stamped `now` so that a sync whose
+ * listing began earlier leaves it.
  *
  * Refused when the id is not a song's or Planning Center has no such song,
  * when the credits do not check, when the author changed since the page
@@ -264,7 +282,10 @@ export async function saveSongCredits(
     const author = renderCredits(checked.credits);
     const changed = !sameAuthor(song.author, author);
     if (changed && !sameAuthor(song.author, shownAuthor)) {
-        mirrorSongs(db, [song], settings.creditRoles, now);
+        refreshMirror(
+            () => mirrorSongs(db, [song], settings.creditRoles, now),
+            `Planning Center song ${id} as it is now`
+        );
         return {
             ...refusal(
                 "changed",
@@ -283,6 +304,11 @@ export async function saveSongCredits(
             logWrite(db, { kind: "song", target, ok: false, payload, result: writeError(error) }, now);
             const refused = refusedByPco(error, `the credits of "${song.title}"`);
             if (refused) {
+                // Planning Center changed nothing, so the song is as read.
+                refreshMirror(
+                    () => mirrorSongs(db, [song], settings.creditRoles, now),
+                    `Planning Center song ${id} as it is now`
+                );
                 return refused;
             }
             throw error;
@@ -1004,7 +1030,10 @@ function idsNotIn(ids: Iterable<string>, without: ReadonlySet<string>): string[]
  * `assign_tags` replaces them all, the whole resulting set is sent, unless
  * it is the set the song has already. The write is logged (`tags`, with
  * the tags' names before and after, and those added and removed), and the
- * mirror's tags for the song replaced with what it has now.
+ * mirror's tags for the song replaced with what it has now, stamped `now`
+ * so that a tags sync whose listing began earlier leaves them: the tags as
+ * read too after a refusal that follows the read ("changed", or a 422,
+ * which changed nothing), so that the page shows them once reloaded.
  *
  * Refused when the song id is not one, the mirror or Planning Center has
  * no such song, a tag added is not a mirrored song tag, a group that takes
@@ -1049,9 +1078,15 @@ export async function saveSongTags(
         return refusal("not-found", NO_SUCH_PCO_SONG);
     }
     const currentIds = new Set(current.map((tag) => tag.id));
+    const mirrorCurrent = () =>
+        refreshMirror(
+            () => replaceSongTags(db, id, [...currentIds], now),
+            `the tags of Planning Center song ${id} as they are now`
+        );
     const next = new Set([...idsNotIn(currentIds, removed), ...added]);
     for (const group of groups) {
         if (!group.allowMultiple && group.tags.filter((tag) => next.has(tag.id)).length > 1) {
+            mirrorCurrent();
             return refusal(
                 "changed",
                 `"${group.name}" takes one tag, and "${mirrored.title}" has another of its tags in Planning Center now, set since this page loaded, so nothing was saved. Reload the page and choose again.`
@@ -1088,6 +1123,8 @@ export async function saveSongTags(
             logWrite(db, { kind: "tags", target, ok: false, payload, result: writeError(error) }, now);
             const refused = refusedByPco(error, `the tags of "${mirrored.title}"`);
             if (refused) {
+                // Planning Center changed nothing, so the tags are as read.
+                mirrorCurrent();
                 return refused;
             }
             throw error;
@@ -1095,6 +1132,6 @@ export async function saveSongTags(
         logWrite(db, { kind: "tags", target, ok: true, payload, result: { tagIds: nextIds } }, now);
     }
     const tagIds = changed ? nextIds : current.map((tag) => tag.id);
-    replaceSongTags(db, id, tagIds);
+    replaceSongTags(db, id, tagIds, now);
     return { ok: true, changed, tagIds, kept };
 }
