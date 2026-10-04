@@ -69,7 +69,8 @@ app/
         [planId]/
           layout.tsx            server: parsePcoId → getPlanDetail → <PlanProvider>; generateMetadata via getPlanLabels
           actions.ts            "use server": linkPcoSong (the Schedule tab's one-click Link), saveScheduleSelection
-                                (each choice), previewHymnNotesAction and syncHymnNotesAction (Sync hymn notes)
+                                (each choice), previewHymnNotesAction and syncHymnNotesAction (Sync hymn notes;
+                                the sync gets the preview back, parsed by lib/previewedHymnNotes.ts)
           error.tsx             errors in the (overview) layout and in item pages, below the provider
           (overview)/
             layout.tsx          PlanHeader + PlanItemsTable + PlanTabNav, with the active tab below
@@ -177,7 +178,10 @@ app/
 Beyond the page chrome (`PageHeader`, `Breadcrumbs`, `LoadingState`, `ErrorState`, `EmptyState`, `Pagination`), `app/components/ui/` has:
 
 - `Segmented`: a row of toggle buttons (`aria-pressed`) in a labelled group, exactly one chosen, for a filter or a sort order (the songs list's book filter and sort). An option may show a short label with its full name as `title`. `describedBy` names the id of text about the choice, such as a form's error about it, which every button is then described by. On a phone, a row too wide for its container scrolls sideways.
-- `Dialog`: a modal on the browser's own `<dialog>` (`showModal()`), for confirming an action (Apply, Discard). It is controlled through `open` and `onClose`. The browser makes the page behind it inert and closes it on Escape; focus starts on its close button and returns to `returnFocusRef`, the button that opened it. Its content stays rendered while it is closed, so a form inside keeps its state.
+- `Dialog`: a modal on the browser's own `<dialog>` (`showModal()`), for confirming an action (Apply, Discard, Sync hymn notes' Confirm). It is controlled through `open` and `onClose`. The browser makes the page behind it inert and closes it on Escape; focus starts on its close button and returns to `returnFocusRef`, the button that opened it. Its content stays rendered while it is closed, so a form inside keeps its state.
+  - **`onClose` comes once the dialog has closed, however it closed**: Escape, its close button (which closes the `<dialog>` itself), or `open` going false. The parent must always set `open` to false there; left true, `open` would say the dialog is showing when it is not.
+  - `dismissible={false}` stops Escape and hides the close button while an action runs, but it stops only a stray key press: Chromium's close watcher closes the dialog on the third Escape. Such a close calls `onClose` like any other, so a parent that must show what the action brings back opens the dialog again when it comes, as the sync dialog does.
+- `buttonClasses(variant, pending)`: the classes of every solid button, the one place their look comes from. `SubmitButton` uses it, and so do the buttons that keep their pending state in `useState`: Settings' `SaveButton` and Sync now, and the sync dialog's. A test pins every variant.
 - `SubmitButton`: the submit button of a form whose `action` is a function, which suits only an action that takes milliseconds, such as a write to the local database (convention 15). It reads `useFormStatus`, so render it inside its form. While the action runs it shows its pending label and is `aria-disabled` rather than `disabled`, so a keyboard user keeps focus when the action comes back with a refusal. `variant` is "primary" (the default), "danger" (Discard, Unlink) or "secondary", a quieter button for an action that should not draw the eye (Reconcile's Ignore, beside Choose another song and New catalog song, and its Undo and Unignore).
 
 The catalog's pages share four pieces in `app/components/Catalog/`:
@@ -200,7 +204,7 @@ client components (interaction only) ── URL state via useUrlState
 
 **Server versus pure modules.**
 
-- **Server-only** modules start with `import "server-only"`, so importing one into a client component fails the build: `lib/pco/*` (except `resources.ts`, which is types only, and the test helpers in `testing.ts`), `lib/queries/*`, `lib/db/*` (except the SQL text in `migrations/`, `errors.ts` and the test helper `testing.ts`), `lib/jobs.ts`, `lib/boot.ts`, and `lib/import/hymnsJsonFile.ts`, the only module that imports `hymns.json` (for the seed import), so its ~150 KB never reaches a client bundle.
+- **Server-only** modules start with `import "server-only"`, so importing one into a client component fails the build: `lib/pco/*` (except `resources.ts`, which is types only, and the test helpers in `testing.ts`), `lib/queries/*`, `lib/db/*` (except the SQL text in `migrations/`, `errors.ts` and the test helper `testing.ts`), `lib/jobs.ts`, `lib/boot.ts`, `lib/previewedHymnNotes.ts` (it parses ids with `parsePcoId`), and `lib/import/hymnsJsonFile.ts`, the only module that imports `hymns.json` (for the seed import), so its ~150 KB never reaches a client bundle.
 - **Pure** modules are safe on both sides and unit-tested: `lib/domain.ts` (types), `copyright.ts`, `serviceSchedule.ts`, `scheduleSelections.ts`, `scheduleSelectionsStore.ts`, `scheduleCards.ts`, `hymnNotes.ts`, `hymnNoteText.ts`, `settings.ts`, `settingsForms.ts`, `settingsText.ts`, `writeLogText.ts`, `dashboard.ts`, `reconcile.ts`, `fuzzy.ts`, `forms.ts`, `csv.ts`, `plansByDate.ts`, `planLabel.ts`, `format.ts`, `normalizeTitle.ts`, `ttlCache.ts`, `debouncedSave.ts`, `deadline.ts`, `routes.ts`, `urlState.ts` and `safeCallbackUrl.ts`, and every module in `lib/catalog/` and `lib/import/` but `hymnsJsonFile.ts` (see [The song catalog](#the-song-catalog)). They take what they need as arguments (`suggestLinks` gets its catalog index, `buildScheduleCopyText` gets the plan's date string and the settings it follows, `diffHymnNotes` gets the notes the app wrote, `planHymnsJsonImport` gets the records of `hymns.json`) and import nothing server-only; a type may come from a server module (`import type`).
 - A client component may `import type` from a server module (the import is erased), never a value.
 
@@ -239,7 +243,7 @@ Getters are wrapped in React `cache()` (calls with the same arguments are dedupe
 - `catalogEdit.ts` has the catalog's forms: `getNewSongFormData(pcoSongId)`, `getNewSongBooks()`, `createSong(input)`, and for the song page `getMirroredPcoSong(id)` and `unlinkCatalogSong(songId, pcoSongId)`.
 - `selections.ts` has the Schedule tab's saved choices: `saveScheduleSelection(planId, itemId, option, customText)`, which checks every argument and returns a refusal as a value, and `getScheduleSelections(planId)`.
 - `settings.ts` has `getSettings()` and `getSettingsIssues()`, which never throw, `saveSettings(values)` and `getRecentWrites()` (see [Settings](#settings)).
-- `hymnNotes.ts` has `previewHymnNotes(st, plan)`, `syncHymnNotes(st, plan)` and, for Settings, `getHymnNoteCategories()` (see [Hymnal notes](#hymnal-notes)).
+- `hymnNotes.ts` has `previewHymnNotes(st, plan)`, `syncHymnNotes(st, plan, previewed)` and, for Settings, `getHymnNoteCategories()` (see [Hymnal notes](#hymnal-notes)).
 - `dashboard.ts` has `getDashboard()`, which never throws (see [The dashboard](#the-dashboard)).
 
 **Domain and links.**
@@ -350,12 +354,17 @@ The schedule text prints, for each song item in sequence, `Title (R-396 / G-317)
 
 ### Hymnal notes
 
-Each song item of a plan can carry a note, in one item note category of its service type, that gives the musicians its hymnal numbers from its catalog link: `R-396 / G-317`, or `R-396 / G-317 · ST. ANNE` with the `hymnNoteIncludesTune` setting. The category is "Hymnal" by default (the `hymnNoteCategoryName` setting). Planning Center's API cannot create a category, so someone adds it once per service type in Planning Center's web app. The app finds it by name, without regard to case or the spaces around it (`sameCategoryName`); its id differs in each service type.
+Each song item of a plan can carry a note, in one item note category of its service type, that gives the musicians its hymnal numbers from its catalog link: `R-396 / G-317`, or `R-396 / G-317 · ST. ANNE` with the `hymnNoteIncludesTune` setting. The category is "Hymnal" by default (the `hymnNoteCategoryName` setting). Planning Center's API cannot create a category, so someone adds it once per service type in Planning Center's web app.
+
+- **The category is found by name, and the notes are matched to it by id.** `matchHymnNoteCategory` finds a service type's category of that name, without regard to case or spacing (`sameCategoryName`); its id differs in each service type. A note is in it when the note's category id is the category's. Only a note Planning Center sent without a category id is matched by name, so a note in a deleted category of the same name is never touched.
+- **Two live categories of the name are refused** ("Hymnal" and "hymnal"): the notes have no one place to go. The status is `unavailable` with the reason `ambiguous-category`, and its message asks for all but one to be renamed or deleted. Settings' Hymnal notes card says "More than one".
 
 ```text
-lib/hymnNotes.ts          pure: formatHymnNote, findHymnNoteCategory, diffHymnNotes, planHymnNoteStatus,
-                          hymnNoteState
-lib/hymnNoteText.ts       pure: the dialog's preview and results, and a song card's note status, in words
+lib/hymnNotes.ts          pure: formatHymnNote, matchHymnNoteCategory, diffHymnNotes, planHymnNoteStatus,
+                          matchesPreview, hymnNoteState
+lib/hymnNoteText.ts       pure: the words of the dialog, its preview and results, and of every note's state
+                          (HYMN_NOTE_STATE_WORDS), which the dashboard and the cards share
+lib/previewedHymnNotes.ts server-only: parses the preview the dialog sends back with Confirm
 lib/pco/writes.ts         createItemNote, updateItemNote, deleteItemNote
 lib/queries/hymnNotes.ts  previewHymnNotes, syncHymnNotes, and getHymnNoteCategories for Settings
 lib/db/writeLog.ts        recordWrite, and findCreatedItemNoteIds: which notes the app wrote
@@ -370,21 +379,34 @@ lib/db/writeLog.ts        recordWrite, and findCreatedItemNoteIds: which notes t
 - **It deletes only notes it wrote.** It knows them from the write log (`findCreatedItemNoteIds`): a successful `item-note` create whose result is that note. Any other note it would delete (an extra in the category, or a note on a song with nothing to say) is left alone and shown as kept. A log that has lost history (a restored database) can therefore only keep a note that could have gone, never delete one.
 - Each item gets one action: `create`, `update`, `unchanged`, `delete` (its song has nothing to say, and the app's notes go), `dedupe` (in step, with extras of the app's to remove), `keep` (nothing to say, and the notes are not the app's) or `none`.
 
-**Preview, then sync.** `previewHymnNotes(st, plan)` reads the service type, the plan's items with their notes and the categories (three requests in parallel), then the catalog and the app's notes, and gives `planHymnNoteStatus`:
+**Preview, then sync.** `previewHymnNotes(st, plan)` reads the service type, the plan's items with their notes and the categories (three requests in parallel), then the catalog and the app's notes, and gives `planHymnNoteStatus`, checked in this order:
 
-- `ready`, with each item's diff;
-- `no-category`, whose message asks for the category: `Create an item note category named "Hymnal" in Planning Center for Sunday Evening.`;
-- `unavailable`, when the categories or the catalog cannot be read.
+1. `unavailable`, reason `settings`, when the settings cannot be read. Their defaults could name another category, or drop the tune the church chose from every note, so nothing is compared or written with them.
+2. `unavailable`, reason `categories`, when the categories cannot be read.
+3. `no-category`, whose message asks for the category (`Create an item note category named "Hymnal" in Planning Center for Sunday Evening.`), or `unavailable`, reason `ambiguous-category`, for two of the name.
+4. `unavailable`, reason `catalog`, when the catalog cannot be read.
+5. Otherwise `ready`, with each item's diff.
 
-`syncHymnNotes(st, plan)` reads the plan's items again with `fetchPlanItems`, never the request's cached read, and computes the diff afresh, so it writes what is needed now, not what the preview showed. A missing category, or categories that cannot be read, refuse the sync, and nothing is written. Then it makes each item's changes in order, unpaced, with a `write_log` row for each. An item whose write fails stops there, and the sync goes on to the next item. It returns each item's outcome (`done`, `failed` or `nothing-to-do`) and the counts. See [Add a PCO write](#add-a-pco-write) for the pattern.
+`syncHymnNotes(st, plan, previewed)`:
+
+- **Holds Confirm to what the preview showed.** It reads the plan's items again with `fetchPlanItems`, never the request's cached read, and computes each item's diff afresh. It then writes an item only when that diff is what was previewed for it (`matchesPreview`: the same action and the same writes, each to the same note with the same words). Any other item, or one the preview did not have, is reported `changed`, with nothing written, and the person previews again.
+- **Never trusts the preview.** It comes from the browser, so it is only compared: every write is the sync's own. The action parses it first (`lib/previewedHymnNotes.ts`): every id through `parsePcoId`, every action, kind and reason checked, at most 200 items and 50 writes to one. A preview that does not parse is refused before Planning Center is read.
+- **Refuses, writing nothing**, for any status but `ready`.
+- **Makes each item's changes in order**, unpaced, with a `write_log` row for each. An item whose write fails stops there, and the sync goes on to the next item, **except at Planning Center's rate limit**: after a 429 the client did not retry, every later item that needed a write is reported `not-attempted`, and nothing more is sent.
+- **Runs one sync per plan at a time.** Each plan's sync in progress is kept on globalThis (convention 15), set before the sync's first await. A second call for that plan gets `kind: "busy"` and writes nothing. It does not join the running sync, whose preview may not be its own. Other plans sync alongside.
+- **Returns** each item's outcome (`done`, `failed`, `nothing-to-do`, `changed` or `not-attempted`) and the counts (`created`, `updated`, `deleted`, `unchanged`, `kept`, `failed`, `changed`, `notAttempted`).
+
+See [Add a PCO write](#add-a-pco-write) for the pattern.
 
 **On the pages.**
 
-- The plan header's "Sync hymn notes" (`SyncHymnNotesAction`) opens a `ui/Dialog` with the preview: a row per song, each with lines for a note in sync, added, changed, removed or left alone. Confirm writes, and then the dialog shows the results, failures first.
-- Both steps are server actions (`previewHymnNotesAction`, `syncHymnNotesAction`) called from their clicks, with the dialog's state in `useState` (convention 15).
-- The dialog cannot be closed while the sync runs. A sync revalidates the plan.
-- `getPlanDetail` carries the plan's `hymnNoteStatus`, so each Schedule-tab card shows its note's status: in sync, needs update, missing, or kept (not written by the app).
-- The dashboard shows each next plan's notes (see [The dashboard](#the-dashboard)), and Settings' Hymnal notes card shows whether each service type has the category.
+- **The dialog.** The plan header's "Sync hymn notes" (`SyncHymnNotesAction`) opens a `ui/Dialog`. It first says what a sync does (`SYNC_DIALOG_DESCRIPTION`): each song's hymnal note is rewritten to its numbers, whoever wrote it; only notes the app wrote are ever removed; notes in other categories are never touched.
+- **The preview** has a row per song, each with lines for a note in sync, added, changed, removed or left alone.
+- **Confirm** sends the preview back with the sync. The results come next, with the songs that failed, changed or were not tried first. Preview again sits beside Done when any changed or were not tried.
+- **Event handlers, not form actions.** Both steps are server actions (`previewHymnNotesAction`, `syncHymnNotesAction`) called from their clicks, with the dialog's state in `useState` (convention 15).
+- **No dismissing it mid-sync**, short of the browser closing it (see `Dialog` in [Shared UI](#shared-ui)). After such a close, a sync that finishes opens the dialog again with its results, and Sync hymn notes pressed during a sync opens it on the sync rather than a new preview. A sync revalidates the plan.
+- **One wording for a note's state** (`HYMN_NOTE_STATE_WORDS` in `lib/hymnNoteText.ts`): in sync, needs sync (which covers a note of the app's to remove), missing, and left alone. The dashboard's badges and the Schedule-tab cards read it as "Note in sync", "Note needs sync" and so on (`hymnNoteBadgeLabel`), and the dialog tags its lines from it (`hymnNoteStateTag`). `getPlanDetail` carries the plan's `hymnNoteStatus` for the cards, and a card's "Note left alone" says beside it that the app did not write the note.
+- **Elsewhere.** The dashboard shows each next plan's notes (see [The dashboard](#the-dashboard)), and Settings' Hymnal notes card shows whether each service type has the category.
 
 ### Settings
 
@@ -422,14 +444,14 @@ lib/queries/settings.ts   getSettings, getSettingsIssues, saveSettings, getRecen
 1. A warning, only when there is something to warn of: the settings could not be read, or stored values no longer parse, each named with the card that replaces it.
 2. **Copyright**: the CCLI license number, with a preview of the copyright block's last line.
 3. **Schedule text**: a header label for each service type Planning Center lists, with what a blank one gives, and the number separator, with previews. It waits for the service types, under a Suspense boundary. When Planning Center cannot be read, the separator can still be saved, and every label already saved is kept.
-4. **Hymnal notes**: the category's name and whether a note names the tune, with a preview. Under the form, whether each service type has the category, with how to create it where it is missing. That part streams in under its own boundary.
+4. **Hymnal notes**: the category's name and whether a note names the tune, with a preview. Under the form, whether each service type has the category: found, missing (with how to create it) or more than one (with which to rename or delete). That part streams in under its own boundary.
 5. **Recent writes to Planning Center**: the last 20 rows of the write log, newest first. Each row has when (in the viewer's time zone), what was done (`describeWrite`, `lib/writeLogText.ts`), to which plan and item (a link that does not prefetch), and whether Planning Center made the change, or why not.
 6. **Planning Center sync**: the song sync's last run, with Sync now.
 7. **Database**: whether it opens, its file, its migrations and the last backup.
 
 The page reads the database, which is quick and never throws, and starts Planning Center's read of the service types and their categories before it renders, under a deadline (see [Why the boundaries sit where they do](#why-the-boundaries-sit-where-they-do)).
 
-**The forms are not form actions.** Each form calls its action (`saveCopyrightAction`, `saveScheduleTextAction`, `saveHymnalNotesAction`) from `onSubmit`, keeps its state and pending flag in `useState` (`useSettingsForm`), and has its own `SaveButton`, not `useActionState` and `SubmitButton`. The reason: a save revalidates Settings, the plans' pages and the dashboard, a revalidated page renders again in the action's response, and Settings waits on Planning Center (convention 15). The fields are controlled, so they show what was typed or saved, and "Saved." stays while they show what the save stored. Each action checks the session, reads its form with `lib/settingsForms.ts` and saves with `saveSettings`.
+**The forms are not form actions.** Each form calls its action (`saveCopyrightAction`, `saveScheduleTextAction`, `saveHymnalNotesAction`) from `onSubmit`, keeps its state and pending flag in `useState` (`useSettingsForm`), and has its own `SaveButton`, not `useActionState` and `SubmitButton`. The reason: a save revalidates Settings, the plans' pages and the dashboard, a revalidated page renders again in the action's response, and Settings waits on Planning Center (convention 15). The fields are controlled, so they show what was typed or saved. "Saved." is the text of a status region that is always there, as Sync now's is: it stays while the fields show what the save stored, and is cleared while a save is under way, so the same "Saved." twice is still announced. Each action checks the session, reads its form with `lib/settingsForms.ts` and saves with `saveSettings`.
 
 ### The dashboard
 
@@ -446,9 +468,9 @@ The page reads the database, which is quick and never throws, and starts Plannin
 - its numbers as the schedule text prints them;
 - or "Not in the catalog", which links to the plan's Schedule tab;
 - or why it has none (in no book, not hymnal material, no Planning Center song);
-- and its hymnal note's badge: in sync, differs or missing.
+- and its hymnal note's badge, in the words the cards and the sync dialog use: "Note in sync", "Note needs sync" or "Note missing".
 
-Under them comes a line on the notes (how many need syncing, all in sync, the missing category, or why they cannot be compared) and a link to the Schedule tab. Cards sit side by side from `lg`.
+Under them comes a line on the notes (how many need syncing, all in sync, a missing or doubled category, or why they cannot be compared, the settings included) and a link to the Schedule tab. Cards sit side by side from `lg`.
 
 **To-dos**, each with the link that fixes it:
 
@@ -552,7 +574,7 @@ Only `lib/pco/writes.ts` writes to PCO (convention 18): `createItemNote`, `updat
 
 - Each one checks every id with `assertPcoId` before it sends anything, makes one write through `pcoMutate` with a body from `jsonApi`, unpaced (someone is waiting), and returns what changed. A 422 throws `PcoValidationError`.
 - The barrel exports these functions and `PcoValidationError`, but not `pcoMutate`, `jsonApi`, `toOne` or `toMany`; `lib/pco/index.test.ts` checks that they stay out.
-- The caller is a `lib/queries` function. It reads afresh before it writes (refresh-before-write), with a getter's uncached twin such as `fetchPlanItems`, and records a row in the write log for each write, made or refused. [Add a PCO write](#add-a-pco-write) is the recipe.
+- The caller is a `lib/queries` function. It reads afresh before it writes (refresh-before-write), with a getter's uncached twin such as `fetchPlanItems`, writes only what the person previewed and confirmed, and records a row in the write log for each write, made or refused. [Add a PCO write](#add-a-pco-write) is the recipe.
 
 **The write log** (`write_log`, migration `0004_selections`, `lib/db/writeLog.ts`) has a row per write the app sends:
 
@@ -612,7 +634,7 @@ await pcoMutate(
 
   For each item the last save wins. Saves go one at a time: a change made while one is on its way waits, a newer change replaces a waiting one, and the result of a save that a newer one follows is ignored. A failed save keeps the choice on screen, and the card says "Not saved." with the reason and a Retry, until a later save of the item succeeds. The action revalidates nothing: the tab already shows the choice, and a revalidation would read Planning Center on every click.
 - **Defaults are derived, not stored.** The merged `scheduleItems` are derived on render from `items`, the choices and `catalog` (`mergeScheduleSelections`). A song item with no choice shows Numbers when its song is linked to a catalog song with entries, and Leave blank otherwise, so a song linked from the tab turns to its numbers when the revalidated layout renders. A saved choice that no longer makes sense is never deleted: Numbers for a song that lost its link shows as Leave blank, and a choice for an item no longer in the plan is not shown.
-- **Banners.** When the saved choices cannot be read (`selectionsError`), every song starts on its default and nothing is saved. When the settings cannot be read (`settingsError`), the text follows the defaults. Each is a quiet banner on the tabs it affects (`PlanNotice`), as `catalogError` is.
+- **Banners.** When the saved choices cannot be read (`selectionsError`), every song starts on its default, and each choice made is still saved: `getDb()` tries again after a failure, so the database may answer by then, and a save that fails says "Not saved" on its card, with Retry. When the settings cannot be read (`settingsError`), the text follows the defaults and the hymnal notes are not compared. Each is a quiet banner on the tabs it affects (`PlanNotice`), as `catalogError` is.
 - `usePlan()` returns `{ plan, serviceType, items, catalog, suggestions, catalogError, selectionsError, scheduleSettings, settingsError, hymnNoteStatus, scheduleItems, saves, chooseOption, setCustomText, retrySave }` and throws outside a provider, so only components under `[planId]/` may call it. `chooseOption`, `setCustomText` and `retrySave` are stable callbacks.
 - The layout keys the provider by `serviceTypeId/planId`, so each plan has its own store.
 
@@ -661,16 +683,18 @@ await pcoMutate(
             - Settings' forms, which call their actions from `onSubmit` with their own `SaveButton` (`useSettingsForm`).
 
           The action's promise resolves when the action returns. A revalidated page's Planning Center parts update when their reads are back.
+        - **A navigation drops an action still running.** In Next 15.5.9 a navigation that starts while a server action is pending marks the action discarded, so its result is never applied, and refreshes the whole destination page once it is done (`next/dist/client/components/app-router-instance.js`, lines 131-141). The action still runs on the server; what is lost is its own revalidation, replaced by a full render. So an action that runs as someone leaves a page costs the next page a full render: `CustomTextInput` saves on blur, which a link's mousedown triggers, so typing custom text and then clicking a link costs one more full Planning Center read of the page the link opens.
     - A failed refresh keeps the previous data: `TtlCache.refresh` replaces the stored value only when the load succeeds.
 16. **Non-ASCII in source.** Write non-ASCII characters in regex character classes and matching or normalization keys as `\u` escapes (`/[\u2018\u2019]/`), in tests too. Literal curly quotes were turned into straight quotes, and `normalizeTitle` silently stopped handling them while the test meant to cover it used straight quotes as well. Literal typographic characters in UI strings (·, ©, …) are fine.
 17. **Database.** Only `getDb()` opens the database (tests use `openTestDb()`), and pages reach it only through `lib/queries/*`. SQL lives in `lib/db/<area>.ts`, in named functions that take `db` first, tested on `:memory:`. A write of more than one statement runs in `withTransaction` with a synchronous function. Migrations are append-only: never edit, reorder or remove a committed one; change the schema with a new migration. Use only the `node:sqlite` API of Node 22.13. See [Database](#database).
-18. **Writes to Planning Center.** Only `lib/pco/writes.ts` sends a POST, PATCH or DELETE, and only through `pcoMutate` with a body from `jsonApi`. The barrel exports its functions but not that plumbing, so app code writes through a `lib/queries` function. That function reads afresh before it writes (refresh-before-write) and records a `write_log` row for each write, made or refused. Sync jobs pass `paced: true` on every PCO call; page loads and actions someone is waiting on never do, and every write so far is one. Never hard-code PCO's rate limits: the pacer learns them from every response. See [Writes to Planning Center](#writes-to-planning-center) and [Add a PCO write](#add-a-pco-write).
+18. **Writes to Planning Center.** Only `lib/pco/writes.ts` sends a POST, PATCH or DELETE, and only through `pcoMutate` with a body from `jsonApi`. The barrel exports its functions but not that plumbing, so app code writes through a `lib/queries` function. That function reads afresh before it writes (refresh-before-write), writes only what the person previewed and confirmed, and records a `write_log` row for each write, made or refused. Sync jobs pass `paced: true` on every PCO call; page loads and actions someone is waiting on never do, and every write so far is one. Never hard-code PCO's rate limits: the pacer learns them from every response. See [Writes to Planning Center](#writes-to-planning-center) and [Add a PCO write](#add-a-pco-write).
 19. **A parser per ID kind.** Every ID or code that comes from a URL or a form (a route param, a query parameter, a form field) passes through the parser for its kind before it reaches a route builder, a query or an action:
     - `parsePcoId` (`@/lib/pco`) for Planning Center IDs;
     - `parseCatalogId` (`lib/catalog/ids.ts`) for catalog IDs: songs, tunes, hymns, books (by id, in a form) and import runs;
     - `parseBookCode` (`lib/catalog/ids.ts`) for book codes.
 
     Each returns the checked value or null, so a page writes `parseCatalogId(params.songId) ?? notFound()` and an action answers null with a message. Never pass an unparsed value to a builder or a query: builders interpolate without encoding, and queries trust the keys they are given. A new kind of ID gets its own parser, with tests, beside these.
+20. **Links in running text are underlined.** A link inside a sentence or a line of text is underlined as well as coloured: blue against the grey or black around it is under the 3:1 contrast a link needs to be told apart by colour alone (axe's `link-in-text-block`). A link that stands alone, such as a card's heading, a nav item or a to-do's action, needs no underline. Settings, checked with axe at 1280 and 320 px in light and dark mode, has no violations.
 
 ## Recipes
 
@@ -769,7 +793,7 @@ Example: a Hymns section, with a list at `/catalog/hymns` and a page per hymn at
 
 Example: the new-song form at `/catalog/songs/new` (`SongForm`, `createSongAction`), the model for the catalog's forms. The action is a server action the form passes to `useActionState`, and every decision lives in `lib/` with tests.
 
-Use `useActionState` only when neither the action nor any page it revalidates that is on screen waits on Planning Center (convention 15). Otherwise keep steps 1 to 4, and have the form call its action from `onSubmit`, with its state and pending flag in `useState` and a button that takes `pending` as a prop, as Settings' forms do (`useSettingsForm`, `SaveButton`). Keep the fields controlled, since nothing resets them then.
+Use `useActionState` only when neither the action nor any page it revalidates that is on screen waits on Planning Center (convention 15). Otherwise keep steps 1 to 4, and have the form call its action from `onSubmit`, with its state and pending flag in `useState` and a button that takes `pending` as a prop and its classes from `ui/buttonClasses`, as Settings' forms do (`useSettingsForm`, `SaveButton`). Keep the fields controlled, since nothing resets them then.
 
 1. **Fields and validation** (pure), beside the area's other modules, as `lib/catalog/validation.ts` is: the field names (`NEW_SONG_FIELDS`), the parts that show one error each (`NewSongPart`), the typed input the form describes, and a validator that reads the `FormData` with the readers of `lib/forms.ts` and returns `{ ok: true, input }` or `{ ok: false, fieldErrors }`, with every part's problem at once. It checks only what needs no database. Test it with a `FormData` built in the test.
 
@@ -925,14 +949,16 @@ Example: the hymnal notes (`createItemNote` and its siblings, `syncHymnNotes`, S
    Export it from the barrel, never `pcoMutate`. Test it in `lib/pco/writes.test.ts` with routes keyed by method (`` [`PATCH ${url}`] ``): the body (`calledRequests`), `no-store`, the auth header, a 422's `PcoValidationError` with its `details`, and no request at all for an invalid id.
 2. **What to write** is pure logic in `lib/<area>.ts`, with tests: a diff from what Planning Center has now to what it should have (`diffHymnNotes`), shared by the preview and the write. Decide what the app may touch and stay inside it. The hymnal notes never touch another category, and delete only notes the write log shows the app created.
 3. **The orchestration** goes in `lib/queries/<area>.ts`. A preview reads and diffs, and writes nothing (`previewHymnNotes`). The write (`syncHymnNotes`):
-   - **reads afresh first** (refresh-before-write), with the getter's uncached twin (`fetchPlanItems`, not the `cache()`d `getPlanItems`, whose result a page rendered earlier in the request may hold), and computes the diff again, so it writes what is needed now, not what the preview showed;
-   - refuses with a message, writing nothing, when it cannot go ahead (a missing category);
+   - **reads afresh first** (refresh-before-write), with the getter's uncached twin (`fetchPlanItems`, not the `cache()`d `getPlanItems`, whose result a page rendered earlier in the request may hold), and computes the diff again;
+   - **writes only what the person confirmed**: it takes the preview's items back and writes a part only when its fresh diff matches what was previewed (`matchesPreview`), reporting any other part `changed`, with nothing written, so a change made in Planning Center since the preview is never overwritten unseen;
+   - refuses with a message, writing nothing, when it cannot go ahead: a missing or doubled category, or settings it cannot read (it never writes with the defaults);
+   - **runs one at a time for the same target**: a second call while one runs is refused (`busy`), not joined, through a map of the writes in progress kept on globalThis (convention 15);
    - makes the writes one at a time, unpaced, and **records a `write_log` row for each**, made or refused: `recordWrite(db, { kind, target, ok, payload, result })`, with what was asked for and what changed, or Planning Center's error (with `PcoValidationError`'s `details` for a 422). A new kind joins `WRITE_LOG_KINDS` and needs no migration. A row that cannot be recorded is logged, and never stops the writes;
-   - goes on after a failed write where that is safe (the next item), and returns each part's outcome.
+   - goes on after a failed write where that is safe (the next item), but **stops at a 429** the client did not retry, reporting the rest `not-attempted`, since the same limit would refuse them; and returns each part's outcome.
 
-   Test it with a stubbed fetch and only `getDb` mocked: the fresh read, the writes in order, a log row for each (a 422 too), and a refusal that writes nothing.
-4. **The actions** go in the page's `actions.ts`, one for the preview and one for the write. Each checks the session, parses every id (convention 19), and calls its query in a `try`; a failure is logged and comes back as a message. After writing, the action revalidates the pages that show what changed (`revalidatePath(routes.plan(st, plan), "layout")`) and returns what happened. Test them as the plan's `actions.test.ts` does.
-5. **The UI** previews first, confirms in a `ui/Dialog` that cannot be closed while the writes run, then shows the results, failures first (`SyncHymnNotesAction`). Both actions wait on Planning Center, so they are **called from event handlers, with their state in `useState`**: never `<form action>`, `useActionState` or `useTransition` (convention 15).
+   Test it with a stubbed fetch and only `getDb` mocked: the fresh read through the uncached getter, the writes in order, a log row for each (a 422 too), a refusal that writes nothing, a changed part, a 429, and a second call while one runs (load a second copy of the module to show the two see each other).
+4. **The actions** go in the page's `actions.ts`, one for the preview and one for the write. Each checks the session, parses every id (convention 19), and calls its query in a `try`; a failure is logged and comes back as a message. The write's action also parses the preview it is sent back, which comes from a browser, with caps on its size (`lib/previewedHymnNotes.ts`). After writing, the action revalidates the pages that show what changed (`revalidatePath(routes.plan(st, plan), "layout")`) and returns what happened. Test them as the plan's `actions.test.ts` does.
+5. **The UI** says plainly what the write does, previews first, confirms in a `ui/Dialog` that cannot be dismissed while the writes run, then shows the results, failures first (`SyncHymnNotesAction`). The browser can still close the dialog (see `Dialog` in [Shared UI](#shared-ui)), so keep `open` in step in `onClose` and open the dialog again when the results come. Both actions wait on Planning Center, so they are **called from event handlers, with their state in `useState`**: never `<form action>`, `useActionState` or `useTransition` (convention 15).
 6. **Check** in the browser against a fake Planning Center that answers the writes (see Testing), never against the real one, and see the rows on Settings' Recent writes card.
 
 ### Add a setting
