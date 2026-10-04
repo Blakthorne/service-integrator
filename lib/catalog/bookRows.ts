@@ -10,7 +10,9 @@ import { entryNotes } from "./entryNotes";
  * `next start` compressed each chunk separately: the book of 708 entries cost
  * about 300 KB on the wire. Every field here is paid for once per row, so the
  * entry's other columns (its ids, its book's code, the song's Planning Center
- * link) stay out.
+ * link) stay out, with one exception: a book without numbers lists its
+ * entries in an order that can be changed, so each of its rows has the
+ * entry's id for its Move up and Move down buttons (`entryId`).
  */
 export interface BookRow {
     /**
@@ -31,6 +33,12 @@ export interface BookRow {
     tune: string | null;
     /** The entry's variant note and location, as `entryNotes` words them, joined; empty with none. */
     note: string;
+    /**
+     * The entry's id, so it can be moved up and down. Only in a book without
+     * numbers, whose entries are ordered by hand; a numbered book's rows have
+     * none, to keep its hundreds of rows lean.
+     */
+    entryId?: number;
 }
 
 /**
@@ -51,5 +59,6 @@ export function toBookRows(
         title: entry.title,
         tune: entry.tuneName,
         note: entryNotes(book, entry).join(" · "),
+        ...(book.numbered ? {} : { entryId: entry.id }),
     }));
 }

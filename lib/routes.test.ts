@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { ADD_BOOK_ID } from "./catalog/bookText";
 import {
     CATALOG_SECTIONS,
     NAV_HOME_ITEM,
@@ -52,6 +53,10 @@ describe("routes", () => {
         expect(routes.catalogTune(7)).toBe("/catalog/tunes/7");
         expect(routes.catalogBook("G")).toBe("/catalog/books/G");
         expect(routes.catalogImportRun(3)).toBe("/catalog/import/3");
+    });
+
+    test("catalogBookAdd links to the Add a book form on the books page", () => {
+        expect(routes.catalogBookAdd()).toBe(`/catalog/books#${ADD_BOOK_ID}`);
     });
 
     test("plan builders put the ids in order", () => {
