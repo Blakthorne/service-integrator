@@ -1,5 +1,5 @@
 import type { Credit, SongCredits } from "./domain";
-import type { CreditPhrases, CreditSettings } from "./settings";
+import { hasControlCharacter, type CreditPhrases, type CreditSettings } from "./settings";
 
 /**
  * Songs' credits: who wrote a song's words and its music, and who arranged
@@ -241,17 +241,6 @@ export const CREDIT_NAME_MAX_LENGTH = 100;
 
 /** The characters a name may not hold: they separate the convention's parts. */
 const NAME_SEPARATORS = /[:;,]/;
-
-/** True when `text` has a control character, such as a line break or a tab. */
-function hasControlCharacter(text: string): boolean {
-    for (const character of text) {
-        const code = character.codePointAt(0) ?? 0;
-        if (code < 0x20 || (code >= 0x7f && code < 0xa0)) {
-            return true;
-        }
-    }
-    return false;
-}
 
 /** "Words, Music, Arr. or Trans.": the roles, to name them in a message. */
 function listRoles(roles: readonly string[]): string {

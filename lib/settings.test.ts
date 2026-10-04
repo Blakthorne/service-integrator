@@ -16,6 +16,7 @@ import {
     SETTINGS,
     SETTING_KEYS,
     defaultScheduleHeaderLabel,
+    hasControlCharacter,
     isSettingKey,
     parseHeaderLabel,
     parseSetting,
@@ -402,6 +403,17 @@ describe("emailSubjectTemplate", () => {
         expect(parsed("emailSubjectTemplate", "x".repeat(EMAIL_SUBJECT_MAX_LENGTH))).toEqual({
             value: "x".repeat(EMAIL_SUBJECT_MAX_LENGTH),
         });
+    });
+});
+
+describe("hasControlCharacter", () => {
+    test("finds a line break, a tab or another C0 or C1 control character, and nothing else", () => {
+        for (const text of ["a\nb", "a\rb", "a\tb", "\u0000", "a\u007fb", `a${String.fromCharCode(0x85)}b`]) {
+            expect([text, hasControlCharacter(text)]).toEqual([text, true]);
+        }
+        for (const text of ["", "Words by", "Songs for {date} · {service}", `${String.fromCharCode(0xa0)}`]) {
+            expect([text, hasControlCharacter(text)]).toEqual([text, false]);
+        }
     });
 });
 

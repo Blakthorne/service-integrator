@@ -136,8 +136,12 @@ function refuse<T>(message: string): SettingParse<T> {
     return { ok: false, message };
 }
 
-/** True when `text` has a control character, such as a line break or a tab. */
-function hasControlCharacter(text: string): boolean {
+/**
+ * True when `text` has a control character, such as a line break or a tab:
+ * what "must be on one line" refuses, here and wherever text the app writes
+ * must stay on one line.
+ */
+export function hasControlCharacter(text: string): boolean {
     for (const character of text) {
         const code = character.codePointAt(0) ?? 0;
         if (code < 0x20 || (code >= 0x7f && code < 0xa0)) {

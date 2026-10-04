@@ -36,6 +36,7 @@ import {
     type PcoSongChanges,
     type SongTag,
 } from "@/lib/pco";
+import { hasControlCharacter } from "@/lib/settings";
 import { getSettings } from "./settings";
 
 /**
@@ -90,9 +91,7 @@ function refusal(reason: PcoWriteRefusalReason, message: string): PcoWriteRefusa
 }
 
 /** What the write log records of a write that failed: why, Planning Center's status, and its reasons for a 422. */
-export type PcoWriteError = { error: string; status?: number; details?: string[] };
-
-function writeError(error: unknown): PcoWriteError {
+function writeError(error: unknown): { error: string; status?: number; details?: string[] } {
     if (error instanceof PcoValidationError) {
         return {
             error: error.details.length > 0 ? error.details.join("; ") : error.message,
@@ -315,17 +314,6 @@ const CCLI_NUMBER_MAX = 999_999_999_999_999;
 
 /** A refusal of the form, about one of its parts. */
 export type NewPcoSongRefusal = PcoWriteRefusal & { field?: NewPcoSongField };
-
-/** True when `text` has a control character, such as a line break or a tab. */
-function hasControlCharacter(text: string): boolean {
-    for (const character of text) {
-        const code = character.codePointAt(0) ?? 0;
-        if (code < 0x20 || (code >= 0x7f && code < 0xa0)) {
-            return true;
-        }
-    }
-    return false;
-}
 
 /** The form's song, checked: what is sent to Planning Center. */
 interface CheckedNewPcoSong {
