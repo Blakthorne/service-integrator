@@ -31,6 +31,7 @@ import {
     PcoValidationError,
     assertPcoId,
     createItemNote,
+    type PcoId,
     deleteItemNote,
     fetchPlanItems,
     getItemNoteCategories,
@@ -243,8 +244,13 @@ export type HymnNotesSyncResult =
           items: HymnNoteSyncItem[];
           counts: HymnNoteSyncCounts;
       }
-    /** Nothing was written: the category is missing, or the categories could not be read. */
-    | { ok: false; kind: "no-category" | "unavailable"; message: string };
+    /**
+     * Nothing was written: the category is missing ("no-category"); the
+     * notes cannot be compared ("unavailable": settings or categories that
+     * could not be read, or several categories of the name); or a sync of
+     * the same plan is already running ("busy").
+     */
+    | { ok: false; kind: "no-category" | "unavailable" | "busy"; message: string };
 
 /** The reason a write failed, Planning Center's status, and its reasons for a 422. */
 function writeError(error: unknown): Extract<ItemNoteWriteResult, { error: string }> {
@@ -466,6 +472,12 @@ function countSync(items: readonly HymnNoteSyncItem[]): Required<HymnNoteSyncCou
  * could not be read, refuse the sync ("no-category" or "unavailable"):
  * nothing is written or logged. A plan, service type or catalog that cannot
  * be read throws before anything is written.
+ *
+ * One sync per plan runs at a time. A call for a plan whose sync is still
+ * running is refused ("busy"), and writes nothing; it does not join the
+ * running one, whose preview may not be the one it was given. Two tabs
+ * confirming together would otherwise both see a song without its note,
+ * and create two.
  */
 export async function syncHymnNotes(
     serviceTypeId: string,
@@ -474,6 +486,48 @@ export async function syncHymnNotes(
 ): Promise<HymnNotesSyncResult> {
     const st = assertPcoId(serviceTypeId);
     const plan = assertPcoId(planId);
+    const running = syncsInProgress();
+    if (running.has(plan)) {
+        return { ok: false, kind: "busy", message: SYNC_IN_PROGRESS_MESSAGE };
+    }
+    // Set before the first await, so a call that comes in while this one
+    // waits on Planning Center finds it.
+    const sync = runSync(st, plan, previewed);
+    running.set(plan, sync);
+    try {
+        return await sync;
+    } finally {
+        if (running.get(plan) === sync) {
+            running.delete(plan);
+        }
+    }
+}
+
+/** What a sync of a plan whose sync is already running says. */
+export const SYNC_IN_PROGRESS_MESSAGE =
+    "A sync of this plan's hymnal notes is already running, so this one wrote nothing. Wait for it to finish, then preview again.";
+
+/**
+ * The hymnal note syncs in progress, by plan id. They live on globalThis,
+ * not in a module constant, because a server action's copy of this module
+ * is not the page's (convention 15), and two tabs confirming at once must
+ * still see each other. Bump the version if what is stored here changes.
+ */
+const SYNCS_GLOBAL = Symbol.for("service-integrator.hymnNoteSyncs.v1");
+
+function syncsInProgress(): Map<string, Promise<HymnNotesSyncResult>> {
+    const scope = globalThis as unknown as {
+        [SYNCS_GLOBAL]?: Map<string, Promise<HymnNotesSyncResult>>;
+    };
+    return (scope[SYNCS_GLOBAL] ??= new Map());
+}
+
+/** The work of `syncHymnNotes`, for one plan at a time. */
+async function runSync(
+    st: PcoId,
+    plan: PcoId,
+    previewed: readonly PreviewedHymnNote[] | undefined
+): Promise<HymnNotesSyncResult> {
     const [serviceType, { items }, categories] = await Promise.all([
         getServiceType(st),
         fetchPlanItems(st, plan),

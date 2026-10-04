@@ -35,7 +35,12 @@ vi.mock("@/lib/db", async (importOriginal) => ({
     getDb,
 }));
 
-import { getHymnNoteCategories, previewHymnNotes, syncHymnNotes } from "./hymnNotes";
+import {
+    SYNC_IN_PROGRESS_MESSAGE,
+    getHymnNoteCategories,
+    previewHymnNotes,
+    syncHymnNotes,
+} from "./hymnNotes";
 
 const ST = "1405391";
 const EVENING = "1486055";
@@ -189,6 +194,8 @@ let db: DatabaseSync;
 
 beforeEach(() => {
     stubPcoCredentials();
+    // A fresh registry of syncs in progress per test (undone by unstubAllGlobals).
+    vi.stubGlobal(Symbol.for("service-integrator.hymnNoteSyncs.v1"), new Map());
     db = openTestDb();
     getDb.mockReturnValue(db);
     const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns" });
@@ -941,6 +948,84 @@ describe("syncHymnNotes", () => {
         await expect(syncHymnNotes("x", PLAN)).rejects.toBeInstanceOf(InvalidPcoIdError);
         await expect(syncHymnNotes(ST, "01")).rejects.toBeInstanceOf(InvalidPcoIdError);
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("syncHymnNotes, one sync per plan at a time", () => {
+    /** A promise the test opens when it likes: a read that waits on it holds a sync mid-flight. */
+    function gate(): { opened: Promise<void>; open: () => void } {
+        let open = () => {};
+        const opened = new Promise<void>((resolve) => {
+            open = resolve;
+        });
+        return { opened, open };
+    }
+
+    /** The plan's reads and writes, with its items read held until `opened`. */
+    function heldRoutes(opened: Promise<void>): Record<string, unknown> {
+        return {
+            ...readRoutes(),
+            ...writeRoutes(),
+            [urls.items]: () => opened.then(() => json(planItems())),
+        };
+    }
+
+    test("refuses a second sync of a plan while its first runs, and writes nothing for it", async () => {
+        const { opened, open } = gate();
+        const fetchMock = stubFetchRoutes(heldRoutes(opened));
+
+        const first = syncHymnNotes(ST, PLAN);
+        const second = await syncHymnNotes(ST, PLAN);
+
+        expect(second).toEqual({ ok: false, kind: "busy", message: SYNC_IN_PROGRESS_MESSAGE });
+        open();
+        await expect(first).resolves.toMatchObject({ ok: true, counts: { created: 1 } });
+        // Item 1's note was created once.
+        expect(writesSent(fetchMock).filter(({ method }) => method === "POST")).toHaveLength(1);
+        // Once it is done, the plan can be synced again.
+        await expect(syncHymnNotes(ST, PLAN)).resolves.toMatchObject({ ok: true });
+    });
+
+    test("keeps the syncs in progress on globalThis, so another copy of the module sees them", async () => {
+        const { opened, open } = gate();
+        stubFetchRoutes(heldRoutes(opened));
+        vi.resetModules();
+        const copy = await import("./hymnNotes");
+
+        const first = syncHymnNotes(ST, PLAN);
+
+        await expect(copy.syncHymnNotes(ST, PLAN)).resolves.toMatchObject({ ok: false, kind: "busy" });
+        open();
+        await first;
+    });
+
+    test("lets syncs of different plans run together", async () => {
+        const other = "81234599";
+        const { opened, open } = gate();
+        stubFetchRoutes({
+            ...heldRoutes(opened),
+            [`${PCO_BASE}/service_types/${ST}/plans/${other}/items?include=song,item_notes&per_page=100`]:
+                listPage([]),
+        });
+
+        const first = syncHymnNotes(ST, PLAN);
+
+        await expect(syncHymnNotes(ST, other)).resolves.toMatchObject({ ok: true, items: [] });
+        open();
+        await expect(first).resolves.toMatchObject({ ok: true });
+    });
+
+    test("frees the plan when its sync fails", async () => {
+        let status = 500;
+        stubFetchRoutes({
+            ...readRoutes(),
+            ...writeRoutes(),
+            [urls.items]: () => (status === 500 ? json({ errors: [] }, { status }) : json(planItems())),
+        });
+
+        await expect(syncHymnNotes(ST, PLAN)).rejects.toMatchObject({ name: "PcoError", status: 500 });
+        status = 200;
+        await expect(syncHymnNotes(ST, PLAN)).resolves.toMatchObject({ ok: true });
     });
 });
 
