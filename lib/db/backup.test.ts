@@ -166,7 +166,7 @@ describe("backupDatabase", () => {
         expect(readdirSync(dir)).toEqual([backupFileName(day(1))]);
     });
 
-    test("fails without leaving a partial file", () => {
+    test("writes nothing when the copy itself fails", () => {
         mkdirSync(dir, { recursive: true });
         db.exec("BEGIN");
         try {
@@ -177,6 +177,25 @@ describe("backupDatabase", () => {
             db.exec("ROLLBACK");
         }
         expect(readdirSync(dir)).toEqual([]);
+    });
+
+    test("removes its partial file when a step after the copy fails", () => {
+        // A folder where the backup goes makes the final rename fail, after
+        // VACUUM INTO has written the partial file and it has been flushed.
+        const file = path.join(dir, backupFileName(T0));
+        mkdirSync(file);
+        let thrown: unknown;
+        try {
+            backupDatabase(db, { dir, at: T0 });
+        } catch (error) {
+            thrown = error;
+        }
+        expect(thrown).toMatchObject({
+            code: "EISDIR",
+            syscall: "rename",
+            path: `${file}.partial`,
+        });
+        expect(readdirSync(dir)).toEqual([backupFileName(T0)]);
     });
 });
 
