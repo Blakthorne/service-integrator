@@ -82,20 +82,28 @@ export function replaceSongCredits(
     });
 }
 
+/** How many songs' authors read as each parse status. */
+export type CreditStatusCounts = Record<CreditParseStatus, number>;
+
 /**
  * Read each song's author as credits with `roles` (the `creditRoles`
  * setting; see `parseCredits`) and store what it reads as, replacing what
  * the song had, all in one transaction. The songs must be in the mirror.
+ * Returns how many read as each status.
  */
 export function deriveSongCredits(
     db: DatabaseSync,
     songs: readonly Pick<PcoLibrarySong, "id" | "author">[],
     roles: readonly string[]
-): void {
-    withTransaction(db, () => {
+): CreditStatusCounts {
+    return withTransaction(db, () => {
+        const counts: CreditStatusCounts = { ok: 0, legacy: 0, unparsed: 0 };
         for (const { id, author } of songs) {
-            replaceSongCredits(db, id, songCreditsOf(parseCredits(author, roles)));
+            const derived = songCreditsOf(parseCredits(author, roles));
+            replaceSongCredits(db, id, derived);
+            counts[derived.status] += 1;
         }
+        return counts;
     });
 }
 

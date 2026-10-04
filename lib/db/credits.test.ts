@@ -126,16 +126,18 @@ describe("deriveSongCredits", () => {
     test("stores what each song's author reads as, with the roles given", () => {
         seedPcoSong(db, { id: "1003" });
         seedPcoSong(db, { id: "1004" });
-        deriveSongCredits(
-            db,
-            [
-                { id: "1001", author: "Words: Isaac Watts; Music: William Croft" },
-                { id: "1002", author: "John Newton" },
-                { id: "1003", author: "Composer: Lowell Mason" },
-                { id: "1004", author: null },
-            ],
-            DEFAULT_SETTINGS.creditRoles
-        );
+        expect(
+            deriveSongCredits(
+                db,
+                [
+                    { id: "1001", author: "Words: Isaac Watts; Music: William Croft" },
+                    { id: "1002", author: "John Newton" },
+                    { id: "1003", author: "Composer: Lowell Mason" },
+                    { id: "1004", author: null },
+                ],
+                DEFAULT_SETTINGS.creditRoles
+            )
+        ).toEqual({ ok: 1, legacy: 2, unparsed: 1 });
         expect(findSongCredits(db, "1001")).toEqual({
             status: "ok",
             credits: [
