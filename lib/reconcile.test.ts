@@ -3,7 +3,9 @@ import type { LabelledEntry } from "./domain";
 import {
     buildCatalogIndex,
     chooseAutoLinks,
+    readTuneHint,
     suggestLinks,
+    tunesNamedBy,
     type AutoLinkablePcoSong,
     type IndexableSong,
 } from "./reconcile";
@@ -132,6 +134,50 @@ describe("buildCatalogIndex", () => {
     test("is empty for an empty catalog", () => {
         const index = buildCatalogIndex([]);
         expect(index.songs.size + index.titles.size + index.tunes.size).toBe(0);
+    });
+});
+
+describe("readTuneHint", () => {
+    test("splits a trailing parenthetical off the title", () => {
+        expect(readTuneHint("Abba, Father (PRITCHARD)")).toEqual({
+            base: "Abba, Father",
+            names: ["PRITCHARD"],
+        });
+    });
+
+    test("offers all of the parenthetical, and its last group when that differs", () => {
+        expect(readTuneHint("Glory Be to the Father (Gloria Patri (Meineke))")).toEqual({
+            base: "Glory Be to the Father",
+            names: ["Gloria Patri (Meineke)"],
+        });
+        expect(readTuneHint("Abba, Father (Descant) (PRITCHARD)")).toEqual({
+            base: "Abba, Father",
+            names: ["Descant) (PRITCHARD", "PRITCHARD"],
+        });
+    });
+
+    test("is null for a title that does not end in one", () => {
+        expect(readTuneHint("Amazing Grace")).toBeNull();
+        expect(readTuneHint("O (Come) All Ye Faithful")).toBeNull();
+    });
+});
+
+describe("tunesNamedBy", () => {
+    test("finds the tunes a hint names, by name or alias, in any case", () => {
+        expect(tunesNamedBy(readTuneHint("Abba, Father (PRITCHARD)"), INDEX)).toEqual(
+            new Set([3])
+        );
+        expect(tunesNamedBy(readTuneHint("Rejoice (Darwal)"), INDEX)).toEqual(new Set([6]));
+        expect(
+            tunesNamedBy(readTuneHint("Glory Be to the Father (Gloria Patri (Meineke))"), INDEX)
+        ).toEqual(new Set([8]));
+    });
+
+    test("finds none for a parenthetical that names no tune, or no parenthetical", () => {
+        expect(tunesNamedBy(readTuneHint("America the Beautiful (Descant)"), INDEX)).toEqual(
+            new Set()
+        );
+        expect(tunesNamedBy(null, INDEX)).toEqual(new Set());
     });
 });
 

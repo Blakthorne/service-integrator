@@ -112,6 +112,45 @@ const TRAILING_PARENTHETICAL = /\s*\(.*\)\s*$/;
 /** The last parenthetical group at the end of a title, with no parentheses inside it. */
 const LAST_PARENTHETICAL = /\(([^()]*)\)\s*$/;
 
+/** A title's trailing parenthetical, split off: what may name the song's tune. */
+export interface TuneHint {
+    /** The title before the parenthetical, as written: "Abba, Father". */
+    base: string;
+    /**
+     * What may name the tune, as written: all of the parenthetical, and its
+     * last group when that differs ("GLORIA PATRI (MEINEKE)" and "MEINEKE").
+     */
+    names: string[];
+}
+
+/**
+ * Split off a title's trailing parenthetical, from its first "(" to the end
+ * ("Abba, Father (PRITCHARD)" gives "Abba, Father" and "PRITCHARD"), or null
+ * when the title has none. The parenthetical names a tune when all of it does
+ * ("(GLORIA PATRI (MEINEKE))") or its last group does ("(Descant)
+ * (PRITCHARD)"); which tune, if any, is for the caller to look up.
+ */
+export function readTuneHint(title: string): TuneHint | null {
+    const match = TRAILING_PARENTHETICAL.exec(title);
+    if (!match) {
+        return null;
+    }
+    const whole = match[0].trim().slice(1, -1);
+    const last = LAST_PARENTHETICAL.exec(title)?.[1] ?? whole;
+    return { base: title.slice(0, match.index), names: [...new Set([whole, last])] };
+}
+
+/** The tunes of the index that a tune hint names, by name or alias. */
+export function tunesNamedBy(hint: TuneHint | null, index: CatalogIndex): Set<number> {
+    const tuneIds = new Set<number>();
+    for (const name of hint?.names ?? []) {
+        for (const tuneId of index.tunes.get(normalizeTuneName(name)) ?? []) {
+            tuneIds.add(tuneId);
+        }
+    }
+    return tuneIds;
+}
+
 /** What a Planning Center title says, worked out once. */
 interface TitleClues {
     /** The whole title, normalized. */
@@ -122,27 +161,13 @@ interface TitleClues {
     tuneIds: ReadonlySet<number>;
 }
 
-/**
- * Read a title's clues. The parenthetical names a tune when all of it does
- * ("(GLORIA PATRI (MEINEKE))") or its last group does ("(Descant) (PRITCHARD)").
- */
+/** Read a title's clues (see `readTuneHint` for the parenthetical). */
 function readClues(title: string, index: CatalogIndex): TitleClues {
-    const match = TRAILING_PARENTHETICAL.exec(title);
-    const tuneIds = new Set<number>();
-    if (!match) {
-        return { key: normalizeTitle(title), baseKey: "", tuneIds };
-    }
-    const whole = match[0].trim().slice(1, -1);
-    const last = LAST_PARENTHETICAL.exec(title)?.[1] ?? whole;
-    for (const hint of new Set([whole, last])) {
-        for (const tuneId of index.tunes.get(normalizeTuneName(hint)) ?? []) {
-            tuneIds.add(tuneId);
-        }
-    }
+    const hint = readTuneHint(title);
     return {
         key: normalizeTitle(title),
-        baseKey: normalizeTitle(title.slice(0, match.index)),
-        tuneIds,
+        baseKey: hint === null ? "" : normalizeTitle(hint.base),
+        tuneIds: tunesNamedBy(hint, index),
     };
 }
 
