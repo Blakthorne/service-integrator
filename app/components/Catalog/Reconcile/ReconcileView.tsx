@@ -59,7 +59,7 @@ export default function ReconcileView({ unlinked, catalogSongs }: ReconcileViewP
                             setSearchParams({ q: next === "" ? null : next }, { history: "replace" })
                         }
                         label="Search these songs"
-                        placeholder="Title or author"
+                        hint="By title or author"
                     />
                     <p
                         aria-live="polite"
