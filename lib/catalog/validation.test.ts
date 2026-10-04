@@ -4,6 +4,7 @@ import {
     EMPTY_NEW_SONG,
     cleanText,
     draftFromPcoTitle,
+    previewEntryLabel,
     validateNewSong,
     type NewSongBook,
     type NewSongValues,
@@ -186,6 +187,31 @@ describe("validateNewSong", () => {
                 tune: { message: "Choose a tune from the list, type a new one, or choose None." },
             },
         });
+    });
+});
+
+describe("previewEntryLabel", () => {
+    const rejoice = { numbered: true, labelFormat: "R-{n}" };
+    const preview = (fields: Partial<NewSongValues>, book = rejoice) =>
+        previewEntryLabel(book, { placement: "number", number: "", location: "", ...fields });
+
+    test("labels a number, or a location, in a numbered book", () => {
+        expect(preview({ number: " 396 " })).toBe("R-396");
+        expect(preview({ placement: "location", location: " front  cover " })).toBe(
+            "R-Front Cover"
+        );
+    });
+
+    test("labels a book without numbers by its label format", () => {
+        expect(preview({}, { numbered: false, labelFormat: "Chorus Book" })).toBe("Chorus Book");
+    });
+
+    test("is null until what is typed makes a label", () => {
+        expect(preview({ number: "" })).toBeNull();
+        expect(preview({ number: "12a" })).toBeNull();
+        expect(preview({ number: "0" })).toBeNull();
+        expect(preview({ number: "100000" })).toBeNull();
+        expect(preview({ placement: "location", location: "  " })).toBeNull();
     });
 });
 

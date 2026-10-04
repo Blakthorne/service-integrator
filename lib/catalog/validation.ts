@@ -9,6 +9,7 @@ import { normalizeTitle } from "@/lib/normalizeTitle";
 import { readTuneHint, tunesNamedBy, type CatalogIndex } from "@/lib/reconcile";
 import { formatCount } from "./counts";
 import { parseCatalogId } from "./ids";
+import { formatEntryLabel } from "./labels";
 
 /**
  * The new-song form (`/catalog/songs/new`): its fields, what it starts with
@@ -278,6 +279,29 @@ export function validateNewSong(
         fieldErrors.entry = { message: entry.message };
     }
     return { ok: false, fieldErrors };
+}
+
+/**
+ * The label the form's entry will have in `book`, as it shows it under the
+ * fields while they are typed in: "R-396" for a number, "G-Front Cover" for
+ * a location, the short name of a book without numbers; null while what is
+ * typed makes none (no number yet, or one that is not a number).
+ */
+export function previewEntryLabel(
+    book: Pick<Book, "numbered" | "labelFormat">,
+    { placement, number, location }: Pick<NewSongValues, "placement" | "number" | "location">
+): string | null {
+    if (!book.numbered) {
+        return formatEntryLabel(book, { number: null, locationLabel: null });
+    }
+    if (placement === "location") {
+        const locationLabel = cleanText(location);
+        return locationLabel === "" ? null : formatEntryLabel(book, { number: null, locationLabel });
+    }
+    const digits = number.trim();
+    return /^[0-9]+$/.test(digits) && Number(digits) >= 1 && Number(digits) <= ENTRY_NUMBER_MAX
+        ? formatEntryLabel(book, { number: Number(digits), locationLabel: null })
+        : null;
 }
 
 /** What the form starts with: the values it would post, and the text in its two searches. */
