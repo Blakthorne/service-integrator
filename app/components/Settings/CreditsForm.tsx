@@ -84,34 +84,32 @@ export default function CreditsForm({ creditRoles, creditPhrases }: CreditsFormP
     }, [values]);
 
     function addRole() {
-        if (form.pending || !canAdd) {
-            return;
+        if (canAdd && form.replaceValues(addCreditRow)) {
+            focusRef.current = roleInputId(rows.length);
+            setAnnouncement(`Added role ${rows.length + 1}.`);
         }
-        focusRef.current = roleInputId(rows.length);
-        setAnnouncement(`Added role ${rows.length + 1}.`);
-        form.replaceValues(addCreditRow);
     }
 
     function removeRole(index: number) {
-        if (form.pending || !canRemove) {
-            return;
+        if (canRemove && form.replaceValues((current) => removeCreditRow(current, index))) {
+            const left = rows.length - 1;
+            focusRef.current = roleInputId(Math.min(index, left - 1));
+            setAnnouncement(`Removed role ${index + 1}. ${left} roles left.`);
         }
-        const left = rows.length - 1;
-        focusRef.current = roleInputId(Math.min(index, left - 1));
-        setAnnouncement(`Removed role ${index + 1}. ${left} roles left.`);
-        form.replaceValues((current) => removeCreditRow(current, index));
     }
 
     function moveRole(index: number, by: -1 | 1) {
         const target = index + by;
-        if (form.pending || target < 0 || target >= rows.length) {
-            return;
+        if (
+            target >= 0 &&
+            target < rows.length &&
+            form.replaceValues((current) => moveCreditRow(current, index, by))
+        ) {
+            focusRef.current = by < 0 ? upButtonId(target) : downButtonId(target);
+            setAnnouncement(
+                `Moved ${rows[index].role.trim() || `role ${index + 1}`} to position ${target + 1}.`
+            );
         }
-        focusRef.current = by < 0 ? upButtonId(target) : downButtonId(target);
-        setAnnouncement(
-            `Moved ${rows[index].role.trim() || `role ${index + 1}`} to position ${target + 1}.`
-        );
-        form.replaceValues((current) => moveCreditRow(current, index, by));
     }
 
     return (
