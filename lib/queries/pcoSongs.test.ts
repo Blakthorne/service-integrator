@@ -39,6 +39,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 }));
 
 import {
+    ADD_IN_PROGRESS_MESSAGE,
     addSongToPlan,
     createSongInPlanningCenter,
     defaultArrangement,
@@ -102,6 +103,15 @@ function writes() {
 /** The requests that were not GETs. */
 function writesSent(fetchMock: ReturnType<typeof stubFetchRoutes>) {
     return calledRequests(fetchMock).filter(({ method }) => method !== "GET");
+}
+
+/** A promise held open until `open()`, for a route that answers only once it is. */
+function gate(): { opened: Promise<void>; open: () => void } {
+    let open: () => void = () => {};
+    const opened = new Promise<void>((resolve) => {
+        open = resolve;
+    });
+    return { opened, open };
 }
 
 /** A database that cannot be opened, for getDb to throw. */
@@ -1053,6 +1063,69 @@ describe("addSongToPlan", () => {
             message: "There is no such plan.",
         });
         expect(writesSent(fetchMock)).toEqual([]);
+    });
+
+    test("runs one add of a song to a plan at a time: a second, from another copy of the module, is refused as busy", async () => {
+        const { opened, open } = gate();
+        const fetchMock = stubFetchRoutes({
+            ...readRoutes(),
+            [`POST ${urls.items()}`]: async () => {
+                await opened;
+                return json({ data: added }, { status: 201 });
+            },
+        });
+        vi.resetModules();
+        const copy = await import("./pcoSongs");
+
+        const first = addSongToPlan(ST, PLAN, SONG);
+        await expect(copy.addSongToPlan(ST, PLAN, SONG, { allowDuplicate: true })).resolves.toEqual({
+            ok: false,
+            reason: "busy",
+            message: ADD_IN_PROGRESS_MESSAGE,
+        });
+        open();
+        await expect(first).resolves.toMatchObject({ ok: true });
+        expect(writesSent(fetchMock)).toHaveLength(1);
+    });
+
+    test("frees the plan and song when an add finishes, or fails", async () => {
+        stubFetchRoutes({ ...readRoutes(), [`POST ${urls.items()}`]: () => json({ errors: [] }, { status: 500 }) });
+        await expect(addSongToPlan(ST, PLAN, SONG)).rejects.toMatchObject({ status: 500 });
+
+        stubFetchRoutes({ ...readRoutes(), [`POST ${urls.items()}`]: () => json({ data: added }, { status: 201 }) });
+        await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toMatchObject({ ok: true });
+        await expect(addSongToPlan(ST, PLAN, SONG)).resolves.toMatchObject({ ok: true });
+    });
+
+    test("lets adds of other songs, or to other plans, run together", async () => {
+        const { opened, open } = gate();
+        const other = songResource("1002", { title: "Amazing Grace" });
+        let posts = 0;
+        stubFetchRoutes({
+            ...readRoutes(),
+            [urls.song("1002")]: { data: other },
+            [urls.arrangements("1002")]: listPage([arrangementResource("6001")]),
+            [urls.planItems(ST, later.id)]: listPage([]),
+            // The first add to the plan is held until the others are done.
+            [`POST ${urls.items()}`]: async () => {
+                posts += 1;
+                if (posts === 1) {
+                    await opened;
+                }
+                return json({ data: added }, { status: 201 });
+            },
+            [`POST ${urls.items(ST, later.id)}`]: () => json({ data: added }, { status: 201 }),
+        });
+
+        const first = addSongToPlan(ST, PLAN, SONG);
+        await vi.waitFor(() => expect(posts).toBe(1));
+        const [otherSong, otherPlan] = await Promise.all([
+            addSongToPlan(ST, PLAN, "1002", { allowDuplicate: true }),
+            addSongToPlan(ST, later.id, SONG),
+        ]);
+        expect([otherSong.ok, otherPlan.ok]).toEqual([true, true]);
+        open();
+        await expect(first).resolves.toMatchObject({ ok: true });
     });
 
     test("reads the upcoming plans afresh for every add, not from an earlier read", async () => {

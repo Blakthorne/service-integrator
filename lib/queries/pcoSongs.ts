@@ -72,7 +72,11 @@ export type PcoWriteRefusalReason =
     | "not-found"
     /** The catalog song is linked to a Planning Center song already. */
     | "linked"
-    /** The same catalog song is being created in Planning Center already. */
+    /**
+     * The same write is under way already: the same catalog song being
+     * created in Planning Center, or the same song being added to the same
+     * plan.
+     */
     | "busy"
     /** The song has no arrangement to put in a plan. */
     | "no-arrangement"
@@ -768,13 +772,17 @@ const NO_SUCH_PLAN = "There is no such plan.";
  * up at the next sync; a mirror that cannot be written is only logged,
  * since the item is in the plan). One write, no undo.
  *
- * Refused when an id is not a Planning Center id, Planning Center has no
- * such song, service type or plan, the plan is not upcoming any more or
- * its service type is archived ("not-upcoming"), the song has no
- * arrangement that is not archived, the plan holds the song already and
- * no duplicate is allowed, or Planning Center refuses the item. Throws
- * when Planning Center or the database fails. It revalidates nothing: the
- * action that calls it does.
+ * One add of a song to a plan runs at a time: a second while the first is
+ * under way, from another tab say, is refused as "busy", never joined or
+ * queued, so a double confirm cannot add the song twice.
+ *
+ * Refused when an id is not a Planning Center id, the same add is under
+ * way, Planning Center has no such song, service type or plan, the plan is
+ * not upcoming any more or its service type is archived ("not-upcoming"),
+ * the song has no arrangement that is not archived, the plan holds the song
+ * already and no duplicate is allowed, or Planning Center refuses the item.
+ * Throws when Planning Center or the database fails. It revalidates
+ * nothing: the action that calls it does.
  */
 export async function addSongToPlan(
     serviceTypeId: string,
@@ -792,6 +800,47 @@ export async function addSongToPlan(
     if (songId === null) {
         return refusal("not-found", NO_SUCH_PCO_SONG);
     }
+    const adding = addsInProgress();
+    const key = `${planIdChecked} ${songId}`;
+    if (adding.has(key)) {
+        return refusal("busy", ADD_IN_PROGRESS_MESSAGE);
+    }
+    // Set before the first await, so a call that comes in while this one
+    // waits on Planning Center finds it.
+    adding.add(key);
+    try {
+        return await addToPlan(st, planIdChecked, songId, allowDuplicate, now);
+    } finally {
+        adding.delete(key);
+    }
+}
+
+/** What `addSongToPlan` says to a second add of the same song to the same plan while the first is under way. */
+export const ADD_IN_PROGRESS_MESSAGE =
+    "This song is being added to that plan already, so this added nothing. Wait for that to finish, then look at the plan.";
+
+/**
+ * The songs being added to plans right now, as "<plan id> <song id>"
+ * (a plan's id is unique across service types). They live on globalThis,
+ * not in a module constant, because a server action's copy of this module
+ * is not the page's (convention 15), and two tabs confirming at once must
+ * still see each other. Bump the version if what is stored here changes.
+ */
+const ADDING_GLOBAL = Symbol.for("service-integrator.pcoSongs.addingToPlans.v1");
+
+function addsInProgress(): Set<string> {
+    const scope = globalThis as unknown as { [ADDING_GLOBAL]?: Set<string> };
+    return (scope[ADDING_GLOBAL] ??= new Set());
+}
+
+/** The work of `addSongToPlan`, one at a time for a song and a plan. */
+async function addToPlan(
+    st: string,
+    planIdChecked: string,
+    songId: string,
+    allowDuplicate: boolean,
+    now: Date
+): Promise<AddSongToPlanResult> {
     const { settings } = getSettings();
     const db = getDb();
     const [song, arrangements, serviceType, upcoming, planItems] = await Promise.all([
