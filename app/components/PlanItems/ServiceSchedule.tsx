@@ -128,7 +128,7 @@ function CustomOption({
 
 /**
  * Numbers, the choice for a song linked to a catalog song in a book: its tune
- * and numbers, as "NETTLETON (R-553/G-17)".
+ * and numbers, as "NETTLETON (R-553 / G-17)".
  */
 function NumbersOption({
     item,

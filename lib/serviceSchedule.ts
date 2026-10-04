@@ -7,10 +7,7 @@ import type {
 import { formatShortDate } from "./format";
 
 /** What the schedule text reads of a catalog song's entry. */
-export type ScheduleEntry = Pick<
-    LabelledEntry,
-    "bookCode" | "number" | "variantNote"
->;
+export type ScheduleEntry = Pick<LabelledEntry, "label" | "variantNote">;
 
 /** What the schedule text reads of a catalog song: its entries, in book order. */
 export type ScheduleMatch = { entries: readonly ScheduleEntry[] };
@@ -76,16 +73,21 @@ export function scheduleEntries<T extends Pick<LabelledEntry, "variantNote">>(
     return plain.length > 0 ? plain : [...entries];
 }
 
+/** What goes between a song's numbers: "R-396 / G-317". */
+const NUMBER_SEPARATOR = " / ";
+
 /**
- * A song's numbers as the schedule text prints them, from the entries
- * `scheduleEntries` picks: each as its book's code and number, joined with
- * "/" ("R-12/G-34"). An entry with no number prints 0, as hymns.json had the
- * Doxology on the front cover of Great Hymns ("G-0"). No entries give "".
+ * A song's numbers as the schedule text prints them: the labels of the
+ * entries `scheduleEntries` picks, in book order, joined with " / "
+ * ("R-396 / G-317"). Each label is the one its book gives the entry (see
+ * `formatEntryLabel`), so the Doxology on the front cover of Great Hymns is
+ * "G-Front Cover" and an entry of an unnumbered book is the book's short
+ * name. No entries give "".
  */
 export function formatScheduleNumbers(entries: readonly ScheduleEntry[]): string {
     return scheduleEntries(entries)
-        .map((entry) => `${entry.bookCode}-${entry.number ?? 0}`)
-        .join("/");
+        .map((entry) => entry.label)
+        .join(NUMBER_SEPARATOR);
 }
 
 /**

@@ -49,8 +49,8 @@ function reduceAll(
 }
 
 const BOTH = [
-    { bookCode: "R", number: 12, variantNote: null },
-    { bookCode: "G", number: 34, variantNote: null },
+    { label: "R-12", variantNote: null },
+    { label: "G-34", variantNote: null },
 ];
 
 /**
@@ -265,14 +265,14 @@ describe("copy text through the merged view", () => {
 
     test("with nothing chosen every linked song shows its numbers", () => {
         expect(copyText([])).toBe(
-            "Sunday AM 6/15/25\n\nMulti (R-12/G-34)\nSingle (R-12/G-34)\nNo Hymn"
+            "Sunday AM 6/15/25\n\nMulti (R-12 / G-34)\nSingle (R-12 / G-34)\nNo Hymn"
         );
     });
 
     test("Leave blank drops a linked song's numbers, and Numbers brings them back", () => {
         expect(lineFor("Multi", [choose("2", "blank")])).toBe("Multi");
         expect(lineFor("Multi", [choose("2", "blank"), choose("2", "numbers")])).toBe(
-            "Multi (R-12/G-34)"
+            "Multi (R-12 / G-34)"
         );
     });
 
@@ -284,7 +284,7 @@ describe("copy text through the merged view", () => {
     });
 
     test("text typed before choosing Custom shows once Custom is chosen", () => {
-        expect(lineFor("Single", [text("3", "x")])).toBe("Single (R-12/G-34)");
+        expect(lineFor("Single", [text("3", "x")])).toBe("Single (R-12 / G-34)");
         expect(lineFor("Single", [text("3", "x"), choose("3", "custom")])).toBe(
             "Single (x)"
         );
@@ -292,7 +292,7 @@ describe("copy text through the merged view", () => {
 
     test("going back to the numbers drops the custom text for good", () => {
         const backToNumbers = [choose("2", "custom"), text("2", "x"), choose("2", "numbers")];
-        expect(lineFor("Multi", backToNumbers)).toBe("Multi (R-12/G-34)");
+        expect(lineFor("Multi", backToNumbers)).toBe("Multi (R-12 / G-34)");
         expect(lineFor("Multi", [...backToNumbers, choose("2", "custom")])).toBe("Multi");
     });
 

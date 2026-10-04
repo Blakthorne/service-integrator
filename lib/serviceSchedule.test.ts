@@ -22,12 +22,8 @@ const HEADER_PM = "Sunday PM 6/15/25\n\n";
 /** The Planning Center song that the song items below schedule, unless they say otherwise. */
 const SONG = "100";
 
-function entry(
-    bookCode: string,
-    number: number | null,
-    variantNote: string | null = null
-): ScheduleEntry {
-    return { bookCode, number, variantNote };
+function entry(label: string, variantNote: string | null = null): ScheduleEntry {
+    return { label, variantNote };
 }
 
 /** A catalog in which Planning Center song `songId` is linked to a song with these entries. */
@@ -73,14 +69,14 @@ function lineFor(
     return textFor([songItem("T", 1, selection)], catalog);
 }
 
-const BOTH = [entry("R", 12), entry("G", 34)]; // R-12/G-34
-const RJ_ONLY = [entry("R", 12)]; // R-12
-const GR_ONLY = [entry("G", 34)]; // G-34
+const BOTH = [entry("R-12"), entry("G-34")]; // R-12 / G-34
+const RJ_ONLY = [entry("R-12")]; // R-12
+const GR_ONLY = [entry("G-34")]; // G-34
 const NEITHER: ScheduleEntry[] = []; // in no book
 
 describe("formatScheduleNumbers", () => {
-    test("joins the numbers with '/', each as its book's code and number", () => {
-        expect(formatScheduleNumbers(BOTH)).toBe("R-12/G-34");
+    test("joins the entries' labels with ' / '", () => {
+        expect(formatScheduleNumbers(BOTH)).toBe("R-12 / G-34");
     });
 
     test("a song in one book has one number", () => {
@@ -93,51 +89,54 @@ describe("formatScheduleNumbers", () => {
     });
 
     test("keeps the entries' order, which is the books' order", () => {
-        expect(formatScheduleNumbers([entry("G", 34), entry("R", 12)])).toBe(
-            "G-34/R-12"
+        expect(formatScheduleNumbers([entry("G-34"), entry("R-12")])).toBe(
+            "G-34 / R-12"
         );
     });
 
-    test("an entry with no number prints 0, as hymns.json had the Doxology's front cover", () => {
-        expect(formatScheduleNumbers([entry("R", 14), entry("G", null)])).toBe(
-            "R-14/G-0"
+    test("prints each label as its book gives it: a front cover, an unnumbered book's name", () => {
+        expect(formatScheduleNumbers([entry("R-14"), entry("G-Front Cover")])).toBe(
+            "R-14 / G-Front Cover"
+        );
+        expect(formatScheduleNumbers([entry("R-12"), entry("Chorus Book")])).toBe(
+            "R-12 / Chorus Book"
         );
     });
 
     test("leaves out a descant printed beside the hymn's own numbers", () => {
         expect(
             formatScheduleNumbers([
-                entry("R", 28),
-                entry("R", 29, "Descant - Last Chorus only"),
-                entry("G", 37),
+                entry("R-28"),
+                entry("R-29", "Descant - Last Chorus only"),
+                entry("G-37"),
             ])
-        ).toBe("R-28/G-37");
+        ).toBe("R-28 / G-37");
     });
 
     test("prints the variants when the song has nothing else, as a round printed only as a round", () => {
-        expect(formatScheduleNumbers([entry("R", 693, "A Round")])).toBe("R-693");
+        expect(formatScheduleNumbers([entry("R-693", "A Round")])).toBe("R-693");
         expect(
-            formatScheduleNumbers([entry("R", 6, "A Round"), entry("G", 9, "Descant")])
-        ).toBe("R-6/G-9");
+            formatScheduleNumbers([entry("R-6", "A Round"), entry("G-9", "Descant")])
+        ).toBe("R-6 / G-9");
     });
 });
 
 describe("scheduleEntries", () => {
     test("gives the entries without a variant note, or all of them when each has one", () => {
-        const plain = entry("R", 28);
-        const descant = entry("R", 29, "Descant");
+        const plain = entry("R-28");
+        const descant = entry("R-29", "Descant");
         expect(scheduleEntries([plain, descant])).toEqual([plain]);
         expect(scheduleEntries([descant])).toEqual([descant]);
         expect(scheduleEntries([])).toEqual([]);
     });
 
     test("counts a blank variant note as none", () => {
-        const blank = entry("R", 1, "  ");
-        expect(scheduleEntries([blank, entry("R", 2, "Descant")])).toEqual([blank]);
+        const blank = entry("R-1", "  ");
+        expect(scheduleEntries([blank, entry("R-2", "Descant")])).toEqual([blank]);
     });
 
     test("gives the entries themselves, in their order, in a new array", () => {
-        const entries = [entry("G", 34), entry("R", 12)];
+        const entries = [entry("G-34"), entry("R-12")];
         const picked = scheduleEntries(entries);
         expect(picked).not.toBe(entries);
         expect(picked[0]).toBe(entries[0]);
@@ -439,7 +438,7 @@ describe("buildScheduleCopyText: song linked to a catalog song", () => {
     const both = linked(BOTH);
 
     test("Numbers prints the song's numbers", () => {
-        expect(lineFor({ option: "numbers" }, both)).toBe("T (R-12/G-34)");
+        expect(lineFor({ option: "numbers" }, both)).toBe("T (R-12 / G-34)");
     });
 
     test("a song in one book prints its one number, and a song in no book just the title", () => {
@@ -473,14 +472,14 @@ describe("buildScheduleCopyText: song linked to a catalog song", () => {
 
     test("custom text is ignored unless the option is Custom", () => {
         expect(lineFor({ option: "numbers", customText: "x" }, both)).toBe(
-            "T (R-12/G-34)"
+            "T (R-12 / G-34)"
         );
     });
 
-    test("the Doxology prints its front cover as G-0", () => {
+    test("the Doxology prints its front cover as G-Front Cover", () => {
         expect(
-            textFor([songItem("Doxology", 1)], linked([entry("R", 14), entry("G", null)]))
-        ).toBe("Doxology (R-14/G-0)");
+            textFor([songItem("Doxology", 1)], linked([entry("R-14"), entry("G-Front Cover")]))
+        ).toBe("Doxology (R-14 / G-Front Cover)");
     });
 });
 
@@ -489,17 +488,17 @@ describe("buildScheduleCopyText: finding a song by its link", () => {
 
     test("the item's own title is printed, not the catalog's", () => {
         expect(textFor([songItem("Amazing Grace", 1)], catalog)).toBe(
-            "Amazing Grace (R-12/G-34)"
+            "Amazing Grace (R-12 / G-34)"
         );
         expect(textFor([songItem("amazing grace", 1)], catalog)).toBe(
-            "amazing grace (R-12/G-34)"
+            "amazing grace (R-12 / G-34)"
         );
     });
 
     test("an item renamed in the plan keeps its song's numbers", () => {
         expect(
             textFor([songItem("Amazing Grace (Acoustic)", 1)], catalog)
-        ).toBe("Amazing Grace (Acoustic) (R-12/G-34)");
+        ).toBe("Amazing Grace (Acoustic) (R-12 / G-34)");
     });
 
     // Titles used to be matched against the hymnbooks (ignoring case,
@@ -516,7 +515,7 @@ describe("buildScheduleCopyText: finding a song by its link", () => {
     test("items that schedule the same song each print its numbers", () => {
         expect(
             textFor([songItem("Amazing Grace", 1), songItem("Amazing Grace, Reprise", 2)], catalog)
-        ).toBe("Amazing Grace (R-12/G-34)\nAmazing Grace, Reprise (R-12/G-34)");
+        ).toBe("Amazing Grace (R-12 / G-34)\nAmazing Grace, Reprise (R-12 / G-34)");
     });
 
     test("each item is found by its own song and carries its own selection", () => {
