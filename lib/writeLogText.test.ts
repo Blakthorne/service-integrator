@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { WriteLogEntry } from "./db/writeLog";
+import type { EmailWritePayload, EmailWriteResult } from "./queries/email";
 import type { ItemNoteWritePayload, ItemNoteWriteResult } from "./queries/hymnNotes";
 import {
     NO_REASON_RECORDED,
@@ -168,6 +169,102 @@ describe("describeWrite: a hymnal note that failed", () => {
     test("ignores a status that is not a whole number", () => {
         expect(failed({ error: "x", status: "422" }).outcome).toMatchObject({ status: null });
         expect(failed({ error: "x", status: 4.5 }).outcome).toMatchObject({ status: null });
+    });
+});
+
+describe("describeWrite: a plan's email", () => {
+    /** What `lib/queries/email.ts` records: `satisfies` keeps these in step with its types. */
+    const PAYLOAD = {
+        to: ["pastor@example.org", "music@example.org"],
+        subject: "Songs for 10/4/26 \u00b7 Sunday Morning",
+    } satisfies EmailWritePayload;
+    const SENT = {
+        messageId: "<1@example.org>",
+        accepted: ["pastor@example.org", "music@example.org"],
+        rejected: [],
+    } satisfies EmailWriteResult;
+
+    function email(fields: Partial<WriteLogRow> = {}): WriteLogRow {
+        return {
+            kind: "email",
+            target: "plan 81234567",
+            ok: true,
+            payload: PAYLOAD,
+            result: SENT,
+            ...fields,
+        };
+    }
+
+    test("says who it went to and its subject, and keeps the target", () => {
+        expect(describeWrite(email())).toEqual({
+            what: "Sent a plan's email",
+            detail: 'To pastor@example.org, music@example.org: "Songs for 10/4/26 \u00b7 Sunday Morning".',
+            place: null,
+            target: "plan 81234567",
+            outcome: { ok: true },
+        });
+    });
+
+    test("says who the mail server refused, though the others got it", () => {
+        const result = {
+            messageId: "<2@example.org>",
+            accepted: ["pastor@example.org"],
+            rejected: ["music@example.org"],
+        } satisfies EmailWriteResult;
+        expect(describeWrite(email({ result })).detail).toBe(
+            'To pastor@example.org, music@example.org: "Songs for 10/4/26 \u00b7 Sunday Morning". The mail server refused music@example.org.'
+        );
+    });
+
+    test("gives the reason a send failed, with no Planning Center status it never had", () => {
+        const result = {
+            error: "Could not send the email: Invalid login",
+            code: "EAUTH",
+            responseCode: 535,
+        } satisfies EmailWriteResult;
+        const described = describeWrite(email({ ok: false, result }));
+        expect(described.what).toBe("Sent a plan's email");
+        expect(described.outcome).toEqual({
+            ok: false,
+            message: "Could not send the email: Invalid login",
+            status: null,
+        });
+    });
+
+    test("says what it can when the payload lacks parts", () => {
+        expect(describeWrite(email({ payload: { to: ["a@example.org"] } })).detail).toBe(
+            "To a@example.org."
+        );
+        expect(describeWrite(email({ payload: { subject: "Songs" } })).detail).toBe('Subject "Songs".');
+        expect(describeWrite(email({ payload: { to: [], subject: " " } }))).toMatchObject({
+            what: "Email write",
+            detail: null,
+        });
+    });
+
+    test.each([
+        ["no payload", null],
+        ["a payload that is not an object", "x"],
+        ["an array", [1]],
+        ["an empty payload", {}],
+    ])("falls back to the kind and the target for %s", (_name, payload) => {
+        expect(describeWrite(email({ payload }))).toEqual({
+            what: "Email write",
+            detail: null,
+            place: null,
+            target: "plan 81234567",
+            outcome: { ok: true },
+        });
+    });
+
+    test("does not read a result that is not an object for refused recipients", () => {
+        expect(describeWrite(email({ result: "x" })).detail).toBe(
+            'To pastor@example.org, music@example.org: "Songs for 10/4/26 \u00b7 Sunday Morning".'
+        );
+    });
+
+    test("does not take another kind's payload for an email's", () => {
+        expect(describeWrite(email({ kind: "song" })).what).toBe("Song write");
     });
 });
 

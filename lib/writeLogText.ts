@@ -1,8 +1,8 @@
 import type { WriteLogEntry, WriteLogKind } from "./db/writeLog";
 
 /**
- * A row of the write log in words, for the Settings page's "Recent writes to
- * Planning Center": what was done, to which plan and item, and how it went.
+ * A row of the write log in words, for the Settings page's "Recent writes":
+ * what was done, to which plan and item, and how it went.
  * The log keeps what each write asked for (`payload`) and what came of it
  * (`result`) as JSON, written by the `lib/queries` function that made the
  * write, so a row is read defensively: one this build cannot make sense of
@@ -130,6 +130,39 @@ function describeItemNote(
 }
 
 /**
+ * What a plan's email row says, from its payload and result: who it was
+ * sent to and its subject (never its text: the log does not keep it), and
+ * who the mail server refused. Null when the payload is not one this build
+ * knows (an empty one, or a newer build's), so the row keeps its kind and
+ * its target.
+ */
+function describeEmail(
+    payload: unknown,
+    result: unknown
+): { what: string; detail: string | null } | null {
+    const record = asRecord(payload);
+    if (record === null) {
+        return null;
+    }
+    const to = textsOf(record.to);
+    const subject = asText(record.subject);
+    if (to.length === 0 && subject === null) {
+        return null;
+    }
+    const sentTo =
+        to.length === 0
+            ? `Subject ${quote(subject ?? "")}.`
+            : subject === null
+              ? `To ${to.join(", ")}.`
+              : `To ${to.join(", ")}: ${quote(subject)}.`;
+    const refused = textsOf(asRecord(result)?.rejected);
+    return {
+        what: "Sent a plan's email",
+        detail: refused.length > 0 ? `${sentTo} The mail server refused ${refused.join(", ")}.` : sentTo,
+    };
+}
+
+/**
  * Why a write failed, from its result: Planning Center's own reasons for a
  * 422 ("category: must exist"), else the error. A result in another shape
  * has no reason to give.
@@ -161,10 +194,11 @@ export function describeFailureLine(outcome: Extract<WriteOutcome, { ok: false }
 /** A row of the write log, in words. */
 export function describeWrite(row: WriteLogRow): WriteDescription {
     const itemNote = row.kind === "item-note" ? describeItemNote(row.payload) : null;
+    const email = row.kind === "email" ? describeEmail(row.payload, row.result) : null;
     const kindWords = Object.hasOwn(KIND_WORDS, row.kind) ? KIND_WORDS[row.kind] : row.kind;
     return {
-        what: itemNote?.what ?? `${kindWords} write`,
-        detail: itemNote?.detail ?? null,
+        what: itemNote?.what ?? email?.what ?? `${kindWords} write`,
+        detail: itemNote?.detail ?? email?.detail ?? null,
         place: itemNote?.place ?? null,
         target: row.target,
         outcome: row.ok ? { ok: true } : { ok: false, ...describeFailure(row.result) },

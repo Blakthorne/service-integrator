@@ -92,18 +92,20 @@ function WriteRow({ entry }: { entry: WriteLogEntry }) {
 }
 
 /**
- * The "Recent writes to Planning Center" card of the Settings page: the
- * latest rows of the write log, newest first, each with when (in the
- * viewer's time zone), what was done and to which plan and item, and whether
- * Planning Center made the change or why it did not. It reads only the local
- * database; when the log cannot be read it says so.
+ * The "Recent writes" card of the Settings page: the latest rows of the
+ * write log, newest first, each with when (in the viewer's time zone), what
+ * was done and to which plan and item, and whether Planning Center made the
+ * change or why it did not. The log holds the emails the app sent too (to
+ * whom and with what subject, never the text), so a plan's email can be
+ * checked here. It reads only the local database; when the log cannot be
+ * read it says so.
  */
 export default function RecentWritesCard({ recent }: RecentWritesCardProps) {
     return (
         <SettingsCard
-            title="Recent writes to Planning Center"
+            title="Recent writes"
             headingId="recent-writes-heading"
-            description={`The last ${RECENT_WRITES_LIMIT} changes this app made in Planning Center, newest first.`}
+            description={`The last ${RECENT_WRITES_LIMIT} changes this app made in Planning Center and emails it sent, newest first.`}
         >
             {!recent.ok ? (
                 <p className="text-sm text-gray-700 dark:text-gray-300 break-words">
@@ -111,7 +113,7 @@ export default function RecentWritesCard({ recent }: RecentWritesCardProps) {
                 </p>
             ) : recent.writes.length === 0 ? (
                 <p className="text-sm text-gray-700 dark:text-gray-300">
-                    The app has not written to Planning Center yet.
+                    The app has not written to Planning Center or sent an email yet.
                 </p>
             ) : (
                 <ol role="list" className="divide-y divide-gray-200 dark:divide-gray-700">
