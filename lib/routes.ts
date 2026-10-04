@@ -130,9 +130,12 @@ export const PLAN_TABS = [
 /** A section of the catalog, shown in its sub-navigation. */
 export interface CatalogSection {
     /**
-     * What `useSelectedLayoutSegment()` returns in the catalog layout on this
-     * section's pages: `null` is the songs list at `/catalog` itself, and a
-     * song page's segment is `"songs"`.
+     * The segment below the catalog layout on this section's pages, route
+     * groups skipped, as `catalogLayoutSegment(useSelectedLayoutSegments())`
+     * gives it (`lib/catalog/sections.ts`): `null` is the songs list at
+     * `/catalog` itself, and a song page's segment is `"songs"`. Not
+     * `useSelectedLayoutSegment()`, which returns `"(list)"` at `/catalog`,
+     * the route group the songs list sits in.
      */
     segments: readonly (string | null)[];
     label: string;
@@ -148,8 +151,8 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
 ];
 
 /**
- * The catalog section that a `useSelectedLayoutSegment()` value belongs to,
- * or undefined for a segment no section claims.
+ * The catalog section that a segment from `catalogLayoutSegment` belongs to,
+ * or undefined for a segment no section claims (a route group among them).
  */
 export function catalogSectionFor(
     segment: string | null
