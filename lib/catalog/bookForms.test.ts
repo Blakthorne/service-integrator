@@ -1,18 +1,14 @@
 import { describe, expect, test } from "vitest";
-import type { BookProblem } from "@/lib/db/books";
 import {
+    BOOK_FIELD_PARTS,
     BOOK_SAVED_MESSAGE,
     EMPTY_NEW_BOOK,
-    FIX_BOOK_FIELDS_MESSAGE,
     NOT_IN_USE_EXPLANATION,
     PREVIEW_ENTRY_NUMBER,
     bookEditValues,
-    bookFieldsRefusal,
-    bookRefusal,
     describeAddedBook,
     describeMove,
     labelFormatHint,
-    linkToRow,
     previewBookLabel,
     type BookLabelFields,
 } from "./bookForms";
@@ -139,88 +135,12 @@ describe("what a book that is not in use does", () => {
     });
 });
 
-describe("linkToRow", () => {
-    test("links to a book by its code, to a song by its id and to a tune by its id", () => {
-        expect(linkToRow({ kind: "book", code: "CB", label: "Chorus Book" })).toEqual({
-            href: "/catalog/books/CB",
-            label: "Chorus Book",
-        });
-        expect(linkToRow({ kind: "song", songId: 12, label: "Amazing Grace (NEW BRITAIN)" })).toEqual({
-            href: "/catalog/songs/12",
-            label: "Amazing Grace (NEW BRITAIN)",
-        });
-        expect(linkToRow({ kind: "tune", tuneId: 4, label: "ST. ANNE" })).toEqual({
-            href: "/catalog/tunes/4",
-            label: "ST. ANNE",
-        });
-    });
-});
-
-describe("bookRefusal", () => {
-    const codeTaken: BookProblem = {
-        reason: "code-taken",
-        part: "code",
-        message: "The code CB is taken by Chorus Book. Choose another.",
-        existing: { kind: "book", code: "CB", label: "Chorus Book" },
-    };
-    const badLabel: BookProblem = {
-        reason: "label-format",
-        part: "labelFormat",
-        message: "A numbered book's label needs {n} where the number goes, such as R-{n}.",
-        existing: null,
-    };
-
-    test("marks each part with its message, and links a part to the book that holds its code", () => {
-        expect(bookRefusal([codeTaken, badLabel])).toEqual({
-            message: FIX_BOOK_FIELDS_MESSAGE,
-            fieldErrors: {
-                code: {
-                    message: "The code CB is taken by Chorus Book. Choose another.",
-                    link: { href: "/catalog/books/CB", label: "Chorus Book" },
-                },
-                labelFormat: { message: badLabel.message },
-            },
-        });
-    });
-
-    test("keeps the first problem of a part", () => {
-        const second: BookProblem = { ...codeTaken, message: "Another." };
-
-        expect(bookRefusal([codeTaken, second]).fieldErrors.code?.message).toBe(codeTaken.message);
-    });
-
-    test("a book that is not in the catalog is the form's message, with no field to mark", () => {
-        const gone: BookProblem = {
-            reason: "book-not-found",
-            part: "book",
-            message: "That book is not in the catalog.",
-            existing: null,
-        };
-
-        expect(bookRefusal([gone])).toEqual({
-            message: "That book is not in the catalog.",
-            fieldErrors: {},
-        });
-    });
-});
-
-describe("bookFieldsRefusal", () => {
-    test("marks the fields, under the sentence that says to fix them", () => {
-        const errors = { name: { message: "Type the book's name." } };
-
-        expect(bookFieldsRefusal(errors)).toEqual({ message: FIX_BOOK_FIELDS_MESSAGE, fieldErrors: errors });
-    });
-
-    test("takes an error about the book itself out of the fields, as the form's message", () => {
-        expect(
-            bookFieldsRefusal({
-                book: { message: "That book is not in the catalog." },
-                name: { message: "Type the book's name." },
-            })
-        ).toEqual({
-            message: "That book is not in the catalog.",
-            fieldErrors: { name: { message: "Type the book's name." } },
-        });
+describe("BOOK_FIELD_PARTS", () => {
+    test("is every part of the book forms but the hidden book id, which has no field to mark", () => {
+        expect([...BOOK_FIELD_PARTS].sort()).toEqual(
+            ["active", "code", "labelFormat", "name", "numbered", "shortName"].sort()
+        );
+        expect(BOOK_FIELD_PARTS).not.toContain("book");
     });
 });
 

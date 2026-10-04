@@ -3,14 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
+    BOOK_FIELD_PARTS,
     BOOK_SAVED_MESSAGE,
     EMPTY_NEW_BOOK,
     bookEditValues,
-    bookFieldsRefusal,
-    bookRefusal,
     describeAddedBook,
     type MoveOutcome,
 } from "@/lib/catalog/bookForms";
+import { editRefusal, formRefusal } from "@/lib/catalog/editForms";
 import {
     BOOK_FIELDS,
     NEW_BOOK_FIELDS,
@@ -111,7 +111,7 @@ export async function addBookAction(formData: FormData): Promise<FormState> {
     const posted = readValues(formData, NEW_BOOK_FIELDS);
     const checked = validateNewBook(formData);
     if (!checked.ok) {
-        const { message, fieldErrors } = bookFieldsRefusal(checked.fieldErrors);
+        const { message, fieldErrors } = formRefusal(checked.fieldErrors, BOOK_FIELD_PARTS);
         return formError(message, { fieldErrors, values: posted });
     }
     let result: BookEditResult;
@@ -121,7 +121,7 @@ export async function addBookAction(formData: FormData): Promise<FormState> {
         return failed("add a book", error, posted);
     }
     if (!result.ok) {
-        const { message, fieldErrors } = bookRefusal(result.problems);
+        const { message, fieldErrors } = editRefusal(result.problems, BOOK_FIELD_PARTS);
         return formError(message, { fieldErrors, values: posted });
     }
     revalidatePath(routes.catalog(), "layout");
@@ -143,7 +143,7 @@ export async function saveBookAction(formData: FormData): Promise<FormState> {
     const posted = readValues(formData, BOOK_FIELDS);
     const checked = validateBookEdit(formData);
     if (!checked.ok) {
-        const { message, fieldErrors } = bookFieldsRefusal(checked.fieldErrors);
+        const { message, fieldErrors } = formRefusal(checked.fieldErrors, BOOK_FIELD_PARTS);
         return formError(message, { fieldErrors, values: posted });
     }
     let result: BookEditResult;
@@ -153,7 +153,7 @@ export async function saveBookAction(formData: FormData): Promise<FormState> {
         return failed(`save book ${checked.input.bookId}`, error, posted);
     }
     if (!result.ok) {
-        const { message, fieldErrors } = bookRefusal(result.problems);
+        const { message, fieldErrors } = editRefusal(result.problems, BOOK_FIELD_PARTS);
         return formError(message, { fieldErrors, values: posted });
     }
     revalidateBookPages();

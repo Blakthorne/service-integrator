@@ -28,7 +28,7 @@ vi.mock("@/lib/queries/catalogEdit", () => ({
     moveCatalogEntry,
 }));
 
-import { FIX_BOOK_FIELDS_MESSAGE } from "@/lib/catalog/bookForms";
+import { FIX_MARKED_FIELDS_MESSAGE } from "@/lib/catalog/editForms";
 import { FORM_FAILURE_MESSAGE } from "@/lib/forms";
 import { addBookAction, moveBookAction, moveEntryAction, saveBookAction } from "./actions";
 
@@ -155,7 +155,7 @@ describe("addBookAction", () => {
         expect(revalidatePath).not.toHaveBeenCalled();
         expect(state).toMatchObject({
             status: "error",
-            message: FIX_BOOK_FIELDS_MESSAGE,
+            message: FIX_MARKED_FIELDS_MESSAGE,
             values: { code: "9", name: " ", numbered: "maybe" },
         });
         expect(Object.keys(state.status === "error" ? state.fieldErrors : {}).sort()).toEqual([
@@ -182,7 +182,7 @@ describe("addBookAction", () => {
 
         expect(state).toEqual({
             status: "error",
-            message: FIX_BOOK_FIELDS_MESSAGE,
+            message: FIX_MARKED_FIELDS_MESSAGE,
             fieldErrors: {
                 code: {
                     message: "The code cb is taken by Chorus Book. Choose another.",
@@ -296,7 +296,7 @@ describe("saveBookAction", () => {
 
         expect(state).toMatchObject({
             status: "error",
-            message: FIX_BOOK_FIELDS_MESSAGE,
+            message: FIX_MARKED_FIELDS_MESSAGE,
             fieldErrors: { labelFormat: { message: expect.stringContaining("{n}") } },
             values: { labelFormat: "Chorus" },
         });

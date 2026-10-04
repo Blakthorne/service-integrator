@@ -1,8 +1,4 @@
-import type { BookProblem } from "@/lib/db/books";
-import type { CatalogRowRef } from "@/lib/db/catalogEdit";
 import type { Book } from "@/lib/domain";
-import type { FieldErrors, FormLink } from "@/lib/forms";
-import { routes } from "@/lib/routes";
 import { formatEntryLabel } from "./labels";
 import {
     BOOK_FIELDS,
@@ -19,11 +15,11 @@ import {
 /**
  * What the book forms (Add a book on the books page, Edit on a book's page)
  * and their Move up and Move down buttons show and say: the values their
- * fields start with, a preview of how the book labels an entry, the form's
- * errors from what the catalog refused, and the sentences that follow a
- * move. Pure and safe on both sides: the forms are client components, and
- * their actions (`app/(app)/catalog/books/actions.ts`) build the same
- * states, which the tests here pin.
+ * fields start with, a preview of how the book labels an entry, which parts
+ * of the forms are fields, and the sentences that follow a move. Pure and
+ * safe on both sides: the forms are client components, and their actions
+ * (`app/(app)/catalog/books/actions.ts`) build the same states, with the
+ * refusals of `lib/catalog/editForms.ts`.
  */
 
 /** What the Add a book form posts, or starts with, by field. */
@@ -144,54 +140,21 @@ export function labelFormatHint(numbered: boolean, code: string): string {
     return "A book without numbers labels every entry alike, as in Chorus Book. Leave blank for the short name.";
 }
 
-/** A link to the catalog row a problem is about: a book's page, a song's or a tune's. */
-export function linkToRow(row: CatalogRowRef): FormLink {
-    switch (row.kind) {
-        case "book":
-            return { href: routes.catalogBook(row.code), label: row.label };
-        case "song":
-            return { href: routes.catalogSong(row.songId), label: row.label };
-        case "tune":
-            return { href: routes.catalogTune(row.tuneId), label: row.label };
-    }
-}
-
 /**
- * What a book form says above its button when a field needs fixing. It does
- * not say where the fields are, or what colour they are marked in: the
- * message sits below them, and a person who cannot see colour must find them.
+ * The parts of the book forms that are fields, which an error marks: every
+ * part but "book", the hidden id of the book an Edit form is for. A refusal
+ * about that one has no field to mark, so it is the form's own message
+ * (`formRefusal` and `editRefusal` in `lib/catalog/editForms.ts`, which the
+ * actions call with these).
  */
-export const FIX_BOOK_FIELDS_MESSAGE =
-    "Nothing was saved. Fix the fields that have an error message, then try again.";
-
-/**
- * A refused book form as it shows: the sentence above the button, and the
- * errors to mark on the fields. A refusal about the book itself (it is not
- * in the catalog any more, or its id was not an id) has no field to mark, so
- * its message is the form's own.
- */
-export function bookFieldsRefusal(errors: FieldErrors<BookPart>): {
-    message: string;
-    fieldErrors: FieldErrors<BookPart>;
-} {
-    const { book, ...fields } = errors;
-    return { message: book?.message ?? FIX_BOOK_FIELDS_MESSAGE, fieldErrors: fields };
-}
-
-/**
- * A refused book edit as a form shows it (`bookFieldsRefusal`): each part's
- * first problem, with a link to the book that has a code that is taken.
- */
-export function bookRefusal(problems: readonly BookProblem[]): {
-    message: string;
-    fieldErrors: FieldErrors<BookPart>;
-} {
-    const fieldErrors: FieldErrors<BookPart> = {};
-    for (const { part, message, existing } of problems) {
-        fieldErrors[part] ??= { message, ...(existing && { link: linkToRow(existing) }) };
-    }
-    return bookFieldsRefusal(fieldErrors);
-}
+export const BOOK_FIELD_PARTS: readonly BookPart[] = [
+    "code",
+    "name",
+    "shortName",
+    "numbered",
+    "labelFormat",
+    "active",
+];
 
 /** What the Add a book form says once the book is added. */
 export function describeAddedBook({ code, name }: { code: string; name: string }): string {
