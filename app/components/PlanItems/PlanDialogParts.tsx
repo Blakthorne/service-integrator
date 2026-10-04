@@ -1,16 +1,10 @@
 /**
  * What the plan header's dialogs (Sync hymn notes, Email this plan) share:
- * the look of their buttons and links, the button that opens each, the row
- * of buttons along the bottom, and the line that takes focus when an action
- * answers.
+ * the look of their links, the button that opens each, the row of buttons
+ * along the bottom, and the line that takes focus when an action answers.
+ * Their buttons take their look from `ui/buttonClasses`, as every solid
+ * button does.
  */
-
-/** White on blue-600 is 5.3:1, and the focus ring outside the button 3:1 on the dialog. */
-export const PRIMARY_BUTTON_CLASS =
-    "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors";
-
-export const SECONDARY_BUTTON_CLASS =
-    "px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed";
 
 /** A link in running text: underlined, since its colour alone is under 3:1 against the text's. */
 export const LINK_CLASS =

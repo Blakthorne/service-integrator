@@ -9,6 +9,7 @@ import {
     type SendPlanEmailState,
 } from "@/app/(app)/plans/[serviceTypeId]/[planId]/actions";
 import Dialog from "@/app/components/ui/Dialog";
+import { buttonClasses } from "@/app/components/ui/buttonClasses";
 import {
     EMAIL_DIALOG_DESCRIPTION,
     EMAIL_PENDING_TEXT,
@@ -21,14 +22,7 @@ import type { PlanEmailPreview } from "@/lib/queries/email";
 import { routes } from "@/lib/routes";
 import { FormNotice } from "../Catalog/SongForm/Fields";
 import EmailSetupNotice from "../Settings/EmailSetupNotice";
-import {
-    DialogAnswer,
-    DialogButtons,
-    HEADER_BUTTON_CLASS,
-    LINK_CLASS,
-    PRIMARY_BUTTON_CLASS,
-    SECONDARY_BUTTON_CLASS,
-} from "./PlanDialogParts";
+import { DialogAnswer, DialogButtons, HEADER_BUTTON_CLASS, LINK_CLASS } from "./PlanDialogParts";
 
 /** Where the dialog is: reading the preview, showing it, sending, or showing what came of the send. */
 type EmailDialogState =
@@ -163,7 +157,7 @@ function EmailPreviewBody({
                             type="button"
                             onClick={onClose}
                             disabled={sending}
-                            className={SECONDARY_BUTTON_CLASS}
+                            className={buttonClasses("secondary", sending)}
                         >
                             Cancel
                         </button>
@@ -176,15 +170,13 @@ function EmailPreviewBody({
                             }}
                             // aria-disabled, not disabled, so it keeps focus while the email goes.
                             aria-disabled={sending}
-                            className={`${PRIMARY_BUTTON_CLASS} ${
-                                sending ? "opacity-60 cursor-not-allowed" : "hover:bg-blue-700 cursor-pointer"
-                            }`}
+                            className={buttonClasses("primary", sending)}
                         >
                             {sending ? "Sending…" : view.sendLabel}
                         </button>
                     </>
                 ) : (
-                    <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                    <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Close
                     </button>
                 )}
@@ -247,18 +239,18 @@ function EmailResultBody({
             )}
             <DialogButtons>
                 {sent ? (
-                    <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                    <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Done
                     </button>
                 ) : (
                     <>
-                        <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                        <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                             Close
                         </button>
                         <button
                             type="button"
                             onClick={onPreview}
-                            className={`${PRIMARY_BUTTON_CLASS} hover:bg-blue-700 cursor-pointer`}
+                            className={buttonClasses("primary")}
                         >
                             Preview again
                         </button>
@@ -289,13 +281,13 @@ function EmailPreviewProblemBody({
                 {message}
             </DialogAnswer>
             <DialogButtons>
-                <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                     Close
                 </button>
                 <button
                     type="button"
                     onClick={onPreview}
-                    className={`${PRIMARY_BUTTON_CLASS} hover:bg-blue-700 cursor-pointer`}
+                    className={buttonClasses("primary")}
                 >
                     Try again
                 </button>
@@ -331,7 +323,7 @@ function EmailDialogBody({
         case "previewing":
             return (
                 <DialogButtons>
-                    <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                    <button type="button" onClick={onClose} className={buttonClasses("secondary")}>
                         Cancel
                     </button>
                 </DialogButtons>
