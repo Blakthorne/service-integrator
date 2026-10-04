@@ -21,7 +21,7 @@ import {
     type UpcomingPlanOption,
 } from "@/lib/catalog/addToPlan";
 import { formStateKey } from "@/lib/forms";
-import { routes } from "@/lib/routes";
+import { pcoWebUrls, routes } from "@/lib/routes";
 import { LINK_CLASS } from "../CatalogCard";
 import { HINT_CLASS } from "../SongForm/Fields";
 import PendingButton from "./PendingButton";
@@ -41,8 +41,9 @@ interface PlanChoices {
 
 /**
  * Where the dialog is: reading the plans, choosing one, confirming it and
- * adding the song, or done. Each failure is a new object, whose
- * `formStateKey` keys its alert.
+ * adding the song, done, or one of two outcomes that need a person: an add
+ * whose outcome is not known, and a plan that holds the song already. Each
+ * message is a new object, whose `formStateKey` keys its alert.
  */
 type AddToPlanStep =
     | { step: "loading" }
@@ -52,11 +53,66 @@ type AddToPlanStep =
           step: "confirm";
           choices: PlanChoices;
           plan: UpcomingPlanOption;
-          /** Why the last try was refused or failed, keyed per attempt; none before the first. */
-          failure: { message: string } | null;
+          /** Why the last try was refused, keyed per attempt: nothing was added. None before the first. */
+          refusal: { message: string } | null;
+          adding: boolean;
+      }
+    | {
+          /** The last try failed, so it is not known whether the song was added. */
+          step: "unknown";
+          choices: PlanChoices;
+          plan: UpcomingPlanOption;
+          failure: { message: string };
+      }
+    | {
+          /** The plan holds the song already: adding another is a choice of its own. */
+          step: "duplicate";
+          choices: PlanChoices;
+          plan: UpcomingPlanOption;
+          refusal: { message: string };
           adding: boolean;
       }
     | { step: "added"; plan: UpcomingPlanOption; added: Extract<AddSongToPlanState, { ok: true }> };
+
+/** Whether an add is under way: from the confirmation, or "Add another anyway". */
+function isAdding(state: AddToPlanStep): boolean {
+    return (state.step === "confirm" || state.step === "duplicate") && state.adding;
+}
+
+/** Where the dialog goes once an add has answered. */
+function stepAfter(
+    result: AddSongToPlanState,
+    choices: PlanChoices,
+    plan: UpcomingPlanOption
+): AddToPlanStep {
+    if (result.ok) {
+        return { step: "added", plan, added: result };
+    }
+    switch (result.kind) {
+        case "unknown":
+            return { step: "unknown", choices, plan, failure: { message: result.message } };
+        case "already-in-plan":
+            return { step: "duplicate", choices, plan, refusal: { message: result.message }, adding: false };
+        case "refused":
+            return { step: "confirm", choices, plan, refusal: { message: result.message }, adding: false };
+    }
+}
+
+/** A text link to a plan in the Planning Center web app, in a new tab, to see what it holds. */
+function PcoPlanWebLink({ planId }: { planId: string }) {
+    return (
+        <a
+            href={pcoWebUrls.plan(planId)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`underline ${LINK_CLASS}`}
+        >
+            Open the plan in Planning Center
+            <span aria-hidden="true"> ↗</span>
+            <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+    );
+}
 
 /** Buttons along the bottom of the dialog. */
 function Buttons({ children }: { children: React.ReactNode }) {
@@ -136,11 +192,20 @@ interface AddToPlanActionProps {
  * dialog on it again rather than read the plans afresh, and its outcome
  * opens the dialog itself, so it is seen.
  *
+ * An add whose outcome is not known (Planning Center failed, or the answer
+ * was lost) is never offered again in one step: the app cannot take an
+ * item out again. The dialog says so, links to the plan in Planning Center,
+ * and goes back through the confirmation, where Add to plan asks the server
+ * again, which refuses a plan that holds the song already. That refusal
+ * says which item it is, and offers "Add another anyway", which adds it
+ * even so. A plain refusal (nothing was added) stays on the confirmation.
+ *
  * Focus: the close button has it while the plans are read; then the plan
  * chosen; on the confirmation, its question, so it is read out; Add to
  * plan keeps it while it runs (`aria-disabled`), and a refusal is an alert
- * keyed per attempt; once added, the message; closing hands it back to the
- * button.
+ * keyed per attempt; an unknown outcome and a plan that holds the song
+ * already take it on their message, never on a button that adds; once
+ * added, the message; closing hands it back to the button.
  */
 export default function AddToPlanAction({ pcoSongId, songLabel, pcoTitle }: AddToPlanActionProps) {
     const [open, setOpen] = useState(false);
@@ -190,27 +255,28 @@ export default function AddToPlanAction({ pcoSongId, songLabel, pcoTitle }: AddT
         setState({ step: "choose", choices: { plans: result.plans, unread: result.unreadServiceTypes } });
     }
 
-    async function add(choices: PlanChoices, plan: UpcomingPlanOption) {
-        if (state.step === "confirm" && state.adding) {
+    /** Add the song to `plan`; with `allowDuplicate`, even though the plan holds it already. */
+    async function add(choices: PlanChoices, plan: UpcomingPlanOption, allowDuplicate: boolean) {
+        if (isAdding(state)) {
             return;
         }
         const request = ++requestRef.current;
-        setState({ step: "confirm", choices, plan, failure: null, adding: true });
+        setState(
+            allowDuplicate && state.step === "duplicate"
+                ? { ...state, adding: true }
+                : { step: "confirm", choices, plan, refusal: null, adding: true }
+        );
         let result: AddSongToPlanState;
         try {
-            result = await addSongToPlanAction(plan.serviceTypeId, plan.planId, pcoSongId);
+            result = await addSongToPlanAction(plan.serviceTypeId, plan.planId, pcoSongId, allowDuplicate);
         } catch (error) {
             console.error("Adding the song to a plan failed:", error);
-            result = { ok: false, message: ADD_TO_PLAN_NO_ANSWER };
+            result = { ok: false, kind: "unknown", message: ADD_TO_PLAN_NO_ANSWER };
         }
         if (request !== requestRef.current) {
             return;
         }
-        setState(
-            result.ok
-                ? { step: "added", plan, added: result }
-                : { step: "confirm", choices, plan, failure: { message: result.message }, adding: false }
-        );
+        setState(stepAfter(result, choices, plan));
         // Open again if the browser closed the dialog while the song was added.
         setOpen(true);
     }
@@ -219,7 +285,7 @@ export default function AddToPlanAction({ pcoSongId, songLabel, pcoTitle }: AddT
         setOpen(true);
         // The browser closed the dialog on an add: show it again, and read
         // the plans afresh only once the add is done.
-        if (!(state.step === "confirm" && state.adding)) {
+        if (!isAdding(state)) {
             void loadPlans();
         }
     }
@@ -228,13 +294,13 @@ export default function AddToPlanAction({ pcoSongId, songLabel, pcoTitle }: AddT
     // always follows. Plans still being read are dropped; an add goes on, and
     // opens the dialog again with its outcome.
     function close() {
-        if (!(state.step === "confirm" && state.adding)) {
+        if (!isAdding(state)) {
             requestRef.current += 1;
         }
         setOpen(false);
     }
 
-    const adding = state.step === "confirm" && state.adding;
+    const adding = isAdding(state);
     const statusText =
         state.step === "loading"
             ? "Reading the upcoming plans from Planning Center…"
@@ -276,11 +342,21 @@ export default function AddToPlanAction({ pcoSongId, songLabel, pcoTitle }: AddT
                     onContinue={(choices) => {
                         const plan = choices.plans.find((option) => planOptionKey(option) === chosen);
                         if (plan) {
-                            setState({ step: "confirm", choices, plan, failure: null, adding: false });
+                            setState({ step: "confirm", choices, plan, refusal: null, adding: false });
                         }
                     }}
-                    onBack={(choices) => setState({ step: "choose", choices })}
-                    onAdd={(choices, plan) => void add(choices, plan)}
+                    onBack={(choices, refused) => {
+                        // After a refusal the plans may have changed (one no longer upcoming): read them again.
+                        if (refused) {
+                            void loadPlans();
+                        } else {
+                            setState({ step: "choose", choices });
+                        }
+                    }}
+                    onConfirmAgain={(choices, plan) =>
+                        setState({ step: "confirm", choices, plan, refusal: null, adding: false })
+                    }
+                    onAdd={(choices, plan, allowDuplicate) => void add(choices, plan, allowDuplicate)}
                 />
             </Dialog>
         </>
@@ -298,8 +374,11 @@ interface AddToPlanBodyProps {
     onClose: () => void;
     onRetry: () => void;
     onContinue: (choices: PlanChoices) => void;
-    onBack: (choices: PlanChoices) => void;
-    onAdd: (choices: PlanChoices, plan: UpcomingPlanOption) => void;
+    /** From the confirmation to the plans; `refused` when the last try was refused, so they are read again. */
+    onBack: (choices: PlanChoices, refused: boolean) => void;
+    /** From an unknown outcome back to the confirmation, where the add can be asked for again. */
+    onConfirmAgain: (choices: PlanChoices, plan: UpcomingPlanOption) => void;
+    onAdd: (choices: PlanChoices, plan: UpcomingPlanOption, allowDuplicate: boolean) => void;
 }
 
 /** What the dialog shows below its status line, for where it is. */
@@ -315,6 +394,7 @@ function AddToPlanBody({
     onRetry,
     onContinue,
     onBack,
+    onConfirmAgain,
     onAdd,
 }: AddToPlanBodyProps) {
     switch (state.step) {
@@ -406,10 +486,10 @@ function AddToPlanBody({
                         {confirmAddToPlanQuestion(songLabel, state.plan)}
                     </p>
                     <p className={`mt-2 ${HINT_CLASS}`}>{describeAddToPlanWrite(pcoTitle)}</p>
-                    {state.failure && (
+                    {state.refusal && (
                         // A new key per attempt: a repeated refusal is announced again.
-                        <p key={formStateKey(state.failure)} role="alert" className={`mt-3 ${ALERT_CLASS}`}>
-                            {state.failure.message}
+                        <p key={formStateKey(state.refusal)} role="alert" className={`mt-3 ${ALERT_CLASS}`}>
+                            {state.refusal.message}
                         </p>
                     )}
                     <Buttons>
@@ -417,7 +497,7 @@ function AddToPlanBody({
                             type="button"
                             onClick={() => {
                                 if (!state.adding) {
-                                    onBack(state.choices);
+                                    onBack(state.choices, state.refusal !== null);
                                 }
                             }}
                             aria-disabled={state.adding}
@@ -428,9 +508,80 @@ function AddToPlanBody({
                         <PendingButton
                             pending={state.adding}
                             pendingLabel="Adding…"
-                            onClick={() => onAdd(state.choices, state.plan)}
+                            onClick={() => onAdd(state.choices, state.plan, false)}
                         >
-                            {state.failure ? "Try again" : "Add to plan"}
+                            Add to plan
+                        </PendingButton>
+                    </Buttons>
+                </>
+            );
+        case "unknown":
+            return (
+                <>
+                    <p
+                        key={formStateKey(state.failure)}
+                        ref={answerRef}
+                        tabIndex={-1}
+                        role="alert"
+                        className={`${ALERT_CLASS} focus:outline-none`}
+                    >
+                        {state.failure.message}
+                    </p>
+                    <p className="mt-3 text-sm">
+                        <PcoPlanWebLink planId={state.plan.planId} />
+                    </p>
+                    <p className={`mt-2 ${HINT_CLASS}`}>
+                        Back goes to the confirmation. Adding from there again is refused if the plan
+                        has the song already.
+                    </p>
+                    <Buttons>
+                        <button type="button" onClick={onClose} className={SECONDARY_BUTTON_CLASS}>
+                            Close
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onConfirmAgain(state.choices, state.plan)}
+                            className={SECONDARY_BUTTON_CLASS}
+                        >
+                            Back
+                        </button>
+                    </Buttons>
+                </>
+            );
+        case "duplicate":
+            return (
+                <>
+                    <p
+                        key={formStateKey(state.refusal)}
+                        ref={answerRef}
+                        tabIndex={-1}
+                        role="alert"
+                        className={`${ALERT_CLASS} focus:outline-none`}
+                    >
+                        {state.refusal.message}
+                    </p>
+                    <p className="mt-3 text-sm">
+                        <PcoPlanWebLink planId={state.plan.planId} />
+                    </p>
+                    <Buttons>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (!state.adding) {
+                                    onClose();
+                                }
+                            }}
+                            aria-disabled={state.adding}
+                            className={SECONDARY_BUTTON_CLASS}
+                        >
+                            Close
+                        </button>
+                        <PendingButton
+                            pending={state.adding}
+                            pendingLabel="Adding…"
+                            onClick={() => onAdd(state.choices, state.plan, true)}
+                        >
+                            Add another anyway
                         </PendingButton>
                     </Buttons>
                 </>

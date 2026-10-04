@@ -443,11 +443,19 @@ describe("addSongToPlanAction", () => {
         arrangement: { id: "3001", name: "Default Arrangement", archived: false, createdAt: null },
     };
 
+    const ADD_REVALIDATIONS = [[`/plans/${ST}/${PLAN}`, "layout"], ["/"], ["/catalog", "layout"]];
+
+    /** The action called with the ids and `allowDuplicate`, any of which `overrides` replaces. */
     function add(
-        overrides: Partial<Record<"serviceTypeId" | "planId" | "pcoSongId", unknown>> = {}
+        overrides: Partial<Record<"serviceTypeId" | "planId" | "pcoSongId" | "allowDuplicate", unknown>> = {}
     ) {
-        const ids = { serviceTypeId: ST, planId: PLAN, pcoSongId: PCO_SONG, ...overrides };
-        return addSongToPlanAction(ids.serviceTypeId as string, ids.planId as string, ids.pcoSongId as string);
+        const args = { serviceTypeId: ST, planId: PLAN, pcoSongId: PCO_SONG, allowDuplicate: undefined, ...overrides };
+        return addSongToPlanAction(
+            args.serviceTypeId as string,
+            args.planId as string,
+            args.pcoSongId as string,
+            args.allowDuplicate as boolean | undefined
+        );
     }
 
     test("throws without a session, before it adds anything", async () => {
@@ -466,11 +474,20 @@ describe("addSongToPlanAction", () => {
             title: "Amazing Grace",
             arrangement: "Default Arrangement",
         });
-        expect(addSongToPlan).toHaveBeenCalledWith(ST, PLAN, PCO_SONG);
-        expect(revalidatePath.mock.calls).toEqual([
-            [`/plans/${ST}/${PLAN}`, "layout"],
-            ["/"],
-            ["/catalog", "layout"],
+        expect(addSongToPlan).toHaveBeenCalledWith(ST, PLAN, PCO_SONG, { allowDuplicate: false });
+        expect(revalidatePath.mock.calls).toEqual(ADD_REVALIDATIONS);
+    });
+
+    test("adds a second one only when asked with true", async () => {
+        addSongToPlan.mockResolvedValue(ADDED);
+
+        await add({ allowDuplicate: true });
+        for (const value of [false, "true", 1, null, {}]) {
+            await add({ allowDuplicate: value });
+        }
+        expect(addSongToPlan.mock.calls.map(([, , , options]) => options)).toEqual([
+            { allowDuplicate: true },
+            ...Array.from({ length: 5 }, () => ({ allowDuplicate: false })),
         ]);
     });
 
@@ -480,38 +497,55 @@ describe("addSongToPlanAction", () => {
         ["Planning Center song", "pcoSongId"],
     ] as const)("refuses a %s id that is not one, without adding anything", async (_name, field) => {
         for (const value of NOT_IDS) {
-            await expect(add({ [field]: value })).resolves.toEqual({ ok: false, message: NOT_AN_ID });
+            await expect(add({ [field]: value })).resolves.toEqual({
+                ok: false,
+                kind: "refused",
+                message: NOT_AN_ID,
+            });
         }
         expect(addSongToPlan).not.toHaveBeenCalled();
     });
 
-    test("gives a refusal's message, and revalidates nothing", async () => {
+    test("gives a refusal's message as refused, and revalidates nothing", async () => {
+        for (const reason of ["no-arrangement", "not-upcoming", "busy", "refused"]) {
+            addSongToPlan.mockResolvedValue({ ok: false, reason, message: `Refused: ${reason}.` });
+            await expect(add()).resolves.toEqual({ ok: false, kind: "refused", message: `Refused: ${reason}.` });
+        }
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("says when the plan holds the song already, with its items, and revalidates nothing", async () => {
+        const existingItems = [{ id: "9002", title: "Amazing Grace", sequence: 3 }];
         addSongToPlan.mockResolvedValue({
             ok: false,
-            reason: "no-arrangement",
-            message: '"Amazing Grace" has no arrangement in Planning Center to put in a plan.',
+            reason: "already-in-plan",
+            message: 'The plan for October 11, 2026 has "Amazing Grace" already, as its item "Amazing Grace", so nothing was added.',
+            existingItems: existingItems.map((item) => ({ ...item, itemType: "song" })),
         });
 
         await expect(add()).resolves.toEqual({
             ok: false,
-            message: '"Amazing Grace" has no arrangement in Planning Center to put in a plan.',
+            kind: "already-in-plan",
+            message: 'The plan for October 11, 2026 has "Amazing Grace" already, as its item "Amazing Grace", so nothing was added.',
+            existingItems,
         });
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
-    test("logs a failure and says to look at the plan before trying again", async () => {
+    test("logs a failure as an unknown outcome, and revalidates in case the song was added", async () => {
         const error = new Error("timeout");
         addSongToPlan.mockRejectedValue(error);
 
         await expect(add()).resolves.toEqual({
             ok: false,
-            message: expect.stringMatching(/not known whether the song was added.*before trying again/),
+            kind: "unknown",
+            message: expect.stringMatching(/not known whether the song was added.*before you add it again/),
         });
         expect(console.error).toHaveBeenCalledWith(
             `Failed to add Planning Center song ${PCO_SONG} to plan ${ST}/${PLAN}:`,
             error
         );
-        expect(revalidatePath).not.toHaveBeenCalled();
+        expect(revalidatePath.mock.calls).toEqual(ADD_REVALIDATIONS);
     });
 });
 

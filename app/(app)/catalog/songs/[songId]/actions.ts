@@ -18,6 +18,7 @@ import {
     type AddSongToPlanResult,
     type CreateInPlanningCenterResult,
     type NewPcoSongField,
+    type PlanItemSummary,
     type SaveSongCreditsResult,
     type SaveSongTagsResult,
     type UpcomingPlans,
@@ -290,48 +291,84 @@ export type AddSongToPlanState =
           /** The name of the arrangement it uses. */
           arrangement: string;
       }
-    | SongPageRefusal;
+    /** Refused, so nothing was added: the plan is not upcoming any more, the song has no arrangement, and so on. */
+    | (SongPageRefusal & { kind: "refused" })
+    /**
+     * Something failed, so it is not known whether the song was added: the
+     * dialog never offers to try again in one step, since the app cannot
+     * take an item out again.
+     */
+    | (SongPageRefusal & { kind: "unknown" })
+    /** The plan holds the song already, so nothing was added; adding another needs `allowDuplicate`. */
+    | (SongPageRefusal & {
+          kind: "already-in-plan";
+          /** The plan's items for the song, in plan order. */
+          existingItems: PlanItemSummary[];
+      });
 
 const ADD_TO_PLAN_FAILURE_MESSAGE =
-    "Something went wrong, so it is not known whether the song was added to the plan. Look at the plan in Planning Center before trying again; the server log has the details.";
+    "Something went wrong, so it is not known whether the song was added to the plan. Look at the plan in Planning Center before you add it again; the server log has the details.";
 
 /**
  * "Add to a plan": add Planning Center song `pcoSongId` to plan `planId` of
  * service type `serviceTypeId`, at its end, with the song's title and its
- * default arrangement (`addSongToPlan`, which reads the song and the plan
- * afresh and logs the write). One write, which the app cannot undo; the
- * dialog has named the plan first. Then that plan's pages are revalidated,
- * the dashboard, which lists the next plans' songs, and the catalog's pages,
+ * default arrangement (`addSongToPlan`, which reads the song, the plan and
+ * its items afresh and logs the write). One write, which the app cannot
+ * undo; the dialog has named the plan first.
+ *
+ * A plan that holds the song already is refused ("already-in-plan", with
+ * its items) unless `allowDuplicate` is true, which the dialog sends once
+ * the person chose to add another anyway; anything but true is false. A
+ * failure is logged and comes back as "unknown": the song may have been
+ * added (a write that timed out may have been applied). After an add, and
+ * after an unknown outcome, that plan's pages are revalidated, the
+ * dashboard, which lists the next plans' songs, and the catalog's pages,
  * since the song was mirrored as Planning Center has it now.
  */
 export async function addSongToPlanAction(
     serviceTypeId: string,
     planId: string,
-    pcoSongId: string
+    pcoSongId: string,
+    allowDuplicate?: boolean
 ): Promise<AddSongToPlanState> {
     await requireSession();
     const st = parsePcoId(serviceTypeId);
     const plan = parsePcoId(planId);
     const song = parsePcoId(pcoSongId);
     if (st === null || plan === null || song === null) {
-        return { ok: false, message: NOT_AN_ID_MESSAGE };
+        return { ok: false, kind: "refused", message: NOT_AN_ID_MESSAGE };
     }
+    const revalidateAdd = () => {
+        revalidatePath(routes.plan(st, plan), "layout");
+        revalidatePath(routes.home());
+        revalidatePath(routes.catalog(), "layout");
+    };
     let result: AddSongToPlanResult;
     try {
-        result = await addSongToPlan(st, plan, song);
+        result = await addSongToPlan(st, plan, song, { allowDuplicate: allowDuplicate === true });
     } catch (error) {
-        return failed(
-            `add Planning Center song ${song} to plan ${st}/${plan}`,
-            error,
-            ADD_TO_PLAN_FAILURE_MESSAGE
-        );
+        // The song may be in the plan now: let its pages show what is there.
+        revalidateAdd();
+        return {
+            ...failed(`add Planning Center song ${song} to plan ${st}/${plan}`, error, ADD_TO_PLAN_FAILURE_MESSAGE),
+            kind: "unknown",
+        };
     }
     if (!result.ok) {
-        return refused(result);
+        return result.reason === "already-in-plan"
+            ? {
+                  ok: false,
+                  kind: "already-in-plan",
+                  message: result.message,
+                  existingItems: (result.existingItems ?? []).map(({ id, title, sequence }) => ({
+                      id,
+                      title,
+                      sequence,
+                  })),
+              }
+            : { ...refused(result), kind: "refused" };
     }
-    revalidatePath(routes.plan(st, plan), "layout");
-    revalidatePath(routes.home());
-    revalidatePath(routes.catalog(), "layout");
+    revalidateAdd();
     return {
         ok: true,
         itemId: result.item.id,
