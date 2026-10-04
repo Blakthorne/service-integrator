@@ -419,3 +419,56 @@ export interface SeedImportReport {
     possibleDuplicates: SeedPossibleDuplicate[];
     skippedEntries: SeedSkippedEntry[];
 }
+
+// ---------------------------------------------------------------------------
+// Planning Center links
+//
+// A catalog song links to at most one Planning Center song, and a Planning
+// Center song to at most one catalog song (`songs.pco_song_id`). The app
+// mirrors the Planning Center song library in the database (`pco_songs`,
+// refreshed by the `pco-songs` sync), so a link never points at nothing and
+// Reconcile can list the songs that have no catalog song yet. Rows of the
+// mirror are never deleted: a song gone from Planning Center is marked
+// removed.
+// ---------------------------------------------------------------------------
+
+/**
+ * A song of the Planning Center library with every field the mirror keeps.
+ * Unlike `Song`, which a plan item carries, it has Planning Center's dates and
+ * hidden flag, and no notes. A field Planning Center leaves empty is null.
+ */
+export interface PcoLibrarySong {
+    id: string;
+    title: string;
+    author: string | null;
+    copyright: string | null;
+    ccliNumber: number | null;
+    admin: string | null;
+    themes: string | null;
+    /** Hidden from the library in Planning Center. */
+    hidden: boolean;
+    /**
+     * When it was last scheduled, as Planning Center gives it: org-local time
+     * labelled UTC ("Z"), counting upcoming plans too. Null when it never was.
+     */
+    lastScheduledAt: string | null;
+    /** When it was created in Planning Center. */
+    createdAt: string | null;
+    /** When it last changed in Planning Center. */
+    updatedAt: string | null;
+}
+
+/** A row of the mirror: a library song, and what the app has noted about it. */
+export interface MirroredPcoSong extends PcoLibrarySong {
+    /** When a sync, or a link made from a page, last read it from Planning Center. */
+    syncedAt: string;
+    /** When a sync found it gone from Planning Center; null while it is there. */
+    removedAt: string | null;
+    /** When Reconcile's Ignore set it aside as not hymnal material; null otherwise. */
+    ignoredAt: string | null;
+    /**
+     * When an auto-link of it was undone, so that no sync links it again
+     * (a manual link still can); null otherwise.
+     */
+    autoLinkBlockedAt: string | null;
+}
