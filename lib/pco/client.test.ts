@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { PcoError, PcoUrlError, pcoFetch, pcoFetchAll } from "./client";
+import { PcoError, PcoUrlError, jsonApi, pcoFetch, pcoFetchAll, toOne } from "./client";
+import { InvalidPcoIdError } from "./ids";
 
 const BASE = "https://api.planningcenteronline.com/services/v2";
 const AUTH = `Basic ${Buffer.from("id:tok").toString("base64")}`;
@@ -613,5 +614,34 @@ describe("rate limiting (429)", () => {
             status: 503,
         });
         expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("jsonApi", () => {
+    test("builds a JSON:API body from the type and attributes", () => {
+        expect(jsonApi("Song", { title: "Amazing Grace", ccli_number: 22025 })).toStrictEqual({
+            data: { type: "Song", attributes: { title: "Amazing Grace", ccli_number: 22025 } },
+        });
+    });
+
+    test("adds the relationships, each built with toOne", () => {
+        const body = jsonApi(
+            "ItemNote",
+            { content: "R-396 / G-317" },
+            { item_note_category: toOne("ItemNoteCategory", "123") }
+        );
+        expect(body).toStrictEqual({
+            data: {
+                type: "ItemNote",
+                attributes: { content: "R-396 / G-317" },
+                relationships: {
+                    item_note_category: { data: { type: "ItemNoteCategory", id: "123" } },
+                },
+            },
+        });
+    });
+
+    test.each(["", "0", "01", "1.5", "../1", "1/2", " 1"])("toOne rejects the ID %j", (id) => {
+        expect(() => toOne("Song", id)).toThrow(InvalidPcoIdError);
     });
 });

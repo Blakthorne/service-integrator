@@ -1,5 +1,6 @@
 import "server-only";
 import { PCO_CACHE_POLICY, type PcoResourceKind } from "./cachePolicy";
+import { assertPcoId, type PcoId } from "./ids";
 import type { PcoListResponse, PcoResourceIdentifier } from "./resources";
 
 const PCO_ORIGIN = "https://api.planningcenteronline.com";
@@ -233,4 +234,38 @@ export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResour
     }
 
     return { data, included, totalCount: totalCount ?? data.length };
+}
+
+/** A to-one relationship in a write body. Its ID has passed assertPcoId. */
+export interface PcoWriteRelationship {
+    data: { type: string; id: PcoId };
+}
+
+/** The JSON:API document a write sends; build it with jsonApi. */
+export interface PcoWriteBody {
+    data: {
+        type: string;
+        attributes: Record<string, unknown>;
+        relationships?: Record<string, PcoWriteRelationship>;
+    };
+}
+
+/**
+ * Build a write's JSON:API body: `{ data: { type, attributes } }`, with
+ * `relationships` when given. Build each relationship with toOne.
+ */
+export function jsonApi(
+    type: string,
+    attributes: Record<string, unknown>,
+    relationships?: Record<string, PcoWriteRelationship>
+): PcoWriteBody {
+    return { data: { type, attributes, ...(relationships ? { relationships } : {}) } };
+}
+
+/**
+ * A to-one relationship for jsonApi, `{ data: { type, id } }`. Throws
+ * InvalidPcoIdError unless `id` is a PCO ID.
+ */
+export function toOne(type: string, id: string): PcoWriteRelationship {
+    return { data: { type, id: assertPcoId(id) } };
 }
