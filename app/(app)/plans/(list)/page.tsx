@@ -11,10 +11,9 @@ export const metadata: Metadata = {
 };
 
 /**
- * The plans list, the app's home. The server loads every service type's
- * plans; PlansList pages through them in the browser. When a service type
- * fails to load, the others are still listed, with a note that the list may
- * be incomplete.
+ * The plans list. The server loads every service type's plans; PlansList
+ * pages through them in the browser. When a service type fails to load, the
+ * others are still listed, with a note that the list may be incomplete.
  */
 export default async function PlansPage() {
     const { dates, plansByDate, failedServiceTypeIds } = await getPlansByDate();

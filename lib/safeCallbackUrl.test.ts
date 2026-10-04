@@ -139,9 +139,9 @@ describe("safeCallbackUrl", () => {
             expect(callbackUrlAfterMiddleware("/a/..//evil.com")).toBeNull();
         });
 
-        test("a request whose path holds an encoded slash is refused, so sign-in goes to the plans", () => {
+        test("a request whose path holds an encoded slash is refused, so sign-in goes to the dashboard", () => {
             expect(callbackUrlAfterMiddleware("/plans/a%2Fb?q=%26")).toBeNull();
-            expect(signInTarget(callbackUrlAfterMiddleware("/plans/a%2Fb?q=%26"))).toBe("/plans");
+            expect(signInTarget(callbackUrlAfterMiddleware("/plans/a%2Fb?q=%26"))).toBe("/");
         });
 
         test("the auth pages are refused: the middleware leaves them public, so they would loop", () => {
@@ -416,7 +416,7 @@ describe("signInTarget", () => {
 
     test("takes the first of a parameter given several times", () => {
         expect(signInTarget(["/catalog", "/settings"])).toBe("/catalog");
-        expect(signInTarget(["//evil.com", "/catalog"])).toBe("/plans");
+        expect(signInTarget(["//evil.com", "/catalog"])).toBe("/");
     });
 
     test.each<[string, unknown]>([
@@ -426,7 +426,7 @@ describe("signInTarget", () => {
         ["another host", "//evil.com"],
         ["an auth page", "/auth/signin"],
         ["an absolute URL", "https://evil.com/plans"],
-    ])("falls back to the plans list for %s", (_, value) => {
-        expect(signInTarget(value)).toBe("/plans");
+    ])("falls back to the dashboard for %s", (_, value) => {
+        expect(signInTarget(value)).toBe("/");
     });
 });

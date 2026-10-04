@@ -102,10 +102,11 @@ export function safeCallbackUrl(value: unknown): string | null {
 /**
  * Where the sign-in page sends a visitor once signed in, or at once when
  * already signed in: the `callbackUrl` it was given, when `safeCallbackUrl`
- * accepts it, otherwise the plans list. `searchParams` may hold the
- * parameter once, several times (the first counts) or not at all.
+ * accepts it, otherwise the dashboard at `/`, the app's home. `searchParams`
+ * may hold the parameter once, several times (the first counts) or not at
+ * all.
  */
 export function signInTarget(callbackUrl: unknown): string {
     const value = Array.isArray(callbackUrl) ? callbackUrl[0] : callbackUrl;
-    return safeCallbackUrl(value) ?? routes.plans();
+    return safeCallbackUrl(value) ?? routes.home();
 }
