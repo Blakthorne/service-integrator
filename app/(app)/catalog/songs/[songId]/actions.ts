@@ -348,56 +348,80 @@ export async function addSongToPlanAction(
 export type SaveSongTagsState =
     | {
           ok: true;
-          /** False when the song had exactly these tags already, so nothing was sent. */
+          /** False when the song's tags in Planning Center already had the changes, so nothing was sent. */
           changed: boolean;
           /** The song's whole set of tags in Planning Center now. */
           tagIds: string[];
-          /** Tags it has that the app does not know yet, which were kept. */
+          /** Tags it has that the app does not know yet, which were left as they are. */
           kept: Pick<PcoTag, "id" | "name">[];
       }
-    | SongPageRefusal;
+    | (SongPageRefusal & {
+          /**
+           * True when the song's tags changed in Planning Center since the
+           * page showed them in a way the changes cannot be applied to (a
+           * group that takes one tag would end with two), so nothing was
+           * saved: the page has to show them afresh first.
+           */
+          changedSinceShown?: true;
+      });
 
 const TAGS_FAILURE_MESSAGE =
     "Something went wrong, so the tags may or may not have been saved. Look at the song in Planning Center before trying again; the server log has the details.";
 
+/** Every id of `raw` through `parsePcoId`, or null when one is not a Planning Center id. */
+function parseTagIds(raw: readonly string[]): string[] | null {
+    const ids: string[] = [];
+    for (const value of raw) {
+        const id = parsePcoId(value);
+        if (id === null) {
+            return null;
+        }
+        ids.push(id);
+    }
+    return ids;
+}
+
 /**
- * The Tags card's Save: give Planning Center song `pcoSongId` the song tags
- * `tagIds`, its whole set of the mirror's song tags (`saveSongTags`, which
- * checks them against the mirror, reads the song's tags afresh, keeps any
- * the mirror does not know, writes only when they change, logs the write
- * and updates the mirror). Then the catalog's pages are revalidated: the
- * song's page, and the songs list, whose tag filter reads the mirror. The
- * plans' pages and the dashboard show no tags.
+ * The Tags card's Save: apply the person's changes to Planning Center song
+ * `pcoSongId`'s tags (`saveSongTags`). `shown` is the set of tags the card
+ * showed, and `wanted` the set it was saved with; only the tags added and
+ * removed between them are applied, to the song's tags as Planning Center
+ * has them now, so a tag set there since the page loaded is never dropped.
+ * The query checks them against the mirror, writes only when the tags
+ * change, logs the write and updates the mirror. Then the catalog's pages
+ * are revalidated: the song's page, and the songs list, whose tag filter
+ * reads the mirror. The plans' pages and the dashboard show no tags.
  */
 export async function saveSongTagsAction(
     pcoSongId: string,
-    tagIds: readonly string[]
+    shown: readonly string[],
+    wanted: readonly string[]
 ): Promise<SaveSongTagsState> {
     await requireSession();
     const id = parsePcoId(pcoSongId);
     if (id === null) {
         return { ok: false, message: NOT_AN_ID_MESSAGE };
     }
-    const read = readTagIdsInput(tagIds);
-    if (read === null) {
+    const shownRead = readTagIdsInput(shown);
+    const wantedRead = readTagIdsInput(wanted);
+    if (shownRead === null || wantedRead === null) {
         return { ok: false, message: UNREADABLE_MESSAGE };
     }
-    const tags: string[] = [];
-    for (const raw of read) {
-        const tag = parsePcoId(raw);
-        if (tag === null) {
-            return { ok: false, message: NOT_AN_ID_MESSAGE };
-        }
-        tags.push(tag);
+    const shownIds = parseTagIds(shownRead);
+    const wantedIds = parseTagIds(wantedRead);
+    if (shownIds === null || wantedIds === null) {
+        return { ok: false, message: NOT_AN_ID_MESSAGE };
     }
     let result: SaveSongTagsResult;
     try {
-        result = await saveSongTags(id, tags);
+        result = await saveSongTags(id, shownIds, wantedIds);
     } catch (error) {
         return failed(`save the tags of Planning Center song ${id}`, error, TAGS_FAILURE_MESSAGE);
     }
     if (!result.ok) {
-        return refused(result);
+        return result.reason === "changed"
+            ? { ok: false, message: result.message, changedSinceShown: true }
+            : refused(result);
     }
     revalidatePath(routes.catalog(), "layout");
     return {

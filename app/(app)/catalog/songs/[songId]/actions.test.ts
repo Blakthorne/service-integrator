@@ -518,10 +518,10 @@ describe("addSongToPlanAction", () => {
 describe("saveSongTagsAction", () => {
     const SAVED = { ok: true, changed: true, tagIds: ["102", "900"], kept: [{ id: "900", name: "Fast", groupId: null }] };
 
-    /** The action called with the song's id and the tag ids, either of which `overrides` replaces. */
-    function save(overrides: { pcoSongId?: unknown; tagIds?: unknown } = {}) {
-        const args = { pcoSongId: PCO_SONG, tagIds: ["102"], ...overrides };
-        return saveSongTagsAction(args.pcoSongId as string, args.tagIds as string[]);
+    /** The action called with the song's id, the tags shown and those wanted, any of which `overrides` replaces. */
+    function save(overrides: { pcoSongId?: unknown; shown?: unknown; wanted?: unknown } = {}) {
+        const args = { pcoSongId: PCO_SONG, shown: ["101"], wanted: ["102"], ...overrides };
+        return saveSongTagsAction(args.pcoSongId as string, args.shown as string[], args.wanted as string[]);
     }
 
     test("throws without a session, before it saves anything", async () => {
@@ -540,15 +540,34 @@ describe("saveSongTagsAction", () => {
             tagIds: ["102", "900"],
             kept: [{ id: "900", name: "Fast" }],
         });
-        expect(saveSongTags).toHaveBeenCalledWith(PCO_SONG, ["102"]);
+        expect(saveSongTags).toHaveBeenCalledWith(PCO_SONG, ["101"], ["102"]);
         expect(revalidatePath.mock.calls).toEqual([["/catalog", "layout"]]);
     });
 
-    test("saves no tags at all, which clears them", async () => {
+    test("passes on empty sets: a song shown with no tags, or none wanted", async () => {
         saveSongTags.mockResolvedValue({ ok: true, changed: true, tagIds: [], kept: [] });
 
-        await expect(save({ tagIds: [] })).resolves.toMatchObject({ ok: true, tagIds: [] });
-        expect(saveSongTags).toHaveBeenCalledWith(PCO_SONG, []);
+        await expect(save({ wanted: [] })).resolves.toMatchObject({ ok: true, tagIds: [] });
+        await save({ shown: [], wanted: ["102"] });
+        expect(saveSongTags.mock.calls).toEqual([
+            [PCO_SONG, ["101"], []],
+            [PCO_SONG, [], ["102"]],
+        ]);
+    });
+
+    test("says when the tags changed in Planning Center since the page showed them, and revalidates nothing", async () => {
+        saveSongTags.mockResolvedValue({
+            ok: false,
+            reason: "changed",
+            message: '"Season" takes one tag, and "X" has another of its tags in Planning Center now.',
+        });
+
+        await expect(save()).resolves.toEqual({
+            ok: false,
+            message: '"Season" takes one tag, and "X" has another of its tags in Planning Center now.',
+            changedSinceShown: true,
+        });
+        expect(revalidatePath).not.toHaveBeenCalled();
     });
 
     test("refuses a song id or a tag id that is not one, without saving", async () => {
@@ -556,14 +575,16 @@ describe("saveSongTagsAction", () => {
             await expect(save({ pcoSongId: value })).resolves.toEqual({ ok: false, message: NOT_AN_ID });
         }
         for (const value of ["", "abc", "0", "1.5", "../1"]) {
-            await expect(save({ tagIds: ["102", value] })).resolves.toEqual({ ok: false, message: NOT_AN_ID });
+            await expect(save({ wanted: ["102", value] })).resolves.toEqual({ ok: false, message: NOT_AN_ID });
+            await expect(save({ shown: [value] })).resolves.toEqual({ ok: false, message: NOT_AN_ID });
         }
         expect(saveSongTags).not.toHaveBeenCalled();
     });
 
     test("refuses tag ids that are not a list of texts", async () => {
         for (const value of [null, undefined, "102", [102], [null]]) {
-            await expect(save({ tagIds: value })).resolves.toEqual({ ok: false, message: UNREADABLE });
+            await expect(save({ wanted: value })).resolves.toEqual({ ok: false, message: UNREADABLE });
+            await expect(save({ shown: value })).resolves.toEqual({ ok: false, message: UNREADABLE });
         }
         expect(saveSongTags).not.toHaveBeenCalled();
     });

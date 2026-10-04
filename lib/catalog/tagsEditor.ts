@@ -86,6 +86,57 @@ export function sameTagSelection(a: readonly string[], b: readonly string[]): bo
     return first.size === second.size && [...first].every((id) => second.has(id));
 }
 
+/** "A", "A and B", "A, B and C". */
+function listNames(names: readonly string[]): string {
+    return names.length <= 2
+        ? names.join(" and ")
+        : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** The tags a save would add and remove, by name, in the mirror's order. */
+export interface TagChanges {
+    added: string[];
+    removed: string[];
+}
+
+/**
+ * What saving `wanted` would change of the tags the editor showed
+ * (`shown`): the tags of `groups` added and removed, by name, in the
+ * mirror's order. A save sends just these changes, which are applied to
+ * the song's tags as Planning Center has them then.
+ */
+export function tagChanges(
+    shown: readonly string[],
+    wanted: readonly string[],
+    groups: readonly PcoTagGroup[]
+): TagChanges {
+    const before = new Set(shown);
+    const after = new Set(wanted);
+    const tags = groups.flatMap((group) => group.tags);
+    return {
+        added: tags.filter(({ id }) => after.has(id) && !before.has(id)).map(({ name }) => name),
+        removed: tags.filter(({ id }) => before.has(id) && !after.has(id)).map(({ name }) => name),
+    };
+}
+
+/**
+ * What the Tags card says beside Save, before it is pressed: 'Save adds
+ * "Easter" and removes "Special".', or that nothing has changed yet.
+ */
+export function describeTagChanges({ added, removed }: TagChanges): string {
+    const quoted = (names: readonly string[]) => listNames(names.map((name) => `"${name}"`));
+    if (added.length === 0 && removed.length === 0) {
+        return "Nothing to save yet: no tag is ticked or unticked.";
+    }
+    if (removed.length === 0) {
+        return `Save adds ${quoted(added)}.`;
+    }
+    if (added.length === 0) {
+        return `Save removes ${quoted(removed)}.`;
+    }
+    return `Save adds ${quoted(added)} and removes ${quoted(removed)}.`;
+}
+
 /** What a group's fieldset says about choosing: any number of its tags, or one. */
 export function tagGroupHint(group: Pick<PcoTagGroup, "allowMultiple">): string {
     return group.allowMultiple ? "Choose any of them." : "Choose one, or none.";
@@ -94,13 +145,6 @@ export function tagGroupHint(group: Pick<PcoTagGroup, "allowMultiple">): string 
 /** What the Tags card says when the mirror has no song tags at all. */
 export const NO_SONG_TAGS =
     "No tags yet: the tags sync has not brought Planning Center's song tags into the app. It runs every hour, after the song sync.";
-
-/** "A", "A and B", "A, B and C". */
-function listNames(names: readonly string[]): string {
-    return names.length <= 2
-        ? names.join(" and ")
-        : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
 
 /** What a save of the tags gave back. */
 export interface TagsSaved {

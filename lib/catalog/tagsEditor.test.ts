@@ -4,11 +4,13 @@ import {
     NO_SONG_TAGS,
     chooseTag,
     clearTagGroup,
+    describeTagChanges,
     describeTagsSave,
     readTagIdsInput,
     sameTagSelection,
     songTagLines,
     songTagSelection,
+    tagChanges,
     tagGroupHint,
 } from "./tagsEditor";
 
@@ -83,6 +85,38 @@ describe("the selection", () => {
         expect(sameTagSelection([], [])).toBe(true);
         expect(sameTagSelection(["101"], ["101", "102"])).toBe(false);
         expect(sameTagSelection(["101", "101"], ["101"])).toBe(true);
+    });
+});
+
+describe("what a save would change", () => {
+    test("lists the tags added and removed, by name, in the mirror's order", () => {
+        expect(tagChanges(["301", "102"], ["303", "101", "102"], GROUPS)).toEqual({
+            added: ["Lent", "Chorus"],
+            removed: ["Advent"],
+        });
+    });
+
+    test("lists nothing when nothing changed, in any order", () => {
+        expect(tagChanges(["102", "301"], ["301", "102"], GROUPS)).toEqual({ added: [], removed: [] });
+    });
+
+    test("leaves out ids that are no tag of the groups", () => {
+        expect(tagChanges(["999"], ["998"], GROUPS)).toEqual({ added: [], removed: [] });
+    });
+
+    test("says it before Save is pressed", () => {
+        expect(describeTagChanges({ added: ["Easter"], removed: ["Special"] })).toBe(
+            'Save adds "Easter" and removes "Special".'
+        );
+        expect(describeTagChanges({ added: ["Easter", "Lent", "Chorus"], removed: [] })).toBe(
+            'Save adds "Easter", "Lent" and "Chorus".'
+        );
+        expect(describeTagChanges({ added: [], removed: ["Hymn", "Special"] })).toBe(
+            'Save removes "Hymn" and "Special".'
+        );
+        expect(describeTagChanges({ added: [], removed: [] })).toBe(
+            "Nothing to save yet: no tag is ticked or unticked."
+        );
     });
 });
 

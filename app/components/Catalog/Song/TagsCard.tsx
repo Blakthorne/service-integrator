@@ -9,10 +9,12 @@ import {
     NO_SONG_TAGS,
     chooseTag,
     clearTagGroup,
+    describeTagChanges,
     describeTagsSave,
     sameTagSelection,
     songTagLines,
     songTagSelection,
+    tagChanges,
     tagGroupHint,
 } from "@/lib/catalog/tagsEditor";
 import type { PcoTag, PcoTagGroup } from "@/lib/domain";
@@ -20,7 +22,10 @@ import { formStateKey } from "@/lib/forms";
 import CatalogCard, { NoValue } from "../CatalogCard";
 import { HINT_CLASS } from "../SongForm/Fields";
 import PendingButton from "./PendingButton";
-import { ALERT_CLASS, DONE_CLASS, WARNING_CLASS } from "./styles";
+import { ALERT_CLASS, DONE_CLASS, SMALL_BUTTON_CLASS, WARNING_CLASS } from "./styles";
+
+/** The id of the line that says what Save will change, which describes Save. */
+const CHANGES_ID = "song-tags-changes";
 
 /** What the card says when its action never answered: Planning Center may have the new tags, or not. */
 const TAGS_NO_ANSWER =
@@ -119,6 +124,15 @@ function TagGroupFields({ group, groups, selection, disabled, onChange }: TagGro
     );
 }
 
+/** After a refusal because the tags changed in Planning Center: load the page again, to show them afresh. */
+function ReloadPageButton() {
+    return (
+        <button type="button" onClick={() => window.location.reload()} className={SMALL_BUTTON_CLASS}>
+            Reload the page
+        </button>
+    );
+}
+
 interface TagsCardProps {
     /** The linked Planning Center song's id. */
     pcoSongId: string;
@@ -137,16 +151,24 @@ interface TagsCardProps {
  * tags, or one), and Save. Before the tags sync has brought any tags, it
  * says so.
  *
- * Save sends the song's whole set of tags (`saveSongTagsAction`, which keeps
- * any tag Planning Center has that the app does not know yet), called from
- * its click with its pending state in `useState` (convention 15). It then
- * says what the song's tags are now, or why nothing was saved, in an alert
- * keyed per attempt; focus stays on Save. The choices are this card's
- * state: a revalidation updates the list above them and never the choices.
+ * Beside Save it says what Save will change ("Save adds "Easter" and
+ * removes "Special"."), which describes the button too. Save sends the
+ * tags the editor showed and the ones chosen (`saveSongTagsAction`): only
+ * the tags added and removed are applied, to the song's tags as Planning
+ * Center has them then, so a tag set there since the page loaded is never
+ * dropped. It is called from its click with its pending state in
+ * `useState` (convention 15), and then says what the song's tags are now,
+ * which the editor then shows, or why nothing was saved, in an alert keyed
+ * per attempt; focus stays on Save. A save refused because the tags changed
+ * in a way the changes cannot be applied to offers to reload the page. The
+ * choices are this card's state: a revalidation updates the list above
+ * them and never the choices.
  */
 export default function TagsCard({ pcoSongId, groups, songTags, editable }: TagsCardProps) {
     const shownGroups = groups.filter((group) => group.tags.length > 0);
-    const [selection, setSelection] = useState(() => songTagSelection(shownGroups, songTags));
+    /** The tags the editor started from (and, after a save, the ones the song has then): a save sends what changed of them. */
+    const [shown, setShown] = useState(() => songTagSelection(shownGroups, songTags));
+    const [selection, setSelection] = useState(shown);
     const [result, setResult] = useState<SaveSongTagsState | null>(null);
     /** The tags the last save left on the song, while "Saved." is true. */
     const [savedSelection, setSavedSelection] = useState<string[] | null>(null);
@@ -155,6 +177,7 @@ export default function TagsCard({ pcoSongId, groups, songTags, editable }: Tags
     const saving = useRef(false);
 
     const lines = songTagLines(shownGroups, songTags);
+    const changes = describeTagChanges(tagChanges(shown, selection, shownGroups));
     const saved =
         result?.ok === true && savedSelection !== null && sameTagSelection(selection, savedSelection);
 
@@ -165,10 +188,14 @@ export default function TagsCard({ pcoSongId, groups, songTags, editable }: Tags
         saving.current = true;
         setPending(true);
         try {
-            const next = await saveSongTagsAction(pcoSongId, selection);
+            const next = await saveSongTagsAction(pcoSongId, shown, selection);
             setResult(next);
             if (next.ok) {
-                setSavedSelection(selection);
+                // The song's tags as Planning Center has them now, set there since included.
+                const now = songTagSelection(shownGroups, next.tagIds.map((id) => ({ id })));
+                setShown(now);
+                setSelection(now);
+                setSavedSelection(now);
             }
         } catch (error) {
             console.error("Saving the tags failed:", error);
@@ -227,12 +254,23 @@ export default function TagsCard({ pcoSongId, groups, songTags, editable }: Tags
                         </div>
                         {result?.ok === false && (
                             // A new key per attempt: a repeated refusal is announced again.
-                            <p key={formStateKey(result)} role="alert" className={ALERT_CLASS}>
-                                {result.message}
-                            </p>
+                            <div key={formStateKey(result)} className="space-y-2">
+                                <p role="alert" className={ALERT_CLASS}>
+                                    {result.message}
+                                </p>
+                                {result.changedSinceShown && <ReloadPageButton />}
+                            </div>
                         )}
+                        <p id={CHANGES_ID} className={HINT_CLASS}>
+                            {changes}
+                        </p>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                            <PendingButton pending={pending} pendingLabel="Saving…" onClick={() => void save()}>
+                            <PendingButton
+                                pending={pending}
+                                pendingLabel="Saving…"
+                                onClick={() => void save()}
+                                describedBy={CHANGES_ID}
+                            >
                                 Save tags
                             </PendingButton>
                             {saved && result?.ok === true && (
