@@ -5,9 +5,11 @@ import type { Migration } from ".";
  * in books, and the runs of the catalog imports.
  *
  * - `books`: a hymnal or other book. `code` ("R", "G", "CB") is unique without
- *   regard to case and is the book's URL segment. `numbered` is 0 for a book
- *   ordered by position only, such as a chorus book. `label_format` is how an
- *   entry is labelled: `R-{n}`, or an unnumbered book's short name.
+ *   regard to case and is the book's URL segment, unencoded, so a CHECK holds
+ *   it to what `parseBookCode` accepts: a letter, then up to 7 letters,
+ *   digits, "_" or "-". `numbered` is 0 for a book ordered by position only,
+ *   such as a chorus book. `label_format` is how an entry is labelled:
+ *   `R-{n}`, or an unnumbered book's short name.
  * - `hymns` (the words) and `tunes` (the melodies). Titles and names are not
  *   unique: two texts can share a title. Their other spellings live in
  *   `hymn_aliases` and `tune_aliases`, whose `normalized` form is unique, and
@@ -37,7 +39,11 @@ const migration: Migration = {
     sql: `
         CREATE TABLE books (
             id INTEGER PRIMARY KEY,
-            code TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            code TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (
+                length(code) BETWEEN 1 AND 8
+                AND code GLOB '[A-Za-z]*'
+                AND code NOT GLOB '*[^A-Za-z0-9_-]*'
+            ),
             name TEXT NOT NULL,
             short_name TEXT NOT NULL,
             numbered INTEGER NOT NULL CHECK (numbered IN (0, 1)),

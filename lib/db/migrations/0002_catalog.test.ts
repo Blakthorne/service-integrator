@@ -1,5 +1,6 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { parseBookCode } from "@/lib/catalog/ids";
 import { openTestDb } from "../testing";
 
 let db: DatabaseSync;
@@ -143,6 +144,57 @@ describe("0002_catalog", () => {
             expect(
                 db.prepare("SELECT id FROM books WHERE code = ?").get("r")
             ).toEqual({ id });
+        });
+
+        test("a code is exactly what parseBookCode accepts, so it can go into a URL as it is", () => {
+            const codes = [
+                "R",
+                "g",
+                "CB",
+                "Chorus",
+                "R2",
+                "Hymns_2",
+                "a-b",
+                "z-_9",
+                "ABCDEFGH",
+                "",
+                "1",
+                "2R",
+                "-R",
+                "_R",
+                "ABCDEFGHI",
+                "R G",
+                " R",
+                "R ",
+                "R\n",
+                "R\t",
+                "R.1",
+                "R/1",
+                "../R",
+                "%52",
+                "R*",
+                "R?",
+                "R[",
+                "R]",
+                "R^",
+                "\u00C9",
+                "R\u00E9",
+                "\uFF32",
+            ];
+            for (const code of codes) {
+                let accepted = true;
+                try {
+                    db.prepare("DELETE FROM books").run();
+                    book(code);
+                } catch (error) {
+                    expect(String(error)).toContain("CHECK constraint failed");
+                    accepted = false;
+                }
+                expect({ code, accepted }).toEqual({
+                    code,
+                    accepted: parseBookCode(code) !== null,
+                });
+            }
         });
 
         test("numbered and active are 0 or 1, and a book is active by default", () => {
