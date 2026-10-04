@@ -14,7 +14,7 @@ import {
 } from "@/lib/catalog/merge";
 import { normalizeTuneName } from "@/lib/catalog/normalize";
 import { normalizeTitle } from "@/lib/normalizeTitle";
-import { songMarksFromJson } from "./marks";
+import { SONG_MARKS_JSON, songMarksFromJson } from "./marks";
 import { withTransaction } from "./transaction";
 
 /**
@@ -88,9 +88,7 @@ function mergeSongs(db: DatabaseSync, tables: Tables, ownerId: number): MergeSon
     const songs = db
         .prepare(
             `SELECT s.id, s.hymn_id, h.title, s.tune_id, t.name AS tune_name, s.pco_song_id,
-                    p.title AS pco_title, s.notes,
-                    (SELECT json_group_array(json_object('mark', m.mark, 'note', m.note, 'createdAt', m.created_at))
-                     FROM song_marks m WHERE m.song_id = s.id) AS marks
+                    p.title AS pco_title, s.notes, ${SONG_MARKS_JSON} AS marks
              FROM songs s
              JOIN hymns h ON h.id = s.hymn_id
              LEFT JOIN tunes t ON t.id = s.tune_id
