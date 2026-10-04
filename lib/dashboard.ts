@@ -113,7 +113,8 @@ function notesNeedSyncing(count: number): string {
  * - "ok": the songs' notes are in sync;
  * - "attention": some need a sync, which the plan page makes;
  * - "warning": the service type has no category for them, so nothing can
- *   be written until someone creates it in Planning Center;
+ *   be written until someone creates it in Planning Center (the to-do says
+ *   how, beside a link);
  * - "muted": they cannot be compared, and why.
  */
 export interface PlanNotesSummary {
@@ -134,7 +135,10 @@ export function planNotesSummary(entry: {
     const { hymnNotes } = entry;
     switch (hymnNotes.kind) {
         case "no-category":
-            return { tone: "warning", text: hymnNotes.message };
+            return {
+                tone: "warning",
+                text: `Hymnal notes can't be synced without a "${hymnNotes.categoryName}" item note category.`,
+            };
         case "unavailable":
             return {
                 tone: "muted",

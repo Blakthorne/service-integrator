@@ -117,15 +117,18 @@ describe("planNotesSummary", () => {
         expect(planNotesSummary({ hymnNotes: READY, notesToSync: 0, songs: [] })).toBeNull();
     });
 
-    test("a missing category asks for one", () => {
-        const message = 'Create an item note category named "Hymnal" in Planning Center for Sunday Evening.';
+    test("a missing category says why there are no badges, and leaves the instruction to the to-do", () => {
+        const message = 'Create an item note category named "Hymnals" in Planning Center for Sunday Evening.';
         expect(
             planNotesSummary({
-                hymnNotes: { kind: "no-category", categoryName: "Hymnal", message },
+                hymnNotes: { kind: "no-category", categoryName: "Hymnals", message },
                 notesToSync: 0,
                 songs: [{ note: null }],
             })
-        ).toEqual({ tone: "warning", text: message });
+        ).toEqual({
+            tone: "warning",
+            text: 'Hymnal notes can\'t be synced without a "Hymnals" item note category.',
+        });
     });
 
     test("notes that cannot be compared say why, briefly", () => {
