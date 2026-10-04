@@ -1,22 +1,27 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // vi.hoisted is required: vi.mock is hoisted above const declarations.
-const { auth, revalidatePath, syncPcoSongsNow, getSettings, saveSettings } = vi.hoisted(() => ({
-    auth: vi.fn(),
-    revalidatePath: vi.fn(),
-    syncPcoSongsNow: vi.fn(),
-    getSettings: vi.fn(),
-    saveSettings: vi.fn(),
-}));
+const { auth, revalidatePath, syncPcoSongsNow, getSettings, saveSettings, rederiveAllCredits } =
+    vi.hoisted(() => ({
+        auth: vi.fn(),
+        revalidatePath: vi.fn(),
+        syncPcoSongsNow: vi.fn(),
+        getSettings: vi.fn(),
+        saveSettings: vi.fn(),
+        rederiveAllCredits: vi.fn(),
+    }));
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ syncPcoSongsNow }));
 vi.mock("@/lib/queries/settings", () => ({ getSettings, saveSettings }));
+vi.mock("@/lib/queries/credits", () => ({ rederiveAllCredits }));
 
 import { FORM_FAILURE_MESSAGE } from "@/lib/forms";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 import {
     saveCopyrightAction,
+    saveCreditsAction,
+    saveEmailAction,
     saveHymnalNotesAction,
     saveScheduleTextAction,
     syncPcoSongsAction,
@@ -46,12 +51,20 @@ function run(ok: boolean, message: string | null) {
 const SYNC_PAGES = [["/settings"], ["/catalog", "layout"], ["/plans", "layout"]];
 
 beforeEach(() => {
-    for (const mock of [auth, revalidatePath, syncPcoSongsNow, getSettings, saveSettings]) {
+    for (const mock of [
+        auth,
+        revalidatePath,
+        syncPcoSongsNow,
+        getSettings,
+        saveSettings,
+        rederiveAllCredits,
+    ]) {
         mock.mockReset();
     }
     auth.mockResolvedValue(SESSION);
     getSettings.mockReturnValue({ settings: DEFAULT_SETTINGS, error: null });
     saveSettings.mockReturnValue({ ok: true, saved: [] });
+    rederiveAllCredits.mockReturnValue({ songs: 8, ok: 1, legacy: 7, unparsed: 0 });
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -129,6 +142,12 @@ describe("syncPcoSongsAction", () => {
 /** Every page a saved setting revalidates: Settings, the plan pages and the dashboard. */
 const SETTINGS_PAGES = [["/settings"], ["/plans", "layout"], ["/"]];
 
+/** What saving the credits revalidates: Settings, the plan pages and the catalog's, not the dashboard. */
+const CREDIT_PAGES = [["/settings"], ["/plans", "layout"], ["/catalog", "layout"]];
+
+/** What saving the email settings revalidates: Settings alone. */
+const EMAIL_PAGES = [["/settings"]];
+
 /** The message above the Save button when a field needs fixing. */
 const FIX_FIELDS = "Nothing was saved. Fix the fields that have an error message, then try again.";
 
@@ -141,39 +160,60 @@ function formWith(fields: Record<string, string>): FormData {
     return formData;
 }
 
-/** Each action, to test what they share. */
+/** Each action, to test what they share: its form's fields, and the pages a save revalidates. */
 const FORM_ACTIONS = [
-    ["saveCopyrightAction", saveCopyrightAction, { ccliLicenseNumber: "7654321" }],
+    ["saveCopyrightAction", saveCopyrightAction, { ccliLicenseNumber: "7654321" }, SETTINGS_PAGES],
     [
         "saveScheduleTextAction",
         saveScheduleTextAction,
         { numberSeparator: " / ", "headerLabel-1405391": "Sunday AM" },
+        SETTINGS_PAGES,
     ],
     [
         "saveHymnalNotesAction",
         saveHymnalNotesAction,
         { hymnNoteCategoryName: "Hymnal", hymnNoteIncludesTune: "no" },
+        SETTINGS_PAGES,
+    ],
+    [
+        "saveCreditsAction",
+        saveCreditsAction,
+        {
+            "creditRole-0": "Words",
+            "creditPhrase-0": "Words by",
+            "creditRole-1": "Music",
+            "creditPhrase-1": "Music by",
+            creditPairPhrase: "Words and Music by",
+        },
+        CREDIT_PAGES,
+    ],
+    [
+        "saveEmailAction",
+        saveEmailAction,
+        { emailRecipients: "pastor@example.org", emailSubjectTemplate: "Songs for {date}" },
+        EMAIL_PAGES,
     ],
 ] as const;
 
-describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
+describe.each(FORM_ACTIONS)("%s", (_name, action, fields, pages) => {
     test("throws without a session, before it reads or saves anything", async () => {
         auth.mockResolvedValue(null);
 
         await expect(action(formWith(fields))).rejects.toThrow("Not signed in");
         expect(getSettings).not.toHaveBeenCalled();
         expect(saveSettings).not.toHaveBeenCalled();
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
-    test("saves, revalidates Settings, the plan pages and the dashboard, and says it is saved", async () => {
+    test("saves, revalidates the pages that show it, and says it is saved", async () => {
         saveSettings.mockReturnValue({ ok: true, saved: ["x"] });
 
         const state = await action(formWith(fields));
 
-        expect(state).toMatchObject({ status: "success", message: "Saved." });
+        expect(state).toMatchObject({ status: "success", message: expect.stringMatching(/^Saved\./) });
         expect(saveSettings).toHaveBeenCalledTimes(1);
-        expect(revalidatePath.mock.calls).toEqual(SETTINGS_PAGES);
+        expect(revalidatePath.mock.calls).toEqual(pages);
     });
 
     test("logs the cause and gives the generic message when the save throws, with what was posted", async () => {
@@ -189,6 +229,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
             values: fields,
         });
         expect(console.error).toHaveBeenCalledWith("Failed to save the settings:", cause);
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
@@ -219,6 +260,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
             );
             expect(state.values).toEqual(fields);
         }
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 });
@@ -414,5 +456,208 @@ describe("saveHymnalNotesAction", () => {
             },
         });
         expect(saveSettings).not.toHaveBeenCalled();
+    });
+});
+
+describe("saveCreditsAction", () => {
+    /** The form of the default roles. */
+    const DEFAULT_FIELDS = {
+        "creditRole-0": "Words",
+        "creditPhrase-0": "Words by",
+        "creditRole-1": "Music",
+        "creditPhrase-1": "Music by",
+        "creditRole-2": "Arr.",
+        "creditPhrase-2": "Arr. by",
+        "creditRole-3": "Trans.",
+        "creditPhrase-3": "Trans. by",
+        creditPairPhrase: "Words and Music by",
+    };
+
+    test("saves the roles in order with their phrases, as the registry takes them", async () => {
+        await saveCreditsAction(
+            formWith({
+                "creditRole-0": " Lyrics ",
+                "creditPhrase-0": "Text by",
+                "creditRole-1": "Tune",
+                "creditPhrase-1": "",
+                "creditRole-2": "Setting",
+                "creditPhrase-2": "Set by",
+                creditPairPhrase: "Text and tune by",
+            })
+        );
+
+        expect(saveSettings).toHaveBeenCalledWith({
+            creditRoles: ["Lyrics", "Tune", "Setting"],
+            creditPhrases: {
+                Lyrics: "Text by",
+                Setting: "Set by",
+                "Lyrics & Tune": "Text and tune by",
+            },
+        });
+    });
+
+    test("then reads every song's credits again, and says how many songs and how they read", async () => {
+        rederiveAllCredits.mockReturnValue({ songs: 397, ok: 3, legacy: 390, unparsed: 4 });
+
+        const state = await saveCreditsAction(formWith(DEFAULT_FIELDS));
+
+        expect(rederiveAllCredits).toHaveBeenCalledTimes(1);
+        expect(rederiveAllCredits).toHaveBeenCalledWith();
+        // The roles are stored before they are read.
+        expect(saveSettings.mock.invocationCallOrder[0]).toBeLessThan(
+            rederiveAllCredits.mock.invocationCallOrder[0]
+        );
+        expect(state).toEqual({
+            status: "success",
+            message:
+                "Saved. Read the credits of 397 songs again: 3 follow the roles, 390 have no labels and 4 have labels that no role matches.",
+            // Each field as the form shows it once saved: the phrases as the text prints them.
+            values: DEFAULT_FIELDS,
+        });
+    });
+
+    test("shows a blank phrase as what the copyright text prints for it", async () => {
+        const state = await saveCreditsAction(
+            formWith({
+                "creditRole-0": "Words",
+                "creditPhrase-0": "",
+                "creditRole-1": "Music",
+                "creditPhrase-1": "Music by",
+                creditPairPhrase: "",
+            })
+        );
+
+        expect(state).toMatchObject({
+            status: "success",
+            values: {
+                "creditPhrase-0": "Words by",
+                creditPairPhrase: "Words and Music by",
+            },
+        });
+    });
+
+    test("marks every field that needs fixing, and saves and reads nothing", async () => {
+        const state = await saveCreditsAction(
+            formWith({
+                ...DEFAULT_FIELDS,
+                "creditRole-1": "  ",
+                "creditRole-3": "words",
+            })
+        );
+
+        expect(state).toMatchObject({
+            status: "error",
+            message: FIX_FIELDS,
+            fieldErrors: {
+                "creditRole-1": { message: "A role cannot be blank." },
+                "creditRole-3": { message: 'The role "words" is listed twice.' },
+            },
+            values: { "creditRole-1": "  ", "creditRole-3": "words" },
+        });
+        expect(saveSettings).not.toHaveBeenCalled();
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("refuses fewer than two roles, on the list as a whole", async () => {
+        const state = await saveCreditsAction(
+            formWith({ "creditRole-0": "Words", "creditPhrase-0": "Words by", creditPairPhrase: "" })
+        );
+
+        expect(state).toMatchObject({
+            status: "error",
+            fieldErrors: { creditRoles: { message: expect.stringContaining("at least two roles") } },
+        });
+        expect(saveSettings).not.toHaveBeenCalled();
+    });
+
+    test("reads nothing again when the save is refused", async () => {
+        saveSettings.mockReturnValue({
+            ok: false,
+            message: "Nothing was saved: fix the settings marked below.",
+            fieldErrors: { creditRoles: "The roles must be a list." },
+        });
+
+        const state = await saveCreditsAction(formWith(DEFAULT_FIELDS));
+
+        expect(state.status).toBe("error");
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("says the roles are saved, and when the credits follow, when they cannot be read again", async () => {
+        const cause = new Error("database or disk is full");
+        rederiveAllCredits.mockImplementation(() => {
+            throw cause;
+        });
+
+        const state = await saveCreditsAction(formWith(DEFAULT_FIELDS));
+
+        expect(state).toEqual({
+            status: "error",
+            message:
+                "The roles were saved, but the songs' credits could not be read again. They follow the new roles at the next song sync, within the hour.",
+            fieldErrors: {},
+            values: DEFAULT_FIELDS,
+        });
+        expect(console.error).toHaveBeenCalledWith("Failed to read the songs' credits again:", cause);
+        // The roles are stored, so the pages that show them are revalidated.
+        expect(revalidatePath.mock.calls).toEqual(CREDIT_PAGES);
+    });
+});
+
+describe("saveEmailAction", () => {
+    test("saves the recipients as a list and the subject as a template", async () => {
+        const state = await saveEmailAction(
+            formWith({
+                emailRecipients: " pastor@example.org,\r\nmusic@example.org ;  ",
+                emailSubjectTemplate: "  Songs for {date} \u00b7 {service} ",
+            })
+        );
+
+        expect(saveSettings).toHaveBeenCalledWith({
+            emailRecipients: ["pastor@example.org", "music@example.org"],
+            emailSubjectTemplate: "Songs for {date} \u00b7 {service}",
+        });
+        expect(state).toEqual({
+            status: "success",
+            message: "Saved.",
+            values: {
+                emailRecipients: "pastor@example.org\nmusic@example.org",
+                emailSubjectTemplate: "Songs for {date} \u00b7 {service}",
+            },
+        });
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
+    });
+
+    test("saves a blank field as no recipients", async () => {
+        await saveEmailAction(formWith({ emailRecipients: "  \n", emailSubjectTemplate: "Songs" }));
+
+        expect(saveSettings).toHaveBeenCalledWith({
+            emailRecipients: [],
+            emailSubjectTemplate: "Songs",
+        });
+    });
+
+    test("marks the entries that are not addresses, and the subject, at once, and saves nothing", async () => {
+        const state = await saveEmailAction(
+            formWith({ emailRecipients: "pastor@example.org\nnope", emailSubjectTemplate: "{when}" })
+        );
+
+        expect(state).toMatchObject({
+            status: "error",
+            message: FIX_FIELDS,
+            fieldErrors: {
+                emailRecipients: {
+                    message: '"nope" is not an email address, such as name@example.org.',
+                },
+                emailSubjectTemplate: {
+                    message: expect.stringContaining('"{when}" is not a placeholder'),
+                },
+            },
+            values: { emailRecipients: "pastor@example.org\nnope", emailSubjectTemplate: "{when}" },
+        });
+        expect(saveSettings).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
     });
 });

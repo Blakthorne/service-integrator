@@ -10,15 +10,19 @@ import {
     type FormState,
 } from "@/lib/forms";
 import { parsePcoId } from "@/lib/pco";
+import { rederiveAllCredits } from "@/lib/queries/credits";
 import { syncPcoSongsNow, type RunJobResult } from "@/lib/queries/reconcile";
 import { getSettings, saveSettings, type SaveSettingsResult } from "@/lib/queries/settings";
 import { routes } from "@/lib/routes";
 import {
     readCopyrightForm,
+    readCreditsForm,
+    readEmailForm,
     readHymnalNotesForm,
     readScheduleTextForm,
     type SettingsFormRead,
 } from "@/lib/settingsForms";
+import { CREDITS_NOT_REREAD_MESSAGE, describeRederivedCredits } from "@/lib/settingsText";
 
 /** What "Sync now" says when it is done: how the run went, in a sentence. */
 export interface SyncNowResult {
@@ -127,6 +131,41 @@ function revalidateSettingsPages(): void {
 }
 
 /**
+ * The pages that show what the credit roles and phrases change: Settings, the
+ * plan pages (the copyright text prints the credits) and the catalog's, whose
+ * song pages show each song's credits as the roles read them. Not the
+ * dashboard, which shows no credits.
+ */
+function revalidateCreditPages(): void {
+    revalidatePath(routes.settings());
+    revalidatePath(routes.plans(), "layout");
+    revalidatePath(routes.catalog(), "layout");
+}
+
+/**
+ * The pages that show the email settings: Settings alone. The plan's Email
+ * dialog reads them afresh each time it opens.
+ */
+function revalidateEmailPages(): void {
+    revalidatePath(routes.settings());
+}
+
+/** What follows a save that went through: more to say beside "Saved.", or a problem the save itself did not have. */
+type AfterSave = { ok: true; message: string } | { ok: false; message: string };
+
+/** What `saveRead` does besides saving. */
+interface SaveOptions {
+    /** Revalidate the pages that show what was saved; the settings pages by default. */
+    revalidate?: () => void;
+    /**
+     * Runs once the values are stored. Its message replaces "Saved." when it
+     * went well. When it did not, the form shows its message as an error,
+     * though the values are stored.
+     */
+    after?: () => AfterSave;
+}
+
+/**
  * A refusal from `saveSettings`, as the form shows it. The readers check
  * every value with the registry's own parsers first, so this is only a
  * guard: a setting whose key is a field of the form is marked on that field,
@@ -153,10 +192,11 @@ function refusal(
  * Save what a form read, and say how it went. A field that needs fixing
  * comes back as an error on that field, with nothing saved. A save the
  * database cannot make (`saveSettings` throws) is logged and comes back as
- * the generic message. A save revalidates the pages that show settings, and
+ * the generic message. A save runs `options.after`, revalidates the pages
+ * that show it (`options.revalidate`: the settings pages by default), and
  * gives the form what each field holds now.
  */
-function saveRead(read: SettingsFormRead): SettingsFormState {
+function saveRead(read: SettingsFormRead, options: SaveOptions = {}): SettingsFormState {
     if (!read.ok) {
         return formError(FIX_FIELDS_MESSAGE, {
             fieldErrors: read.fieldErrors,
@@ -173,8 +213,13 @@ function saveRead(read: SettingsFormRead): SettingsFormState {
     if (!result.ok) {
         return refusal(result, read.posted);
     }
-    revalidateSettingsPages();
-    return formSuccess(SAVED_MESSAGE, read.shown);
+    const followUp = options.after?.();
+    // The values are stored whether or not the follow-up worked.
+    (options.revalidate ?? revalidateSettingsPages)();
+    if (followUp?.ok === false) {
+        return formError(followUp.message, { values: read.posted });
+    }
+    return formSuccess(followUp?.message ?? SAVED_MESSAGE, read.shown);
 }
 
 /** The Copyright card's action: save the CCLI license number. */
@@ -204,4 +249,44 @@ export async function saveScheduleTextAction(formData: FormData): Promise<Settin
 export async function saveHymnalNotesAction(formData: FormData): Promise<SettingsFormState> {
     await requireSession();
     return saveRead(readHymnalNotesForm(formData));
+}
+
+/**
+ * Read every song's author again with the roles just saved, and say how
+ * many songs that was and how they read (`rederiveAllCredits`: the database
+ * alone, one transaction). A failure is logged and says when the credits
+ * will follow anyway: the next song sync derives them with the stored roles.
+ */
+function rederiveCredits(): AfterSave {
+    try {
+        return { ok: true, message: describeRederivedCredits(rederiveAllCredits()) };
+    } catch (error) {
+        console.error("Failed to read the songs' credits again:", error);
+        return { ok: false, message: CREDITS_NOT_REREAD_MESSAGE };
+    }
+}
+
+/**
+ * The Credits card's action: save the credit roles, in order, and the
+ * phrase for each, then read every song's author again with the new roles
+ * (`rederiveAllCredits`) so the credits follow at once and not at the next
+ * song sync, and say how many songs that was. A refused form saves nothing
+ * and reads nothing again.
+ */
+export async function saveCreditsAction(formData: FormData): Promise<SettingsFormState> {
+    await requireSession();
+    return saveRead(readCreditsForm(formData), {
+        revalidate: revalidateCreditPages,
+        after: rederiveCredits,
+    });
+}
+
+/**
+ * The Email card's action: save the recipients, one address each, and the
+ * subject's template. It reads nothing from Planning Center and sends
+ * nothing: the plan's Email dialog does, with what is saved here.
+ */
+export async function saveEmailAction(formData: FormData): Promise<SettingsFormState> {
+    await requireSession();
+    return saveRead(readEmailForm(formData), { revalidate: revalidateEmailPages });
 }
