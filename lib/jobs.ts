@@ -1,0 +1,199 @@
+import "server-only";
+import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+import { backupDirectory, getDb } from "@/lib/db";
+import { backupDatabase, isBackupDue } from "@/lib/db/backup";
+import { errorMessage } from "@/lib/db/errors";
+import {
+    finishSyncRun,
+    startSyncRun,
+    type SyncRunCounts,
+    type SyncRunKind,
+} from "@/lib/db/syncRuns";
+
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+/** How long after boot the `atBoot` check waits, so it does not compete with the first requests. */
+export const BOOT_DELAY_MS = MINUTE_MS;
+
+/** What a run reports, recorded on its `sync_runs` row. */
+export interface JobResult {
+    message?: string;
+    counts?: SyncRunCounts;
+}
+
+/** A background job. Each run is recorded in `sync_runs` under its kind. */
+export interface Job {
+    /** Its `sync_runs` kind. One job per kind. */
+    kind: SyncRunKind;
+    /** How often the scheduler checks it. */
+    everyMs: number;
+    /** Also check it once, `BOOT_DELAY_MS` after the server starts. */
+    atBoot?: boolean;
+    /**
+     * Whether a scheduled check should run it now. Omitted: every check
+     * runs it. A run on demand (`runJob`) does not ask.
+     */
+    isDue?: (db: DatabaseSync, now: Date) => boolean;
+    /**
+     * The work. What it returns is recorded with the run; a throw or a
+     * rejection records a failed run.
+     */
+    run: (db: DatabaseSync) => JobResult | void | Promise<JobResult | void>;
+}
+
+/**
+ * The daily backup. It is checked hourly and soon after boot, and runs when
+ * the newest backup is a day old, so restarts (every deploy) never stretch the
+ * gap between backups much past a day.
+ */
+export const backupJob: Job = {
+    kind: "backup",
+    everyMs: HOUR_MS,
+    atBoot: true,
+    isDue: (_db, now) => isBackupDue(backupDirectory(), now),
+    run: (db) => {
+        const { file, pruned } = backupDatabase(db, { dir: backupDirectory() });
+        return {
+            message: `Wrote ${path.basename(file)}`,
+            counts: { pruned: pruned.length },
+        };
+    },
+};
+
+/**
+ * The jobs `startJobs()` schedules. A new job is one entry here, such as an
+ * hourly sync: `{ kind: "pco-songs", everyMs: HOUR_MS, atBoot: true, run }`.
+ */
+export const JOBS: readonly Job[] = [backupJob];
+
+/**
+ * The runs in progress, by kind. They live on globalThis because a run
+ * started on demand (a server action) and a scheduled one (started from the
+ * instrumentation hook) use different copies of this module (convention 15),
+ * and must still see each other.
+ */
+const RUNNING_GLOBAL = Symbol.for("service-integrator.jobs.running.v1");
+
+/** Set once the jobs are scheduled in this process. */
+const STARTED_GLOBAL = Symbol.for("service-integrator.jobs.started.v1");
+
+function runningJobs(): Map<SyncRunKind, Promise<void>> {
+    const scope = globalThis as unknown as {
+        [RUNNING_GLOBAL]?: Map<SyncRunKind, Promise<void>>;
+    };
+    return (scope[RUNNING_GLOBAL] ??= new Map());
+}
+
+async function execute(job: Job, openDb: () => DatabaseSync): Promise<void> {
+    let db: DatabaseSync;
+    let id: number;
+    try {
+        db = openDb();
+        id = startSyncRun(db, job.kind);
+    } catch (error) {
+        console.error(`Job ${job.kind} could not start:`, error);
+        return;
+    }
+    try {
+        const result = (await job.run(db)) ?? {};
+        finishSyncRun(db, id, {
+            ok: true,
+            message: result.message ?? null,
+            counts: result.counts ?? null,
+        });
+        console.log(
+            `Job ${job.kind} finished${result.message ? `: ${result.message}` : ""}`
+        );
+    } catch (error) {
+        console.error(`Job ${job.kind} failed:`, error);
+        try {
+            finishSyncRun(db, id, { ok: false, message: errorMessage(error) });
+        } catch (recordError) {
+            console.error(
+                `Job ${job.kind}: could not record the failure:`,
+                recordError
+            );
+        }
+    }
+}
+
+/**
+ * Run `job` now and record the run in `sync_runs`; resolves when it is done.
+ * Never throws or rejects: a failure is logged and recorded as a failed run
+ * (only logged, if the database cannot be opened). A call while a run of the
+ * same kind is in progress joins that run instead of starting another.
+ */
+export function runJob(
+    job: Job,
+    openDb: () => DatabaseSync = getDb
+): Promise<void> {
+    const running = runningJobs();
+    const current = running.get(job.kind);
+    if (current) {
+        return current;
+    }
+    const run = execute(job, openDb).finally(() => {
+        if (running.get(job.kind) === run) {
+            running.delete(job.kind);
+        }
+    });
+    running.set(job.kind, run);
+    return run;
+}
+
+/** A scheduled check: run `job` if it is due. Never throws or rejects. */
+export async function runIfDue(
+    job: Job,
+    openDb: () => DatabaseSync = getDb,
+    now: () => Date = () => new Date()
+): Promise<void> {
+    if (job.isDue) {
+        let due: boolean;
+        try {
+            due = job.isDue(openDb(), now());
+        } catch (error) {
+            console.error(`Job ${job.kind}: could not tell whether it is due:`, error);
+            return;
+        }
+        if (!due) {
+            return;
+        }
+    }
+    await runJob(job, openDb);
+}
+
+/** Options for startJobs (tests pass their own). */
+export interface StartJobsOptions {
+    jobs?: readonly Job[];
+    openDb?: () => DatabaseSync;
+}
+
+/**
+ * Schedule the background jobs: each is checked every `everyMs` and, with
+ * `atBoot`, once `BOOT_DELAY_MS` from now. It schedules them once per process
+ * (Next may run the instrumentation hook again in development): later calls
+ * do nothing and return false. The timers are unref()ed, so they never keep a
+ * process alive on their own.
+ */
+export function startJobs({
+    jobs = JOBS,
+    openDb = getDb,
+}: StartJobsOptions = {}): boolean {
+    const scope = globalThis as unknown as { [STARTED_GLOBAL]?: boolean };
+    if (scope[STARTED_GLOBAL]) {
+        return false;
+    }
+    scope[STARTED_GLOBAL] = true;
+    for (const job of jobs) {
+        const check = () => {
+            void runIfDue(job, openDb);
+        };
+        setInterval(check, job.everyMs).unref();
+        if (job.atBoot) {
+            setTimeout(check, BOOT_DELAY_MS).unref();
+        }
+    }
+    return true;
+}
