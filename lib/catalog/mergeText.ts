@@ -187,3 +187,11 @@ export function mergeDestinationSong(
     }
     return preview.moves[0]?.songId ?? preview.merges[0]?.targetSongId ?? null;
 }
+
+/**
+ * What the confirmation says when the merge is refused as it is written:
+ * the catalog changed after the preview (a song was linked, say), and the
+ * merge planned afresh is refused. Nothing was merged; the reasons follow.
+ */
+export const MERGE_REFUSED_NOW_MESSAGE =
+    "Nothing was merged: the catalog changed after the preview, and the merge is refused now, for the reasons below.";
