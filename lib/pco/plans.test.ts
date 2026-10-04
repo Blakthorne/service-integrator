@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PcoError } from "./client";
 import { InvalidPcoIdError } from "./ids";
-import { getAllPlans, getPlan, getPlansForServiceType } from "./plans";
+import { getAllPlans, getNextPlan, getPlan, getPlansForServiceType } from "./plans";
 import {
     PCO_BASE,
     calledUrls,
@@ -212,5 +212,44 @@ describe("getPlan", () => {
             name: "PcoError",
             status: 404,
         });
+    });
+});
+
+describe("getNextPlan", () => {
+    const nextUrl = (serviceTypeId: string) =>
+        `${PCO_BASE}/service_types/${serviceTypeId}/plans?filter=future&order=sort_date&per_page=25`;
+
+    test("asks for the type's future plans, earliest first, in one request", async () => {
+        const fetchMock = stubFetchRoutes({
+            [nextUrl(MORNING)]: listPage([morningPlan]),
+        });
+
+        const plan = await getNextPlan(MORNING);
+
+        expect(calledUrls(fetchMock)).toEqual([nextUrl(MORNING)]);
+        expect(plan).toMatchObject({ id: "101", serviceTypeId: MORNING, dates: "October 4, 2026" });
+    });
+
+    test("is the earliest by sort_date, whatever order the page comes in", async () => {
+        const later = planResource({ id: "102" }, { sort_date: "2026-10-11T08:00:00Z" });
+        const earliest = planResource({ id: "103" }, { sort_date: "2026-10-04T08:00:00Z" });
+        stubFetchRoutes({ [nextUrl(MORNING)]: listPage([later, earliest, later]) });
+        await expect(getNextPlan(MORNING)).resolves.toMatchObject({ id: "103" });
+    });
+
+    test("is null when the type has no future plan", async () => {
+        stubFetchRoutes({ [nextUrl(EVENING)]: listPage([]) });
+        await expect(getNextPlan(EVENING)).resolves.toBeNull();
+    });
+
+    test("lets a PcoError through", async () => {
+        stubFetchRoutes({ [nextUrl(MORNING)]: () => json({ errors: [] }, { status: 500 }) });
+        await expect(getNextPlan(MORNING)).rejects.toBeInstanceOf(PcoError);
+    });
+
+    test("rejects an invalid service type ID before any fetch", async () => {
+        const fetchMock = stubFetchRoutes({});
+        await expect(getNextPlan("1e3")).rejects.toBeInstanceOf(InvalidPcoIdError);
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 });

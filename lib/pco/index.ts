@@ -22,6 +22,7 @@ export { orNotFound } from "./next";
 export { getServiceType, getServiceTypes } from "./serviceTypes";
 export {
     getAllPlans,
+    getNextPlan,
     getPlan,
     getPlansForServiceType,
     type AllPlans,
