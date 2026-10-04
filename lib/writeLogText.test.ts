@@ -146,10 +146,32 @@ describe("describeWrite: a hymnal note that failed", () => {
         });
     });
 
-    test("still says what was attempted, and where", () => {
+    test("says in its headline that it failed, what it tried, and where", () => {
         const described = failed({ error: "x" });
-        expect(described.what).toBe("Created a hymnal note");
-        expect(described.place).toEqual(PLACE);
+        expect(described).toMatchObject({
+            what: "Creating a hymnal note failed",
+            detail: 'Tried to write "R-396 / G-317".',
+            place: PLACE,
+        });
+    });
+
+    test("words a change and a delete that failed as ones that did not happen", () => {
+        expect(failed({ error: "x" }, UPDATE)).toMatchObject({
+            what: "Changing a hymnal note failed",
+            detail: 'Tried to change "R-396" to "R-396 / G-317".',
+        });
+        expect(failed({ error: "x" }, { ...UPDATE, previous: undefined })).toMatchObject({
+            what: "Changing a hymnal note failed",
+            detail: 'Tried to set "R-396 / G-317".',
+        });
+        expect(failed({ error: "x" }, DELETE_NOTHING)).toMatchObject({
+            what: "Deleting a hymnal note (its song has no numbers) failed",
+            detail: 'The note says "R-396".',
+        });
+        expect(failed({ error: "x" }, DELETE_EXTRA).what).toBe("Deleting an extra hymnal note failed");
+        expect(failed({ error: "x" }, { ...DELETE_EXTRA, reason: undefined }).what).toBe(
+            "Deleting a hymnal note failed"
+        );
     });
 
     test.each([
@@ -223,12 +245,54 @@ describe("describeWrite: a plan's email", () => {
             responseCode: 535,
         } satisfies EmailWriteResult;
         const described = describeWrite(email({ ok: false, result }));
-        expect(described.what).toBe("Sent a plan's email");
         expect(described.outcome).toEqual({
             ok: false,
             message: "Could not send the email: Invalid login",
             status: null,
         });
+    });
+
+    test("says in its headline that a send that failed did not go, and to whom it would have", () => {
+        const result = {
+            error: "Could not send the email: Invalid login",
+            code: "EAUTH",
+            responseCode: 535,
+        } satisfies EmailWriteResult;
+        expect(describeWrite(email({ ok: false, result }))).toMatchObject({
+            what: "Email to pastor@example.org, music@example.org not sent",
+            detail: 'Subject "Songs for 10/4/26 \u00b7 Sunday Morning".',
+        });
+        // Every other reason a send fails means nothing went: a refused message, a server that could not be reached.
+        for (const code of ["EMESSAGE", "EENVELOPE", "ESOCKET", "EDNS", "ECONFIG", undefined]) {
+            expect(describeWrite(email({ ok: false, result: { error: "x", code } })).what).toBe(
+                "Email to pastor@example.org, music@example.org not sent"
+            );
+        }
+    });
+
+    test.each(["ETIMEDOUT", "ECONNECTION"])(
+        "says it may have gone when it failed with %s, so nobody sends it twice",
+        (code) => {
+            const described = describeWrite(
+                email({ ok: false, result: { error: "Could not send the email: Socket timeout", code } })
+            );
+            expect(described.what).toBe("Email to pastor@example.org, music@example.org may not have been sent");
+            expect(described.detail).toBe(
+                'Subject "Songs for 10/4/26 \u00b7 Sunday Morning". The mail server went quiet or dropped the connection, so it is not certain that nothing was sent: ask a recipient before sending it again.'
+            );
+        }
+    );
+
+    test("says what it can of a send that failed when the payload lacks parts", () => {
+        expect(describeWrite(email({ ok: false, payload: { subject: "Songs" }, result: {} }))).toMatchObject({
+            what: "Email not sent",
+            detail: 'Subject "Songs".',
+        });
+        expect(describeWrite(email({ ok: false, payload: { to: ["a@example.org"] }, result: {} }))).toMatchObject({
+            what: "Email to a@example.org not sent",
+            detail: null,
+        });
+        expect(describeWrite(email({ ok: false, payload: {}, result: {} })).what).toBe("Email write");
     });
 
     test("says what it can when the payload lacks parts", () => {
@@ -325,11 +389,15 @@ describe("describeWrite: a song's credits saved", () => {
         });
     });
 
-    test("gives Planning Center's reasons when it refused the write, with the same words", () => {
+    test("words a save Planning Center refused as one that did not happen, with its reasons", () => {
         expect(describeWrite(credits({ ok: false, result: REFUSED }))).toMatchObject({
-            what: 'Credits saved for "O God, Our Help"',
+            what: 'Saving the credits of "O God, Our Help" failed',
+            detail: 'Tried to change "Isaac Watts" to "Words: Isaac Watts; Music: William Croft".',
             outcome: { ok: false, message: "author: is too long", status: 422 },
         });
+        expect(
+            describeWrite(credits({ ok: false, payload: { ...CREDITS, previous: null }, result: REFUSED })).detail
+        ).toBe('Tried to set "Words: Isaac Watts; Music: William Croft".');
     });
 
     test.each([
@@ -379,11 +447,13 @@ describe("describeWrite: a song created in Planning Center", () => {
         ).toBeNull();
     });
 
-    test("is the same for a song Planning Center refused, which has the catalog song for a target", () => {
+    test("words a song Planning Center refused as one that was not created, with the catalog song for a target", () => {
         expect(
             describeWrite(created({ target: "catalog song 42", ok: false, result: REFUSED }))
         ).toMatchObject({
-            what: 'Song "O God, Our Help" created in Planning Center',
+            what: 'Creating the song "O God, Our Help" in Planning Center failed',
+            detail:
+                'It had the credits "Words: Isaac Watts; Music: William Croft" and the copyright "Public Domain".',
             target: "catalog song 42",
             outcome: { ok: false, message: "author: is too long", status: 422 },
         });
@@ -403,6 +473,13 @@ describe("describeWrite: a CCLI number set on a song", () => {
         expect(describeWrite(songRow("song", { payload: CCLI }))).toMatchObject({
             what: 'CCLI number set on "O God, Our Help"',
             detail: "CCLI song number 22025.",
+        });
+    });
+
+    test("words a number Planning Center refused as one that was not set", () => {
+        expect(describeWrite(songRow("song", { payload: CCLI, ok: false, result: REFUSED }))).toMatchObject({
+            what: 'Setting the CCLI number of "O God, Our Help" failed',
+            detail: "Tried to set CCLI song number 22025.",
         });
     });
 
@@ -469,10 +546,24 @@ describe("describeWrite: typed details written back over CCLI's", () => {
         );
     });
 
-    test("gives Planning Center's reasons when it refused the write", () => {
+    test("words a write Planning Center refused as one that did not happen, with its reasons", () => {
         expect(describeWrite(songRow("song", { payload: RESTORE, ok: false, result: REFUSED }))).toMatchObject({
-            what: "Typed title and credits written back over CCLI's",
+            what: "Writing the typed title and credits back over CCLI's failed",
+            detail:
+                'Tried to change the title from "O God Our Help In Ages Past" to "O God, Our Help". Tried to change the credits from "Isaac Watts, William Croft" to "Words: Isaac Watts; Music: William Croft".',
             outcome: { ok: false, status: 422 },
+        });
+        expect(
+            describeWrite(
+                songRow("song", {
+                    payload: { ...RESTORE, typed: { title: "O God, Our Help" }, fromCcli: undefined },
+                    ok: false,
+                    result: REFUSED,
+                })
+            )
+        ).toMatchObject({
+            what: "Writing the typed title back over CCLI's failed",
+            detail: 'Tried to set the title to "O God, Our Help".',
         });
     });
 
@@ -533,7 +624,7 @@ describe("describeWrite: a song added to a plan", () => {
         });
     });
 
-    test("gives the plan but no item for an add Planning Center refused", () => {
+    test("words an add Planning Center refused as one that failed, and gives the plan but no item", () => {
         expect(
             describeWrite(
                 added({
@@ -543,7 +634,7 @@ describe("describeWrite: a song added to a plan", () => {
                 })
             )
         ).toEqual({
-            what: '"O God, Our Help" added to the plan for October 11, 2026',
+            what: 'Adding "O God, Our Help" to the plan for October 11, 2026 failed',
             detail: 'With the arrangement "Default Arrangement".',
             place: { serviceTypeId: "1405391", planId: "81234567", itemId: null },
             target: "plan 81234567",
@@ -600,6 +691,12 @@ describe("describeWrite: a song's tags set", () => {
     const tagged = (fields: Partial<WriteLogRow> = {}) =>
         songRow("tags", { payload: ASSIGN, result: { tagIds: ["81", "72", "71"] }, ...fields });
 
+    test("says what it tried when the song had no tags recorded", () => {
+        expect(
+            describeWrite(tagged({ ok: false, payload: { ...ASSIGN, previous: undefined }, result: {} })).detail
+        ).toBe("Tried to set Advent, Chorus, Hymn.");
+    });
+
     test("says which song, the tags it had and the tags it has now", () => {
         expect(describeWrite(tagged())).toEqual({
             what: 'Tags set on "Amazing Grace"',
@@ -640,7 +737,7 @@ describe("describeWrite: a song's tags set", () => {
         });
     });
 
-    test("gives Planning Center's reasons when it refused the write, with the same words", () => {
+    test("words a write Planning Center refused as one that failed, with its reasons", () => {
         expect(
             describeWrite(
                 tagged({
@@ -649,7 +746,8 @@ describe("describeWrite: a song's tags set", () => {
                 })
             )
         ).toMatchObject({
-            what: 'Tags set on "Amazing Grace"',
+            what: 'Setting the tags of "Amazing Grace" failed',
+            detail: "Tried to change Hymn to Advent, Chorus, Hymn.",
             outcome: {
                 ok: false,
                 message: "Planning Center API responded with status: 500",

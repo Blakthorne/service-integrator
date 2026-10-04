@@ -82,15 +82,38 @@ function quote(text: string): string {
     return `"${text}"`;
 }
 
-/** What a kind's reader makes of a row: what was done, what it wrote, and where; null for a place the row does not say. */
+/**
+ * What a kind's reader makes of a row: what was done, what it wrote, and
+ * where; null for a place the row does not say. A row of a write that
+ * failed or was refused is worded in the failure voice ("Adding ... failed",
+ * "Email to ... not sent"), never as if it had been made: the card shows
+ * Failed beside it, and a person decides from it whether to try again.
+ */
 interface Described {
     what: string;
     detail: string | null;
     place: WritePlace | null;
 }
 
+/** A write's headline: `made` when it was made, `failed` when it failed or was refused. */
+function headline(ok: boolean, made: string, failed: string): string {
+    return ok ? made : failed;
+}
+
+/**
+ * What a write changed, or tried to: "Was "A"; now "B"." (or "Now "B"." when
+ * nothing was there before) for a write that was made, "Tried to change "A"
+ * to "B"." ("Tried to set "B".") for one that was not.
+ */
+function changeText(ok: boolean, previous: string | null, now: string): string {
+    if (ok) {
+        return previous === null ? `Now ${now}.` : `Was ${previous}; now ${now}.`;
+    }
+    return previous === null ? `Tried to set ${now}.` : `Tried to change ${previous} to ${now}.`;
+}
+
 /** What a hymnal note write did, from its payload; null when the payload is not one this build knows. */
-function describeItemNote(payload: unknown): Described | null {
+function describeItemNote(ok: boolean, payload: unknown): Described | null {
     const record = asRecord(payload);
     if (record === null) {
         return null;
@@ -107,45 +130,70 @@ function describeItemNote(payload: unknown): Described | null {
     switch (record.action) {
         case "create":
             return {
-                what: "Created a hymnal note",
-                detail: content === null ? null : `It says ${quote(content)}.`,
+                what: headline(ok, "Created a hymnal note", "Creating a hymnal note failed"),
+                detail:
+                    content === null
+                        ? null
+                        : ok
+                          ? `It says ${quote(content)}.`
+                          : `Tried to write ${quote(content)}.`,
                 place,
             };
         case "update":
             return {
-                what: "Changed a hymnal note",
+                what: headline(ok, "Changed a hymnal note", "Changing a hymnal note failed"),
                 detail:
                     content === null
                         ? null
-                        : previous === null
-                          ? `Now ${quote(content)}.`
-                          : `Was ${quote(previous)}; now ${quote(content)}.`,
+                        : changeText(ok, previous === null ? null : quote(previous), quote(content)),
                 place,
             };
-        case "delete":
+        case "delete": {
+            const note =
+                record.reason === "duplicate"
+                    ? "an extra hymnal note"
+                    : record.reason === "nothing-to-say"
+                      ? "a hymnal note (its song has no numbers)"
+                      : "a hymnal note";
             return {
-                what:
-                    record.reason === "duplicate"
-                        ? "Deleted an extra hymnal note"
-                        : record.reason === "nothing-to-say"
-                          ? "Deleted a hymnal note (its song has no numbers)"
-                          : "Deleted a hymnal note",
-                detail: previous === null ? null : `It said ${quote(previous)}.`,
+                what: headline(ok, `Deleted ${note}`, `Deleting ${note} failed`),
+                detail:
+                    previous === null
+                        ? null
+                        : ok
+                          ? `It said ${quote(previous)}.`
+                          : `The note says ${quote(previous)}.`,
                 place,
             };
+        }
         default:
             return null;
     }
 }
 
 /**
+ * The error codes of a send that failed with the email's fate not known:
+ * Nodemailer's timeout (the server may have taken the email before it went
+ * quiet) and its dropped connection. Every other failure (a refused login,
+ * recipient or message, a server that could not be reached) means nothing
+ * was sent.
+ */
+const EMAIL_FATE_UNKNOWN_CODES: readonly string[] = ["ETIMEDOUT", "ECONNECTION"];
+
+/** What a failed send says when it is not known whether the email went. */
+const EMAIL_FATE_UNKNOWN_NOTE =
+    "The mail server went quiet or dropped the connection, so it is not certain that nothing was sent: ask a recipient before sending it again.";
+
+/**
  * What a plan's email row says, from its payload and result: who it was
  * sent to and its subject (never its text: the log does not keep it), and
- * who the mail server refused. Null when the payload is not one this build
- * knows (an empty one, or a newer build's), so the row keeps its kind and
- * its target.
+ * who the mail server refused. A send that failed says so in its headline
+ * ("Email to ... not sent"), and, when it failed with the email's fate not
+ * known (a timeout), that it may have gone. Null when the payload is not
+ * one this build knows (an empty one, or a newer build's), so the row keeps
+ * its kind and its target.
  */
-function describeEmail(payload: unknown, result: unknown): Described | null {
+function describeEmail(ok: boolean, payload: unknown, result: unknown): Described | null {
     const record = asRecord(payload);
     if (record === null) {
         return null;
@@ -154,6 +202,20 @@ function describeEmail(payload: unknown, result: unknown): Described | null {
     const subject = asText(record.subject);
     if (to.length === 0 && subject === null) {
         return null;
+    }
+    if (!ok) {
+        const code = asText(asRecord(result)?.code);
+        const unknown = code !== null && EMAIL_FATE_UNKNOWN_CODES.includes(code);
+        const recipients = to.length === 0 ? "" : ` to ${to.join(", ")}`;
+        const parts = [
+            subject === null ? null : `Subject ${quote(subject)}.`,
+            unknown ? EMAIL_FATE_UNKNOWN_NOTE : null,
+        ].filter((part) => part !== null);
+        return {
+            what: unknown ? `Email${recipients} may not have been sent` : `Email${recipients} not sent`,
+            detail: parts.length === 0 ? null : parts.join(" "),
+            place: null,
+        };
     }
     const sentTo =
         to.length === 0
@@ -177,7 +239,7 @@ function describeEmail(payload: unknown, result: unknown): Described | null {
  * when the payload is not one of these or lacks what its words need (the
  * song's title), so the row keeps its kind and its target.
  */
-function describeSong(payload: unknown): Described | null {
+function describeSong(ok: boolean, payload: unknown): Described | null {
     const record = asRecord(payload);
     if (record === null) {
         return null;
@@ -190,13 +252,15 @@ function describeSong(payload: unknown): Described | null {
             return title === null
                 ? null
                 : {
-                      what: `Credits saved for ${quote(title)}`,
+                      what: headline(
+                          ok,
+                          `Credits saved for ${quote(title)}`,
+                          `Saving the credits of ${quote(title)} failed`
+                      ),
                       detail:
                           author === null
                               ? null
-                              : previous === null
-                                ? `Now ${quote(author)}.`
-                                : `Was ${quote(previous)}; now ${quote(author)}.`,
+                              : changeText(ok, previous === null ? null : quote(previous), quote(author)),
                       place: null,
                   };
         }
@@ -210,8 +274,15 @@ function describeSong(payload: unknown): Described | null {
             return title === null
                 ? null
                 : {
-                      what: `Song ${quote(title)} created in Planning Center`,
-                      detail: given.length === 0 ? null : `With ${given.join(" and ")}.`,
+                      what: headline(
+                          ok,
+                          `Song ${quote(title)} created in Planning Center`,
+                          `Creating the song ${quote(title)} in Planning Center failed`
+                      ),
+                      detail:
+                          given.length === 0
+                              ? null
+                              : `${ok ? "With" : "It had"} ${given.join(" and ")}.`,
                       place: null,
                   };
         }
@@ -220,10 +291,14 @@ function describeSong(payload: unknown): Described | null {
             return title === null
                 ? null
                 : {
-                      what: `CCLI number set on ${quote(title)}`,
+                      what: headline(
+                          ok,
+                          `CCLI number set on ${quote(title)}`,
+                          `Setting the CCLI number of ${quote(title)} failed`
+                      ),
                       detail:
                           typeof ccliNumber === "number" && Number.isInteger(ccliNumber)
-                              ? `CCLI song number ${ccliNumber}.`
+                              ? `${ok ? "" : "Tried to set "}CCLI song number ${ccliNumber}.`
                               : null,
                       place: null,
                   };
@@ -241,14 +316,22 @@ function describeSong(payload: unknown): Described | null {
             const changes = [
                 typedTitle === null
                     ? null
-                    : fromTitle === null
-                      ? `Title now ${quote(typedTitle)}.`
-                      : `Title was ${quote(fromTitle)}; now ${quote(typedTitle)}.`,
+                    : ok
+                      ? fromTitle === null
+                          ? `Title now ${quote(typedTitle)}.`
+                          : `Title was ${quote(fromTitle)}; now ${quote(typedTitle)}.`
+                      : fromTitle === null
+                        ? `Tried to set the title to ${quote(typedTitle)}.`
+                        : `Tried to change the title from ${quote(fromTitle)} to ${quote(typedTitle)}.`,
                 typedAuthor === null
                     ? null
-                    : fromAuthor === null
-                      ? `Credits now ${quote(typedAuthor)}.`
-                      : `Credits were ${quote(fromAuthor)}; now ${quote(typedAuthor)}.`,
+                    : ok
+                      ? fromAuthor === null
+                          ? `Credits now ${quote(typedAuthor)}.`
+                          : `Credits were ${quote(fromAuthor)}; now ${quote(typedAuthor)}.`
+                      : fromAuthor === null
+                        ? `Tried to set the credits to ${quote(typedAuthor)}.`
+                        : `Tried to change the credits from ${quote(fromAuthor)} to ${quote(typedAuthor)}.`,
             ].filter((part) => part !== null);
             const fields =
                 typedTitle !== null && typedAuthor !== null
@@ -257,7 +340,11 @@ function describeSong(payload: unknown): Described | null {
                       ? "title"
                       : "credits";
             return {
-                what: `Typed ${fields} written back over CCLI's`,
+                what: headline(
+                    ok,
+                    `Typed ${fields} written back over CCLI's`,
+                    `Writing the typed ${fields} back over CCLI's failed`
+                ),
                 detail: changes.join(" "),
                 place: null,
             };
@@ -273,7 +360,7 @@ function describeSong(payload: unknown): Described | null {
  * plan and the item made (a refused write made none) to link to. Null when
  * the payload is not an add or lacks the title or the date.
  */
-function describeItem(payload: unknown, result: unknown): Described | null {
+function describeItem(ok: boolean, payload: unknown, result: unknown): Described | null {
     const record = asRecord(payload);
     if (record === null || record.action !== "add-song") {
         return null;
@@ -287,7 +374,11 @@ function describeItem(payload: unknown, result: unknown): Described | null {
     const serviceTypeId = asText(record.serviceTypeId);
     const planId = asText(record.planId);
     return {
-        what: `${quote(title)} added to the plan for ${planDates}`,
+        what: headline(
+            ok,
+            `${quote(title)} added to the plan for ${planDates}`,
+            `Adding ${quote(title)} to the plan for ${planDates} failed`
+        ),
         detail: arrangement === null ? null : `With the arrangement ${quote(arrangement)}.`,
         place:
             serviceTypeId === null || planId === null
@@ -324,7 +415,7 @@ function tagNames(value: unknown): string | null {
  * the tags it had and has now (`assign` replaces them all). Null when the
  * payload is not an assign or lacks the title.
  */
-function describeTags(payload: unknown): Described | null {
+function describeTags(ok: boolean, payload: unknown): Described | null {
     const record = asRecord(payload);
     if (record === null || record.action !== "assign") {
         return null;
@@ -336,9 +427,8 @@ function describeTags(payload: unknown): Described | null {
     const now = tagNames(record.tags);
     const was = tagNames(record.previous);
     return {
-        what: `Tags set on ${quote(title)}`,
-        detail:
-            now === null ? null : was === null ? `Now ${now}.` : `Was ${was}; now ${now}.`,
+        what: headline(ok, `Tags set on ${quote(title)}`, `Setting the tags of ${quote(title)} failed`),
+        detail: now === null ? null : changeText(ok, was, now),
         place: null,
     };
 }
@@ -376,15 +466,15 @@ export function describeFailureLine(outcome: Extract<WriteOutcome, { ok: false }
 function describeKind(row: WriteLogRow): Described | null {
     switch (row.kind) {
         case "item-note":
-            return describeItemNote(row.payload);
+            return describeItemNote(row.ok, row.payload);
         case "song":
-            return describeSong(row.payload);
+            return describeSong(row.ok, row.payload);
         case "item":
-            return describeItem(row.payload, row.result);
+            return describeItem(row.ok, row.payload, row.result);
         case "tags":
-            return describeTags(row.payload);
+            return describeTags(row.ok, row.payload);
         case "email":
-            return describeEmail(row.payload, row.result);
+            return describeEmail(row.ok, row.payload, row.result);
         default:
             return null;
     }
@@ -393,7 +483,9 @@ function describeKind(row: WriteLogRow): Described | null {
 /**
  * A row of the write log, in words. A row whose payload this build cannot
  * read, or that lacks a field its words need, says only its kind ("Song
- * write"), its target and how it went.
+ * write"), its target and how it went. A write that failed or was refused is
+ * worded as one that did not happen ("Adding ... failed"), and so is what
+ * it tried to change.
  */
 export function describeWrite(row: WriteLogRow): WriteDescription {
     const described = describeKind(row);
