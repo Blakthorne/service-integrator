@@ -252,7 +252,8 @@ export default function SyncHymnNotesAction({ serviceTypeId, planId }: SyncHymnN
                 onClick={openDialog}
                 // SubmitButton's primary colours: white text is 5.3:1 on
                 // blue-600, and the ring outside the button 3:1 on the page.
-                className="px-4 py-2 text-sm font-medium text-white text-center bg-blue-600 rounded-lg shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors whitespace-nowrap cursor-pointer"
+                // Sized like "View in Planning Center" below it.
+                className="px-4 py-2 text-white text-center bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors whitespace-nowrap cursor-pointer"
             >
                 Sync hymn notes
             </button>
@@ -351,15 +352,21 @@ function SyncDialogBody({ state, attempt, answerRef, onClose, onPreview, onSync 
     }
 }
 
-/** A message that takes focus when it arrives, as an alert for a failure (keyed per attempt). */
+/**
+ * A message that takes focus when it arrives. A failure is an alert, keyed
+ * per attempt, and red unless `quiet`: the results' summary, which says what
+ * was written too, stays black, and its failed rows' tags are red.
+ */
 function Answer({
     answerRef,
     alert,
+    quiet = false,
     attempt,
     children,
 }: {
     answerRef: React.RefObject<HTMLParagraphElement | null>;
     alert?: boolean;
+    quiet?: boolean;
     attempt?: number;
     children: React.ReactNode;
 }) {
@@ -370,7 +377,7 @@ function Answer({
             tabIndex={-1}
             role={alert ? "alert" : undefined}
             className={`text-sm focus:outline-none ${
-                alert ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"
+                alert && !quiet ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"
             }`}
         >
             {children}
@@ -515,7 +522,7 @@ function ResultsBody({
     if (result.ok) {
         return (
             <>
-                <Answer answerRef={answerRef} alert={result.counts.failed > 0} attempt={attempt}>
+                <Answer answerRef={answerRef} alert={result.counts.failed > 0} quiet attempt={attempt}>
                     {resultSummary(result.counts)}
                 </Answer>
                 <NoteRows rows={resultRows(result.items)} label="What the sync did, song by song" />
