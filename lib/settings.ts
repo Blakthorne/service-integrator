@@ -20,6 +20,14 @@ import type { ServiceType } from "./domain";
  */
 export type ScheduleHeaderLabels = Readonly<Record<string, string>>;
 
+/**
+ * What the copyright text prints before the names of a credit role, by
+ * role ("Words": "Words by"), and before the names of two roles the same
+ * people hold, by the two roles joined with " & " ("Words & Music": "Words
+ * and Music by").
+ */
+export type CreditPhrases = Readonly<Record<string, string>>;
+
 /** Every setting, by key. */
 export interface AppSettings {
     /** The church's CCLI Streaming License number, on the last line of every copyright block. */
@@ -36,6 +44,28 @@ export interface AppSettings {
     hymnNoteCategoryName: string;
     /** Whether a hymnal note names the tune after the numbers: "R-396 / G-317 · ST. ANNE". */
     hymnNoteIncludesTune: boolean;
+    /**
+     * The roles a song's credits name, in the order they are written and
+     * printed: the labels of the credits convention in Planning Center's
+     * author field (`Words: Isaac Watts; Music: Lowell Mason`), matched
+     * without regard to case. The first two are the words' and the music's:
+     * an author with no labels is read as naming those two.
+     */
+    creditRoles: readonly string[];
+    /**
+     * What the copyright text prints before each role's names, and before
+     * the names of two roles the same people hold (see `CreditPhrases`). A
+     * role without a phrase prints "<role> by", and two without one print
+     * "<role> and <role> by".
+     */
+    creditPhrases: CreditPhrases;
+    /** The addresses a plan's email goes to; none until some are saved. */
+    emailRecipients: readonly string[];
+    /**
+     * A plan email's subject. `{date}` becomes the plan's date and
+     * `{service}` its service type's name (see `EMAIL_SUBJECT_PLACEHOLDERS`).
+     */
+    emailSubjectTemplate: string;
 }
 
 export type SettingKey = keyof AppSettings;
@@ -47,6 +77,16 @@ export const DEFAULT_SETTINGS: Readonly<AppSettings> = Object.freeze({
     numberSeparator: " / ",
     hymnNoteCategoryName: "Hymnal",
     hymnNoteIncludesTune: false,
+    creditRoles: Object.freeze(["Words", "Music", "Arr.", "Trans."]),
+    creditPhrases: Object.freeze({
+        Words: "Words by",
+        Music: "Music by",
+        "Words & Music": "Words and Music by",
+        "Arr.": "Arr. by",
+        "Trans.": "Trans. by",
+    }),
+    emailRecipients: Object.freeze([]),
+    emailSubjectTemplate: "Songs for {date} · {service}",
 });
 
 /** What a parser made of a value: the setting's value, or why it is not one, fit to show. */
@@ -68,6 +108,26 @@ export const HEADER_LABEL_MAX_LENGTH = 40;
 export const NUMBER_SEPARATOR_MAX_LENGTH = 10;
 /** The longest category name taken. */
 export const CATEGORY_NAME_MAX_LENGTH = 100;
+/** The longest credit role taken. */
+export const CREDIT_ROLE_MAX_LENGTH = 30;
+/** The most credit roles taken. */
+export const CREDIT_ROLES_MAX = 12;
+/** The longest credit phrase taken. */
+export const CREDIT_PHRASE_MAX_LENGTH = 40;
+/** The most credit phrases taken: one for each role and for each pair of roles next to each other. */
+export const CREDIT_PHRASES_MAX = 2 * CREDIT_ROLES_MAX - 1;
+/** The most email recipients taken. */
+export const EMAIL_RECIPIENTS_MAX = 25;
+/** The longest email address taken (RFC 5321's limit on a forward path). */
+export const EMAIL_ADDRESS_MAX_LENGTH = 254;
+/** The longest email subject template taken. */
+export const EMAIL_SUBJECT_MAX_LENGTH = 150;
+
+/**
+ * The placeholders a plan email's subject may hold, as `{name}`: the plan's
+ * date and its service type's name.
+ */
+export const EMAIL_SUBJECT_PLACEHOLDERS = ["date", "service"] as const;
 
 /** A Planning Center id, as `parsePcoId` (server-only) accepts it. */
 const PCO_ID_PATTERN = /^[1-9][0-9]{0,19}$/;
@@ -185,6 +245,225 @@ function parseIncludesTune(value: unknown): SettingParse<boolean> {
         : refuse("Whether the note names the tune must be yes or no.");
 }
 
+/**
+ * The characters that separate the parts of the credits convention
+ * (`Words & Music: A, B; Arr.: C`), which a role may therefore not hold.
+ */
+const CREDIT_SEPARATORS = /[:;,&]/;
+
+/** One credit role: trimmed, on one line, at most `CREDIT_ROLE_MAX_LENGTH` characters, with no separator. */
+function parseCreditRole(value: unknown): SettingParse<string> {
+    if (typeof value !== "string") {
+        return refuse("A role must be text.");
+    }
+    const text = value.trim();
+    if (text === "") {
+        return refuse("A role cannot be blank.");
+    }
+    if (hasControlCharacter(text)) {
+        return refuse("A role must be on one line.");
+    }
+    if (text.length > CREDIT_ROLE_MAX_LENGTH) {
+        return refuse(`A role is at most ${CREDIT_ROLE_MAX_LENGTH} characters.`);
+    }
+    if (CREDIT_SEPARATORS.test(text)) {
+        return refuse(
+            `The role ${quoted(text)} has a colon, semicolon, comma or "&" in it, which separate the credits in Planning Center.`
+        );
+    }
+    return { ok: true, value: text };
+}
+
+/**
+ * The credit roles, in order: at least two (the words' and the music's
+ * first) and at most `CREDIT_ROLES_MAX`, each a role `parseCreditRole`
+ * takes, none listed twice (without regard to case).
+ */
+function parseCreditRoles(value: unknown): SettingParse<readonly string[]> {
+    if (!Array.isArray(value)) {
+        return refuse("The roles must be a list.");
+    }
+    if (value.length < 2) {
+        return refuse("List at least two roles: the words' and the music's, in that order.");
+    }
+    if (value.length > CREDIT_ROLES_MAX) {
+        return refuse(`List at most ${CREDIT_ROLES_MAX} roles.`);
+    }
+    const roles: string[] = [];
+    const seen = new Set<string>();
+    for (const item of value) {
+        const parsed = parseCreditRole(item);
+        if (!parsed.ok) {
+            return parsed;
+        }
+        const key = parsed.value.toLowerCase();
+        if (seen.has(key)) {
+            return refuse(`The role ${quoted(parsed.value)} is listed twice.`);
+        }
+        seen.add(key);
+        roles.push(parsed.value);
+    }
+    return { ok: true, value: roles };
+}
+
+/**
+ * A credit phrase's key: one role, or two joined with "&", each as
+ * `parseCreditRole` takes it. Two roles are written "Words & Music".
+ */
+function parseCreditPhraseKey(key: string): SettingParse<string> {
+    const parts = key.split("&");
+    if (parts.length > 2) {
+        return refuse(`${quoted(key.trim())} names more than two roles; a phrase is for one role, or two joined with "&".`);
+    }
+    const roles: string[] = [];
+    for (const part of parts) {
+        const parsed = parseCreditRole(part);
+        if (!parsed.ok) {
+            return parsed;
+        }
+        roles.push(parsed.value);
+    }
+    return { ok: true, value: roles.join(" & ") };
+}
+
+/** A credit phrase: trimmed, not blank, on one line, at most `CREDIT_PHRASE_MAX_LENGTH` characters. */
+function parseCreditPhrase(value: unknown): SettingParse<string> {
+    if (typeof value !== "string") {
+        return refuse("A phrase must be text.");
+    }
+    const text = value.trim();
+    if (text === "") {
+        return refuse('A phrase cannot be blank: it is what goes before the names, such as "Words by".');
+    }
+    if (hasControlCharacter(text)) {
+        return refuse("A phrase must be on one line.");
+    }
+    if (text.length > CREDIT_PHRASE_MAX_LENGTH) {
+        return refuse(`A phrase is at most ${CREDIT_PHRASE_MAX_LENGTH} characters.`);
+    }
+    return { ok: true, value: text };
+}
+
+/**
+ * The credit phrases: an object of at most `CREDIT_PHRASES_MAX` phrases,
+ * each under a key `parseCreditPhraseKey` takes ("Words&Music" is stored as
+ * "Words & Music"), no key given twice (without regard to case).
+ */
+function parseCreditPhrases(value: unknown): SettingParse<CreditPhrases> {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return refuse("The phrases must be a phrase for each role.");
+    }
+    const entries = Object.entries(value);
+    if (entries.length > CREDIT_PHRASES_MAX) {
+        return refuse(`Give at most ${CREDIT_PHRASES_MAX} phrases.`);
+    }
+    const phrases: [string, string][] = [];
+    const seen = new Set<string>();
+    for (const [rawKey, rawPhrase] of entries) {
+        const key = parseCreditPhraseKey(rawKey);
+        if (!key.ok) {
+            return key;
+        }
+        if (seen.has(key.value.toLowerCase())) {
+            return refuse(`There are two phrases for ${quoted(key.value)}.`);
+        }
+        seen.add(key.value.toLowerCase());
+        const phrase = parseCreditPhrase(rawPhrase);
+        if (!phrase.ok) {
+            return phrase;
+        }
+        phrases.push([key.value, phrase.value]);
+    }
+    // Object.fromEntries defines own properties, so even a "__proto__" key stays a key.
+    return { ok: true, value: Object.fromEntries(phrases) };
+}
+
+/**
+ * A plain email address, local@domain.tld: no whitespace, and none of the
+ * characters that would let one entry name more than one address or add to
+ * a header (quotes, commas, semicolons, angle brackets, parentheses,
+ * square brackets, backslashes).
+ */
+const EMAIL_ADDRESS = /^[^\s@",;<>()[\]\\]+@[^\s@",;<>()[\]\\.]+(?:\.[^\s@",;<>()[\]\\.]+)+$/;
+
+/** One recipient: an address `EMAIL_ADDRESS` matches, trimmed, at most `EMAIL_ADDRESS_MAX_LENGTH` characters. */
+function parseEmailAddress(value: unknown): SettingParse<string> {
+    if (typeof value !== "string") {
+        return refuse("An email address must be text.");
+    }
+    const text = value.trim();
+    if (text === "") {
+        return refuse("An email address cannot be blank.");
+    }
+    if (
+        text.length > EMAIL_ADDRESS_MAX_LENGTH ||
+        hasControlCharacter(text) ||
+        !EMAIL_ADDRESS.test(text)
+    ) {
+        return refuse(`${quoted(text)} is not an email address, such as name@example.org.`);
+    }
+    return { ok: true, value: text };
+}
+
+/**
+ * The recipients: a list of at most `EMAIL_RECIPIENTS_MAX` addresses, each
+ * one `parseEmailAddress` takes, none listed twice (without regard to case).
+ * An empty list is fine: no email is sent until there are recipients.
+ */
+function parseEmailRecipients(value: unknown): SettingParse<readonly string[]> {
+    if (!Array.isArray(value)) {
+        return refuse("The recipients must be a list of email addresses.");
+    }
+    if (value.length > EMAIL_RECIPIENTS_MAX) {
+        return refuse(`List at most ${EMAIL_RECIPIENTS_MAX} recipients.`);
+    }
+    const recipients: string[] = [];
+    const seen = new Set<string>();
+    for (const item of value) {
+        const parsed = parseEmailAddress(item);
+        if (!parsed.ok) {
+            return parsed;
+        }
+        const key = parsed.value.toLowerCase();
+        if (seen.has(key)) {
+            return refuse(`${quoted(parsed.value)} is listed twice.`);
+        }
+        seen.add(key);
+        recipients.push(parsed.value);
+    }
+    return { ok: true, value: recipients };
+}
+
+/**
+ * A plan email's subject: trimmed, not blank, on one line, at most
+ * `EMAIL_SUBJECT_MAX_LENGTH` characters, and every `{name}` in it one of
+ * `EMAIL_SUBJECT_PLACEHOLDERS`.
+ */
+function parseEmailSubjectTemplate(value: unknown): SettingParse<string> {
+    if (typeof value !== "string") {
+        return refuse("The subject must be text.");
+    }
+    const text = value.trim();
+    if (text === "") {
+        return refuse("Enter the subject, such as Songs for {date} · {service}.");
+    }
+    if (hasControlCharacter(text)) {
+        return refuse("The subject must be on one line.");
+    }
+    if (text.length > EMAIL_SUBJECT_MAX_LENGTH) {
+        return refuse(`The subject is at most ${EMAIL_SUBJECT_MAX_LENGTH} characters.`);
+    }
+    const known: readonly string[] = EMAIL_SUBJECT_PLACEHOLDERS;
+    for (const [placeholder, name] of text.matchAll(/\{([^{}]*)\}/g)) {
+        if (!known.includes(name)) {
+            return refuse(
+                `${quoted(placeholder)} is not a placeholder the subject can hold: use {date} or {service}.`
+            );
+        }
+    }
+    return { ok: true, value: text };
+}
+
 /** Every setting's default and parser, by key. */
 export const SETTINGS: { readonly [K in SettingKey]: SettingDefinition<AppSettings[K]> } = {
     ccliLicenseNumber: {
@@ -206,6 +485,22 @@ export const SETTINGS: { readonly [K in SettingKey]: SettingDefinition<AppSettin
     hymnNoteIncludesTune: {
         defaultValue: DEFAULT_SETTINGS.hymnNoteIncludesTune,
         parse: parseIncludesTune,
+    },
+    creditRoles: {
+        defaultValue: DEFAULT_SETTINGS.creditRoles,
+        parse: parseCreditRoles,
+    },
+    creditPhrases: {
+        defaultValue: DEFAULT_SETTINGS.creditPhrases,
+        parse: parseCreditPhrases,
+    },
+    emailRecipients: {
+        defaultValue: DEFAULT_SETTINGS.emailRecipients,
+        parse: parseEmailRecipients,
+    },
+    emailSubjectTemplate: {
+        defaultValue: DEFAULT_SETTINGS.emailSubjectTemplate,
+        parse: parseEmailSubjectTemplate,
     },
 };
 
@@ -321,6 +616,12 @@ export type CopyrightSettings = Pick<AppSettings, "ccliLicenseNumber">;
 
 /** What the hymnal notes read of the settings. */
 export type HymnNoteSettings = Pick<AppSettings, "numberSeparator" | "hymnNoteIncludesTune">;
+
+/** What reading and writing songs' credits follows of the settings. */
+export type CreditSettings = Pick<AppSettings, "creditRoles" | "creditPhrases">;
+
+/** What a plan's email follows of the settings. */
+export type EmailSettings = Pick<AppSettings, "emailRecipients" | "emailSubjectTemplate">;
 
 /** The settings a plan's pages follow, resolved for the plan's service type. */
 export interface PlanTextSettings {
