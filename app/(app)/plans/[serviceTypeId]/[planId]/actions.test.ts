@@ -66,21 +66,26 @@ describe("linkPcoSong", () => {
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
-    test("links the songs, then revalidates the plan's pages", async () => {
+    test("links the songs, then revalidates the plan's pages and the catalog's", async () => {
         await expect(link()).resolves.toEqual({ ok: true });
 
         expect(auth).toHaveBeenCalledTimes(1);
         expect(linkCatalogSong).toHaveBeenCalledTimes(1);
         expect(linkCatalogSong).toHaveBeenCalledWith(42, PCO_SONG);
-        expect(revalidatePath).toHaveBeenCalledTimes(1);
-        expect(revalidatePath).toHaveBeenCalledWith(`/plans/${ST}/${PLAN}`, "layout");
+        expect(revalidatePath.mock.calls).toEqual([
+            [`/plans/${ST}/${PLAN}`, "layout"],
+            ["/catalog", "layout"],
+        ]);
     });
 
     test("revalidates when the two were already linked, so a tab that is out of date catches up", async () => {
         linkCatalogSong.mockResolvedValue({ ok: true, changed: false });
 
         await expect(link()).resolves.toEqual({ ok: true });
-        expect(revalidatePath).toHaveBeenCalledWith(`/plans/${ST}/${PLAN}`, "layout");
+        expect(revalidatePath.mock.calls).toEqual([
+            [`/plans/${ST}/${PLAN}`, "layout"],
+            ["/catalog", "layout"],
+        ]);
     });
 
     test.each([

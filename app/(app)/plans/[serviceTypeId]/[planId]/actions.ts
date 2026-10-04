@@ -26,7 +26,8 @@ const NOT_AN_ID_MESSAGE =
  * which plan `planId` of service type `serviceTypeId` schedules, to catalog
  * song `songId`, by hand (`linked_by = 'manual'`; see `linkCatalogSong`).
  * Then the plan's pages are revalidated, so the action's response brings
- * the song's numbers to the tab without leaving it.
+ * the song's numbers to the tab without leaving it, and so are the
+ * catalog's, which show the link too (convention 15).
  *
  * A server action is a public POST endpoint. It checks the session first and
  * throws without one (convention 15), and since its arguments may be
@@ -67,5 +68,6 @@ export async function linkPcoSong(
     }
     // Also when the two were already linked: the tab that asked is out of date.
     revalidatePath(routes.plan(st, plan), "layout");
+    revalidatePath(routes.catalog(), "layout");
     return { ok: true };
 }
