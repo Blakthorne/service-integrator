@@ -584,11 +584,12 @@ describe("createSongInPlanningCenter", () => {
         ]);
     });
 
-    test("a CCLI number that cannot be set is a warning: the song is still mirrored and linked", async () => {
+    test("a CCLI number that cannot be set is a warning, once the song is read back without it: the song is still mirrored and linked", async () => {
         const songId = seedCatalogSong();
-        stubFetchRoutes({
+        const fetchMock = stubFetchRoutes({
             [`POST ${urls.songs}`]: () => json({ data: created() }, { status: 201 }),
             [`PATCH ${urls.song(NEW_ID)}`]: () => VALIDATION_ERROR("is invalid", "ccli_number"),
+            [urls.song(NEW_ID)]: { data: created() },
         });
 
         await expect(createSongInPlanningCenter(songId, { ...FORM, ccliNumber: 22025 })).resolves.toEqual({
@@ -597,8 +598,76 @@ describe("createSongInPlanningCenter", () => {
             linked: true,
             warnings: ["The song was created in Planning Center, but its CCLI number could not be set: ccli_number: is invalid"],
         });
+        expect(calledRequests(fetchMock).map(({ method }) => method)).toEqual(["POST", "PATCH", "GET"]);
         expect(writes().map(({ ok }) => ok)).toEqual([true, false]);
         expect(linkOf(songId)).toEqual([NEW_ID, "manual"]);
+    });
+
+    test("reads the song back after a CCLI number whose answer was lost, and reports what Planning Center has", async () => {
+        const songId = seedCatalogSong();
+        const restored = created({ ccli_number: 22025, admin: "CCLI Admin" });
+        let patches = 0;
+        const fetchMock = stubFetchRoutes({
+            [`POST ${urls.songs}`]: () => json({ data: created() }, { status: 201 }),
+            [`PATCH ${urls.song(NEW_ID)}`]: () => {
+                patches += 1;
+                if (patches === 1) {
+                    // Planning Center applies the number, but its answer never comes.
+                    throw Object.assign(new Error("The operation was aborted due to timeout"), {
+                        name: "TimeoutError",
+                    });
+                }
+                return json({ data: restored });
+            },
+            [urls.song(NEW_ID)]: { data: fromCcli },
+        });
+
+        const result = await createSongInPlanningCenter(songId, { ...FORM, ccliNumber: 22025 }, T0);
+
+        expect(result).toMatchObject({ ok: true, linked: true, warnings: [], song: { title: FORM.title, ccliNumber: 22025 } });
+        expect(calledRequests(fetchMock).map(({ method, body }) => [method, body])).toEqual([
+            ["POST", expect.anything()],
+            ["PATCH", { data: { type: "Song", attributes: { ccli_number: 22025 } } }],
+            ["GET", undefined],
+            ["PATCH", { data: { type: "Song", attributes: { title: FORM.title, author: AUTHOR } } }],
+        ]);
+        expect(writes().map(({ ok, payload }) => [ok, (payload as { action: string }).action])).toEqual([
+            [true, "create"],
+            [false, "ccli-number"],
+            [true, "restore-typed-details"],
+        ]);
+        expect(findPcoSong(db, NEW_ID)).toMatchObject({ title: FORM.title, author: AUTHOR, ccliNumber: 22025 });
+    });
+
+    test("a CCLI number that failed, on a song that cannot be read back, says to look in Planning Center", async () => {
+        const songId = seedCatalogSong();
+        stubFetchRoutes({
+            [`POST ${urls.songs}`]: () => json({ data: created() }, { status: 201 }),
+            [`PATCH ${urls.song(NEW_ID)}`]: () => json({ errors: [] }, { status: 500 }),
+            [urls.song(NEW_ID)]: () => json({ errors: [] }, { status: 503 }),
+        });
+
+        const result = await createSongInPlanningCenter(songId, { ...FORM, ccliNumber: 22025 });
+        expect(result).toMatchObject({ ok: true, linked: true, song: { id: NEW_ID } });
+        expect(result.ok && result.warnings).toEqual([
+            expect.stringMatching(
+                /^The song was created in Planning Center, but setting its CCLI number failed \(.*500.*\), and it could not be read back to see whether Planning Center has the number: .*503.*\. Look at the song in Planning Center\.$/
+            ),
+        ]);
+    });
+
+    test("a CCLI number Planning Center answered for but does not show is a warning", async () => {
+        const songId = seedCatalogSong();
+        stubFetchRoutes({
+            [`POST ${urls.songs}`]: () => json({ data: created() }, { status: 201 }),
+            [`PATCH ${urls.song(NEW_ID)}`]: () => json({ data: created({ ccli_number: 22025 }) }),
+            [urls.song(NEW_ID)]: { data: created() },
+        });
+        const result = await createSongInPlanningCenter(songId, { ...FORM, ccliNumber: 22025 });
+        expect(result.ok && result.warnings).toEqual([
+            "The song was created in Planning Center, but it does not have the CCLI number 22025 there.",
+        ]);
+        expect(result.ok && result.song.ccliNumber).toBeNull();
     });
 
     test("a song that cannot be read back is a warning, and keeps what the PATCH answered", async () => {

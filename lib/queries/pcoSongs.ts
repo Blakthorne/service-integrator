@@ -589,8 +589,12 @@ function describeFields(changes: PcoSongChanges): string {
 /**
  * Give a song just created its CCLI number, read it back, and, unless
  * `useCcliDetails`, write back the title and credits typed where CCLI's
- * replaced them. Every write is logged; a step that fails is a warning,
- * and the song is returned as the last answer from Planning Center left it.
+ * replaced them. The song is read back whatever came of setting the
+ * number: Planning Center may have applied it even when its answer was
+ * lost (a timeout), and replaced the song's details with CCLI's, so what
+ * is reported, and written back, is what Planning Center has. Every write
+ * is logged; a step that fails is a warning, and the song is returned as
+ * Planning Center was last seen to have it.
  */
 async function setCcliNumber(
     db: DatabaseSync,
@@ -602,24 +606,34 @@ async function setCcliNumber(
 ): Promise<PcoLibrarySong> {
     const target = `song ${created.id}`;
     const payload = { action: "ccli-number", title: created.title, ccliNumber };
-    let song: PcoLibrarySong;
+    let song = created;
+    let failure: string | null = null;
     try {
         song = await updateSong(created.id, { ccliNumber });
+        logWrite(db, { kind: "song", target, ok: true, payload, result: { song: songSummary(song) } }, now);
     } catch (error) {
-        logWrite(db, { kind: "song", target, ok: false, payload, result: writeError(error) }, now);
-        warnings.push(
-            `The song was created in Planning Center, but its CCLI number could not be set: ${writeError(error).error}`
-        );
-        return created;
+        const result = writeError(error);
+        logWrite(db, { kind: "song", target, ok: false, payload, result }, now);
+        failure = result.error;
     }
-    logWrite(db, { kind: "song", target, ok: true, payload, result: { song: songSummary(song) } }, now);
 
-    // Planning Center may have replaced the song's details with CCLI's.
+    // Planning Center may have replaced the song's details with CCLI's, or
+    // set the number though its answer was lost.
     try {
         song = await fetchSong(created.id);
     } catch (error) {
         warnings.push(
-            `The song was created in Planning Center with its CCLI number, but could not be read back to check its title and credits: ${writeError(error).error}`
+            failure === null
+                ? `The song was created in Planning Center with its CCLI number, but could not be read back to check its title and credits: ${writeError(error).error}`
+                : `The song was created in Planning Center, but setting its CCLI number failed (${failure}), and it could not be read back to see whether Planning Center has the number: ${writeError(error).error}. Look at the song in Planning Center.`
+        );
+        return song;
+    }
+    if (song.ccliNumber !== ccliNumber) {
+        warnings.push(
+            failure === null
+                ? `The song was created in Planning Center, but it does not have the CCLI number ${ccliNumber} there.`
+                : `The song was created in Planning Center, but its CCLI number could not be set: ${failure}`
         );
         return song;
     }
@@ -635,6 +649,7 @@ async function setCcliNumber(
     }
     const restorePayload = {
         action: "restore-typed-details",
+        title: typed.title,
         ccliNumber,
         typed: restore,
         fromCcli: {
