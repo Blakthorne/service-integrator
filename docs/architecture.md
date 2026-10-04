@@ -237,7 +237,7 @@ await pcoMutate(
 );
 ```
 
-**Validation errors.** A 422 throws `PcoValidationError`, a `PcoError` with status 422 whose `details` are the `errors[].detail` strings of PCO's body: the reasons to show the user. The body is read defensively, so one that is not JSON, or not that shape, gives no details rather than a parse error. The details also appear in the message, JSON-quoted so they cannot forge log lines. Reads share the path, so a GET answered 422 throws the same error; every other non-2xx status is a plain `PcoError`. No error message or property carries the Authorization header (a test checks).
+**Validation errors.** A 422 throws `PcoValidationError`, a `PcoError` with status 422 whose `errors` are the body's issues as `{ title, detail, parameter }`, and whose `details` give one readable line for each ("category: must exist"). The body is read defensively, so one that is not JSON, or not that shape, gives no details rather than a parse error. The details also appear in the message, JSON-quoted so they cannot forge log lines. Reads share the path, so a GET answered 422 throws the same error; every other non-2xx status is a plain `PcoError`. No error message or property carries the Authorization header (a test checks).
 
 **The pacer** (`pacer.ts`). PCO grants a budget of requests per period and changes it whenever it likes (users report silent drops to 10 per 20 s after a burst at one endpoint), so the pacer learns it and nothing hard-codes it:
 
