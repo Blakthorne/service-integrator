@@ -239,6 +239,22 @@ jobs:
                       echo "Install Node 22 with nvm, make it the default, then run 'pm2 update'." >&2
                       exit 1
                   fi
+                  # pm2 restart keeps the Node that PM2 started the app with, so
+                  # the default above is not enough: check the app's own Node too
+                  # (skipped when PM2 does not know the app yet).
+                  PM2_NODE="$(pm2 jlist 2>/dev/null | node -e '
+                      let s = "";
+                      process.stdin.on("data", (d) => (s += d)).on("end", () => {
+                          try {
+                              const app = JSON.parse(s).find((p) => p.name === "service-integrator");
+                              process.stdout.write(String(app?.pm2_env?.node_version ?? ""));
+                          } catch {}
+                      });' 2>/dev/null || true)"
+                  if [ -n "$PM2_NODE" ] && [ "${PM2_NODE%%.*}" -lt 22 ] 2>/dev/null; then
+                      echo "PM2 runs service-integrator on Node $PM2_NODE, which has no node:sqlite." >&2
+                      echo "Run 'pm2 update' so PM2 and the app move to the default Node." >&2
+                      exit 1
+                  fi
 
                   cd ~/service-integrator
                   tar -xzf /tmp/deploy.tar.gz
