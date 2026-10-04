@@ -106,7 +106,7 @@ function EmailPreviewFields({ view, textId }: { view: PlanEmailPreviewView; text
                 <pre
                     tabIndex={0}
                     aria-labelledby={textId}
-                    className="mt-1 max-h-[40vh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+                    className="mt-1 max-h-[30vh] overflow-auto whitespace-pre-wrap sm:max-h-[40vh] break-words rounded-md border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                 >
                     {view.text}
                 </pre>

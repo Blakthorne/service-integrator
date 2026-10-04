@@ -34,7 +34,7 @@ export default function EmailCard({ recipients, subjectTemplate, status }: Email
         <SettingsCard
             title={SETTINGS_CARD_TITLES.email}
             headingId="email-heading"
-            description="Email this plan, on a plan's page, shows the email first and then sends it: the plan's schedule text and its songs' copyright text, as plain text, to these addresses."
+            description="Email this plan, on each plan's page, shows the email and then sends it to these addresses: the plan's schedule text and its songs' copyright text, as plain text."
         >
             <div className="mb-6 space-y-3 border-b border-gray-200 pb-6 dark:border-gray-700">
                 <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">

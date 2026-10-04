@@ -18,7 +18,7 @@ export const EMAIL_PENDING_TEXT = {
 
 /** What the dialog is for, under its title. */
 export const EMAIL_DIALOG_DESCRIPTION =
-    "Sends this plan's schedule and its songs' copyright text, as plain text, to the recipients in Settings. This is the email as it would go out now.";
+    "Sends this plan's schedule and its songs' copyright text, as plain text, to the recipients in Settings.";
 
 /** What each environment variable that email needs holds. */
 const VARIABLE_HELP: Readonly<Record<EmailVariable, string>> = {
