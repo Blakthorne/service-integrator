@@ -230,8 +230,8 @@ export function listCatalogSongs(db: DatabaseSync): CatalogSongSummary[] {
     return songSummaries(db, null, BY_TITLE);
 }
 
-/** "Amazing Grace (NEW BRITAIN)", or the title alone when the tune is unknown. */
-function songLabelOf(title: string, tuneName: string | null): string {
+/** A song's label, "Amazing Grace (NEW BRITAIN)", or the title alone when the tune is unknown. */
+export function songLabelOf(title: string, tuneName: string | null): string {
     return tuneName === null ? title : `${title} (${tuneName})`;
 }
 
