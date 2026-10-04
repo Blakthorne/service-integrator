@@ -20,6 +20,17 @@ import {
     previewCopyrightFooter,
     previewHymnNote,
     previewNumbers,
+    CREDITS_NOT_REREAD_MESSAGE,
+    EMAIL_RECIPIENTS_HINT,
+    EMAIL_SUBJECT_HINT,
+    EMAIL_SUBJECT_SAMPLE_PLAN,
+    NO_RECIPIENTS_PREVIEW,
+    creditPhraseHint,
+    creditRoleLegend,
+    describeRederivedCredits,
+    previewCreditLines,
+    previewEmailSubject,
+    previewRecipients,
 } from "./settingsText";
 
 function issue(key: SettingKey, stored: string, message = "It is not valid."): SettingIssue {
@@ -253,5 +264,193 @@ describe("pcoTimedOutReason", () => {
 
     test("waits less than one of Planning Center's own timeouts, which the client sets at 15 s", () => {
         expect(PCO_WAIT_MS).toBeLessThan(15_000);
+    });
+});
+
+describe("creditRoleLegend", () => {
+    test("says the first two roles are the words' and the music's", () => {
+        expect(creditRoleLegend(0)).toBe("Role 1 (the words)");
+        expect(creditRoleLegend(1)).toBe("Role 2 (the music)");
+        expect(creditRoleLegend(2)).toBe("Role 3");
+        expect(creditRoleLegend(11)).toBe("Role 12");
+    });
+});
+
+describe("creditPhraseHint", () => {
+    test("says what a blank phrase prints", () => {
+        expect(creditPhraseHint("Words")).toBe('Left blank, it reads "Words by".');
+        expect(creditPhraseHint("  Arr. ")).toBe('Left blank, it reads "Arr. by".');
+        expect(creditPhraseHint("")).toBe('Left blank, it reads "the role by".');
+    });
+});
+
+describe("previewCreditLines", () => {
+    const DEFAULT_ROWS = [
+        { role: "Words", phrase: "Words by" },
+        { role: "Music", phrase: "Music by" },
+        { role: "Arr.", phrase: "Arr. by" },
+        { role: "Trans.", phrase: "Trans. by" },
+    ];
+
+    test("prints the default roles as the copyright text does", () => {
+        expect(previewCreditLines(DEFAULT_ROWS, "Words and Music by")).toEqual({
+            apart: "Words by Isaac Watts. Music by Lowell Mason. Arr. by John Doe. Trans. by Jane Roe.",
+            together: "Words and Music by John Newton.",
+        });
+    });
+
+    test("follows the phrases and the roles as they are typed", () => {
+        expect(
+            previewCreditLines(
+                [
+                    { role: "Lyrics", phrase: "Text by" },
+                    { role: "Tune", phrase: " Melody by " },
+                ],
+                "Text and melody by"
+            )
+        ).toEqual({
+            apart: "Text by Isaac Watts. Melody by Lowell Mason.",
+            together: "Text and melody by John Newton.",
+        });
+    });
+
+    test("prints '<role> by' for a blank phrase, and '<role> and <role> by' for a blank pair phrase", () => {
+        expect(
+            previewCreditLines(
+                [
+                    { role: "Lyrics", phrase: "" },
+                    { role: "Tune", phrase: "  " },
+                ],
+                ""
+            )
+        ).toEqual({
+            apart: "Lyrics by Isaac Watts. Tune by Lowell Mason.",
+            together: "Lyrics and Tune by John Newton.",
+        });
+    });
+
+    test("leaves out a role that is blank, has a separator or is listed twice, and a phrase that is too long", () => {
+        expect(
+            previewCreditLines(
+                [
+                    { role: "Words", phrase: "x".repeat(41) },
+                    { role: "", phrase: "Nothing by" },
+                    { role: "Music", phrase: "Music by" },
+                    { role: "words", phrase: "Again by" },
+                    { role: "A, B", phrase: "Both by" },
+                ],
+                "Words and Music by"
+            )
+        ).toEqual({
+            apart: "Words by Isaac Watts. Music by Lowell Mason.",
+            together: "Words and Music by John Newton.",
+        });
+    });
+
+    test("is null when fewer than two roles can be read", () => {
+        expect(previewCreditLines([], "x")).toBeNull();
+        expect(previewCreditLines([{ role: "Words", phrase: "Words by" }], "x")).toBeNull();
+        expect(
+            previewCreditLines(
+                [
+                    { role: "Words", phrase: "" },
+                    { role: "Words", phrase: "" },
+                ],
+                ""
+            )
+        ).toBeNull();
+    });
+
+    test("gives every role a name, and never the same one to two next to each other", () => {
+        const rows = Array.from({ length: 12 }, (_, i) => ({ role: `Role ${i}`, phrase: "" }));
+        const preview = previewCreditLines(rows, "");
+        expect(preview?.apart.match(/Role \d+ by/g)).toHaveLength(12);
+        expect(preview?.apart).not.toContain(" and ");
+    });
+});
+
+describe("describeRederivedCredits", () => {
+    test("says how many songs were read again, and how they read", () => {
+        expect(describeRederivedCredits({ songs: 397, ok: 3, legacy: 390, unparsed: 4 })).toBe(
+            "Saved. Read the credits of 397 songs again: 3 follow the roles, 390 have no labels and 4 have labels that no role matches."
+        );
+    });
+
+    test("leaves out a status no song has, and words one song in the singular", () => {
+        expect(describeRederivedCredits({ songs: 8, ok: 0, legacy: 8, unparsed: 0 })).toBe(
+            "Saved. Read the credits of 8 songs again: 8 have no labels."
+        );
+        expect(describeRederivedCredits({ songs: 1, ok: 1, legacy: 0, unparsed: 0 })).toBe(
+            "Saved. Read the credits of 1 song again: 1 follows the roles."
+        );
+        expect(describeRederivedCredits({ songs: 2, ok: 1, legacy: 0, unparsed: 1 })).toBe(
+            "Saved. Read the credits of 2 songs again: 1 follows the roles and 1 has labels that no role matches."
+        );
+    });
+
+    test("says there were no songs to read, with none synced yet", () => {
+        expect(describeRederivedCredits({ songs: 0, ok: 0, legacy: 0, unparsed: 0 })).toBe(
+            "Saved. No songs have been synced from Planning Center yet, so there were no credits to read again."
+        );
+    });
+
+    test("has a message for credits that could not be read again, which says when they will be", () => {
+        expect(CREDITS_NOT_REREAD_MESSAGE).toContain("roles were saved");
+        expect(CREDITS_NOT_REREAD_MESSAGE).toContain("next song sync");
+    });
+});
+
+describe("previewEmailSubject", () => {
+    test("gives the default subject for a sample plan", () => {
+        expect(previewEmailSubject(DEFAULT_SETTINGS.emailSubjectTemplate)).toBe(
+            "Songs for 10/4/26 \u00b7 Sunday Morning"
+        );
+        expect(EMAIL_SUBJECT_SAMPLE_PLAN).toBe("a Sunday Morning plan for October 4, 2026");
+    });
+
+    test("fills in each placeholder, and leaves a template without any as it is", () => {
+        expect(previewEmailSubject("{service}: {date}")).toBe("Sunday Morning: 10/4/26");
+        expect(previewEmailSubject("  This week's songs  ")).toBe("This week's songs");
+    });
+
+    test("is null for a subject the setting does not accept", () => {
+        expect(previewEmailSubject("")).toBeNull();
+        expect(previewEmailSubject("Songs for {when}")).toBeNull();
+        expect(previewEmailSubject("a\nb")).toBeNull();
+        expect(previewEmailSubject("x".repeat(151))).toBeNull();
+    });
+
+    test("explains both placeholders", () => {
+        expect(EMAIL_SUBJECT_HINT).toContain("{date}");
+        expect(EMAIL_SUBJECT_HINT).toContain("{service}");
+        expect(EMAIL_RECIPIENTS_HINT).toContain("each line");
+    });
+});
+
+describe("previewRecipients", () => {
+    test("says how many people the email goes to", () => {
+        expect(previewRecipients("a@example.org")).toBe("The email goes to 1 recipient.");
+        expect(previewRecipients("a@example.org\nb@example.org, c@example.org")).toBe(
+            "The email goes to 3 recipients."
+        );
+    });
+
+    test("says that nothing is sent until there are recipients", () => {
+        expect(previewRecipients("")).toBe(NO_RECIPIENTS_PREVIEW);
+        expect(previewRecipients(" \n, ")).toBe(NO_RECIPIENTS_PREVIEW);
+        expect(NO_RECIPIENTS_PREVIEW).toContain("sends nothing");
+    });
+
+    test("names the entries that are not addresses, the first few", () => {
+        expect(previewRecipients("a@example.org, pastor")).toBe('Not an email address: "pastor".');
+        expect(previewRecipients("one, two, three, four, five")).toBe(
+            'Not an email address: "one", "two", "three" and 2 more.'
+        );
+    });
+
+    test("says what is wrong with the list when each entry is an address", () => {
+        expect(previewRecipients("a@example.org, A@example.org")).toBe('"A@example.org" is listed twice.');
+        const many = Array.from({ length: 26 }, (_, i) => `p${i}@example.org`).join(", ");
+        expect(previewRecipients(many)).toBe("List at most 25 recipients.");
     });
 });

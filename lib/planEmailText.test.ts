@@ -5,6 +5,7 @@ import {
     EMAIL_PENDING_TEXT,
     NO_RECIPIENTS_NOTICE,
     describeEmailSetup,
+    describeEmailTransport,
     planEmailOutcomeView,
     planEmailPreviewView,
     recipientCount,
@@ -233,4 +234,25 @@ describe("planEmailOutcomeView", () => {
             });
         }
     );
+});
+
+describe("describeEmailTransport", () => {
+    test("says email is set up, without showing any value", () => {
+        expect(describeEmailTransport({ configured: true })).toEqual({
+            tone: "ok",
+            status: "Set up on the server",
+            detail:
+                "SMTP_URL and EMAIL_FROM are both set, so Email this plan can send. Their values are never shown.",
+            setup: null,
+        });
+    });
+
+    test("says what is missing and how to set it up", () => {
+        expect(describeEmailTransport({ configured: false, missing: ["SMTP_URL"] })).toEqual({
+            tone: "warning",
+            status: "Not set up on the server",
+            detail: null,
+            setup: describeEmailSetup(["SMTP_URL"]),
+        });
+    });
 });

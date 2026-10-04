@@ -391,7 +391,7 @@ function ownPhrase(phrases: CreditPhrases, key: string): string | undefined {
  * by"), or of two the same people hold ("Words and Music by"): the phrase
  * the settings give it, or else "<role> by", "<role> and <role> by".
  */
-function phraseFor(roles: readonly string[], phrases: CreditPhrases): string {
+export function phraseFor(roles: readonly string[], phrases: CreditPhrases): string {
     return ownPhrase(phrases, roles.join(" & ")) ?? `${roles.join(" and ")} by`;
 }
 

@@ -256,7 +256,7 @@ function parseIncludesTune(value: unknown): SettingParse<boolean> {
 const CREDIT_SEPARATORS = /[:;,&]/;
 
 /** One credit role: trimmed, on one line, at most `CREDIT_ROLE_MAX_LENGTH` characters, with no separator. */
-function parseCreditRole(value: unknown): SettingParse<string> {
+export function parseCreditRole(value: unknown): SettingParse<string> {
     if (typeof value !== "string") {
         return refuse("A role must be text.");
     }
@@ -331,7 +331,7 @@ function parseCreditPhraseKey(key: string): SettingParse<string> {
 }
 
 /** A credit phrase: trimmed, not blank, on one line, at most `CREDIT_PHRASE_MAX_LENGTH` characters. */
-function parseCreditPhrase(value: unknown): SettingParse<string> {
+export function parseCreditPhrase(value: unknown): SettingParse<string> {
     if (typeof value !== "string") {
         return refuse("A phrase must be text.");
     }
@@ -391,7 +391,7 @@ function parseCreditPhrases(value: unknown): SettingParse<CreditPhrases> {
 const EMAIL_ADDRESS = /^[^\s@",;<>()[\]\\]+@[^\s@",;<>()[\]\\.]+(?:\.[^\s@",;<>()[\]\\.]+)+$/;
 
 /** One recipient: an address `EMAIL_ADDRESS` matches, trimmed, at most `EMAIL_ADDRESS_MAX_LENGTH` characters. */
-function parseEmailAddress(value: unknown): SettingParse<string> {
+export function parseEmailAddress(value: unknown): SettingParse<string> {
     if (typeof value !== "string") {
         return refuse("An email address must be text.");
     }

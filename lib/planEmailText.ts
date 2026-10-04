@@ -1,4 +1,4 @@
-import type { EmailVariable } from "./email";
+import type { EmailStatus, EmailVariable } from "./email";
 // Types only: what the email's preview and send give the dialog.
 import type { PlanEmailPreview, SendPlanEmailResult } from "./queries/email";
 
@@ -52,6 +52,40 @@ export function describeEmailSetup(missing: readonly EmailVariable[]): EmailSetu
             missing.length === 0
                 ? "Check SMTP_URL and EMAIL_FROM in the server's .env.production, then restart the app."
                 : `Add ${names} to the server's .env.production file (a deploy writes that file from the secrets of the same names) and restart the app.`,
+    };
+}
+
+/** How Settings shows whether email can be sent. */
+export interface EmailTransportText {
+    /** Fine, or to be fixed. */
+    tone: "ok" | "warning";
+    /** A few words that do not rely on colour: "Set up on the server". */
+    status: string;
+    /** What to know, or null when the status says it all. */
+    detail: string | null;
+    /** What is missing and how to set it up, when it is not set up. */
+    setup: EmailSetupText | null;
+}
+
+/**
+ * Whether email can be sent, in words, for the Email card: set up on the
+ * server (both variables are set and usable; their values are never
+ * shown), or not, with what is missing (`describeEmailSetup`).
+ */
+export function describeEmailTransport(status: EmailStatus): EmailTransportText {
+    if (status.configured) {
+        return {
+            tone: "ok",
+            status: "Set up on the server",
+            detail: "SMTP_URL and EMAIL_FROM are both set, so Email this plan can send. Their values are never shown.",
+            setup: null,
+        };
+    }
+    return {
+        tone: "warning",
+        status: "Not set up on the server",
+        detail: null,
+        setup: describeEmailSetup(status.missing),
     };
 }
 
