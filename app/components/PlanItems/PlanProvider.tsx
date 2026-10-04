@@ -18,6 +18,7 @@ import type {
     ScheduleSelection,
     ServiceType,
 } from "@/lib/domain";
+import type { HymnNoteStatus } from "@/lib/hymnNotes";
 // Type-only, so nothing server-only reaches the client bundle.
 import type { PlanDetail } from "@/lib/queries/plans";
 import {
@@ -70,6 +71,12 @@ export interface PlanContextValue {
     scheduleSettings: PlanTextSettings;
     /** Why the settings could not be read, or null; `scheduleSettings` then holds the defaults. */
     settingsError: string | null;
+    /**
+     * The plan's hymnal notes against its service type's category, as the
+     * page was rendered (see `planHymnNoteStatus`): each song item's diff, or
+     * why there is none. A sync revalidates the plan, which refreshes it.
+     */
+    hymnNoteStatus: HymnNoteStatus;
     /**
      * `items` with the Schedule tab's selections merged in: a song with
      * numbers starts on Numbers, every other item on Leave blank, unless a
@@ -165,6 +172,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
         selectionsError,
         scheduleSettings,
         settingsError,
+        hymnNoteStatus,
     } = detail;
     const [store] = useState(() => storeFor(detail));
     const { selections, saves } = useSyncExternalStore(
@@ -208,6 +216,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             selectionsError,
             scheduleSettings,
             settingsError,
+            hymnNoteStatus,
             scheduleItems,
             saves,
             chooseOption,
@@ -224,6 +233,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             selectionsError,
             scheduleSettings,
             settingsError,
+            hymnNoteStatus,
             scheduleItems,
             saves,
             chooseOption,

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogMatch, PlanItemWithSong, ScheduleSelection } from "@/lib/domain";
+import type { CardNoteBadge, CardNoteState } from "@/lib/hymnNoteText";
 import { routes } from "@/lib/routes";
 import {
     SAVED_AFTER_FAILURE_NOTICE,
@@ -24,6 +25,36 @@ type ItemWithSelection = PlanItemWithSong & ScheduleSelection;
 
 /** Muted text under a card's title. */
 const NOTE_CLASS = "text-sm text-gray-600 dark:text-gray-400";
+
+/**
+ * Each hymnal note status's badge colours, as the dashboard's: green in
+ * sync, amber to be synced, grey for a note left alone. The words say the
+ * same, so colour is never the only sign.
+ */
+const NOTE_BADGE_CLASSES: Readonly<Record<CardNoteState, string>> = {
+    "in-sync":
+        "bg-green-50 text-green-800 ring-green-200 dark:bg-green-950 dark:text-green-200 dark:ring-green-900",
+    "needs-update":
+        "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900",
+    missing:
+        "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900",
+    kept: "bg-gray-50 text-gray-700 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700",
+};
+
+/** A card's hymnal note status, under its title: "Hymnal note in sync". */
+function NoteBadge({ badge }: { badge: CardNoteBadge }) {
+    return (
+        <p>
+            <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                    NOTE_BADGE_CLASSES[badge.state]
+                }`}
+            >
+                {badge.label}
+            </span>
+        </p>
+    );
+}
 
 /**
  * The catalog song a linked song is: its hymn's title (a link to the song's
@@ -92,6 +123,8 @@ interface ScheduleSongCardProps {
     item: ItemWithSelection;
     /** Which card it is (see `scheduleSongView`). */
     view: ScheduleSongView;
+    /** Its hymnal note's status (see `cardNoteBadge`); null when there is nothing to say. */
+    noteBadge: CardNoteBadge | null;
     /** How the save of its choice stands; null when it is saved, or was never changed. */
     saveState: SelectionSaveState | null;
     /** What goes between a song's numbers, from the settings, for what a Link says. */
@@ -105,8 +138,10 @@ interface ScheduleSongCardProps {
 }
 
 /**
- * A song item on the Schedule tab: its title, then what the catalog knows of
- * it, then the choices for its line in the schedule text.
+ * A song item on the Schedule tab: its title and its hymnal note's status
+ * (in sync, needs update, missing, or kept: a note the app did not write),
+ * then what the catalog knows of it, then the choices for its line in the
+ * schedule text.
  *
  * - Linked: the catalog song's title and tune and its numbers
  *   (`EntryNumbers`); Numbers, Leave blank or Custom.
@@ -136,6 +171,7 @@ interface ScheduleSongCardProps {
 export default function ScheduleSongCard({
     item,
     view,
+    noteBadge,
     saveState,
     numberSeparator,
     scheduleHref,
@@ -192,6 +228,7 @@ export default function ScheduleSongCard({
             >
                 {item.title}
             </h3>
+            {noteBadge !== null && <NoteBadge badge={noteBadge} />}
             {view.kind === "linked" ? (
                 <LinkedSong match={view.match} />
             ) : view.kind === "unlinked" ? (

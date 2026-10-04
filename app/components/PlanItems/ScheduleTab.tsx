@@ -11,11 +11,12 @@ import ServiceSchedule from "./ServiceSchedule";
 /**
  * The Service Schedule tab's connector: feeds ServiceSchedule the items with
  * their selections, how their saves stand, their catalog links and
- * suggestions, the plan's date and the settings its text follows from
- * `usePlan()`, and sends its changes back to the provider, which keeps them
- * while the user visits other tabs and items, and saves them. A Link goes to
- * the `linkPcoSong` action with this plan's ids, and its revalidation brings
- * the new numbers back through the provider.
+ * suggestions, their hymnal notes, the plan's date and the settings its
+ * text follows from `usePlan()`, and sends its changes back to the
+ * provider, which keeps them while the user visits other tabs and items,
+ * and saves them. A Link goes to the `linkPcoSong` action with this plan's
+ * ids, and its revalidation brings the new numbers back through the
+ * provider.
  */
 export default function ScheduleTab() {
     const {
@@ -27,6 +28,7 @@ export default function ScheduleTab() {
         selectionsError,
         scheduleSettings,
         settingsError,
+        hymnNoteStatus,
         scheduleItems,
         saves,
         chooseOption,
@@ -48,6 +50,7 @@ export default function ScheduleTab() {
             catalogError={catalogError}
             selectionsError={selectionsError}
             settingsError={settingsError}
+            hymnNoteStatus={hymnNoteStatus}
             saves={saves}
             serviceTypeName={serviceType.name}
             planDate={planDateFromSortDate(plan.sortDate)}

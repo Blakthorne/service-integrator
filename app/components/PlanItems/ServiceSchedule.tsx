@@ -7,6 +7,8 @@ import type {
     PlanItemWithSong,
     ScheduleSelection,
 } from "@/lib/domain";
+import { cardNoteBadge } from "@/lib/hymnNoteText";
+import { hymnNoteDiffFor, type HymnNoteStatus } from "@/lib/hymnNotes";
 import {
     catalogUnavailableMessage,
     scheduleSongView,
@@ -38,6 +40,8 @@ export interface ServiceScheduleProps {
     selectionsError: string | null;
     /** Why the settings could not be read, or null; the tab then says the text uses the defaults. */
     settingsError: string | null;
+    /** The plan's hymnal notes against its category, for each card's note status. */
+    hymnNoteStatus: HymnNoteStatus;
     /** How the saves of the changed songs stand, by item ID (see `SelectionSaveState`). */
     saves: Readonly<Record<string, SelectionSaveState>>;
     serviceTypeName: string;
@@ -61,8 +65,8 @@ export interface ServiceScheduleProps {
 
 /**
  * The Service Schedule tab: a card per song item, in sequence order, with
- * its numbers from its catalog link or a way to link it, and the choices for
- * its line (see `ScheduleSongCard`); a "Copy All" button for the schedule
+ * its numbers from its catalog link or a way to link it, its hymnal note's
+ * status, and the choices for its line (see `ScheduleSongCard`); a "Copy All" button for the schedule
  * text, with the header and separator from the settings; and quiet banners
  * when the catalog, the saved choices or the settings cannot be read. It
  * holds no selections itself; they come in with `items`, with how
@@ -75,6 +79,7 @@ export default function ServiceSchedule({
     catalogError,
     selectionsError,
     settingsError,
+    hymnNoteStatus,
     saves,
     serviceTypeName,
     planDate,
@@ -126,6 +131,7 @@ export default function ServiceSchedule({
                             key={item.id}
                             item={item}
                             view={scheduleSongView(item, catalogState)}
+                            noteBadge={cardNoteBadge(hymnNoteDiffFor(hymnNoteStatus, item.id))}
                             saveState={saves[item.id] ?? null}
                             numberSeparator={numberSeparator}
                             scheduleHref={scheduleHref}
