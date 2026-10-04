@@ -232,6 +232,21 @@ describe("todoView", () => {
         expect(view("A", "B", "C").text).toBe('3 songs aren\'t in the catalog: "A", "B" and "C".');
     });
 
+    test("a long list names the first three songs and counts the rest", () => {
+        const songs = ["A", "B", "C", "D", "E", "F", "G"].map((title, i) => ({
+            itemId: String(i + 1),
+            title,
+            pcoSongId: String(90 + i),
+        }));
+        expect(
+            todoView({ kind: "songs-not-in-catalog", serviceType: MORNING, plan: AM_PLAN, songs }).text
+        ).toBe('7 songs aren\'t in the catalog: "A", "B", "C" and 4 more.');
+        expect(
+            todoView({ kind: "songs-not-in-catalog", serviceType: MORNING, plan: AM_PLAN, songs: songs.slice(0, 4) })
+                .text
+        ).toBe('4 songs aren\'t in the catalog: "A", "B", "C" and 1 more.');
+    });
+
     test("notes out of date link to the plan, where they are synced", () => {
         const view = (count: number) =>
             todoView({ kind: "notes-out-of-date", serviceType: MORNING, plan: AM_PLAN, count });

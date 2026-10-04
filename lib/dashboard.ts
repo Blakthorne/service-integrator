@@ -176,9 +176,19 @@ function reasonSentence(reason: string | null): string {
     return /[.!?]$/.test(text) ? `: ${text}` : `: ${text}.`;
 }
 
-/** `"A"`, `"A" and "B"`, `"A", "B" and "C"`. */
+/** How many titles a to-do names before it counts the rest. */
+export const TODO_TITLES_SHOWN = 3;
+
+/**
+ * `"A"`, `"A" and "B"`, `"A", "B" and "C"`; past `TODO_TITLES_SHOWN`, the
+ * first few and a count: `"A", "B", "C" and 4 more`.
+ */
 function quotedList(titles: readonly string[]): string {
     const quoted = titles.map((title) => `"${title}"`);
+    if (quoted.length > TODO_TITLES_SHOWN) {
+        const rest = quoted.length - TODO_TITLES_SHOWN;
+        return `${quoted.slice(0, TODO_TITLES_SHOWN).join(", ")} and ${rest} more`;
+    }
     return quoted.length <= 1
         ? quoted.join("")
         : `${quoted.slice(0, -1).join(", ")} and ${quoted[quoted.length - 1]}`;
