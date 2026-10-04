@@ -1,7 +1,8 @@
 /**
  * What the plan header's dialogs (Sync hymn notes, Email this plan) share:
- * the look of their buttons and links, the row of buttons along the bottom,
- * and the line that takes focus when an action answers.
+ * the look of their buttons and links, the button that opens each, the row
+ * of buttons along the bottom, and the line that takes focus when an action
+ * answers.
  */
 
 /** White on blue-600 is 5.3:1, and the focus ring outside the button 3:1 on the dialog. */
@@ -14,6 +15,15 @@ export const SECONDARY_BUTTON_CLASS =
 /** A link in running text: underlined, since its colour alone is under 3:1 against the text's. */
 export const LINK_CLASS =
     "text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300";
+
+/**
+ * The plan header's button that opens a dialog: `buttonClasses`' primary
+ * colours (white on blue-600 is 5.3:1, and the ring outside it 3:1 on the
+ * page), but sized like "View in Planning Center" below it, which no
+ * variant is.
+ */
+export const HEADER_BUTTON_CLASS =
+    "px-4 py-2 text-white text-center bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors whitespace-nowrap cursor-pointer";
 
 /** The buttons along the bottom of a dialog. */
 export function DialogButtons({ children }: { children: React.ReactNode }) {

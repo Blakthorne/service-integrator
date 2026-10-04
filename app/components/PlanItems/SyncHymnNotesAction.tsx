@@ -25,7 +25,7 @@ import {
     type HymnNoteRow,
 } from "@/lib/hymnNoteText";
 import { routes } from "@/lib/routes";
-import { DialogAnswer, DialogButtons, LINK_CLASS } from "./PlanDialogParts";
+import { DialogAnswer, DialogButtons, HEADER_BUTTON_CLASS, LINK_CLASS } from "./PlanDialogParts";
 
 /** A preview that found the category: each song item's diff. */
 type ReadyStatus = Extract<HymnNoteStatus, { kind: "ready" }>;
@@ -252,10 +252,7 @@ export default function SyncHymnNotesAction({ serviceTypeId, planId }: SyncHymnN
                 ref={buttonRef}
                 type="button"
                 onClick={openDialog}
-                // buttonClasses' primary colours (white text is 5.3:1 on blue-600,
-                // the ring outside the button 3:1 on the page), but sized like
-                // "View in Planning Center" below it, which no variant is.
-                className="px-4 py-2 text-white text-center bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors whitespace-nowrap cursor-pointer"
+                className={HEADER_BUTTON_CLASS}
             >
                 Sync hymn notes
             </button>
