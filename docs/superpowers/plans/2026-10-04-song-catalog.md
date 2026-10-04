@@ -1,0 +1,269 @@
+# Song catalog redesign and next-stage roadmap
+
+> **Status:** approved 2026-10-03; implementation started 2026-10-03 in the worktree `../service-integrator-catalog`, one stacked branch per phase (`feat/catalog-0-spike`, `feat/catalog-1-core`, …). This copy is the living plan that implementer and reviewer subagents read. **[Execution](#execution) and [Spike findings](#spike-findings) at the end override anything earlier in this document.**
+
+## Context
+
+Service Integrator began as a proof of concept: read Planning Center (PCO) Services plans and generate copyright and service-schedule text. The multi-page routing refactor (branch `refactor/multi-page-routing`, ~97 commits ahead of `main`, another agent finishing it) is nearly done. The concept is proved; the next stage is a scalable data model and letting the app do more for its one user.
+
+The weakest part today is the hymn store: `hymns.json`, one record per hymn (title, tune name, number in each of two books). The user's reported problems, each confirmed in the code and git history:
+
+- **PCO title vs. hymnal title.** Matching is by normalized title text, so first-line/title differences, punctuation, translations and renamed plan items cause misses and over-matches. Every data fix in git history (typos, apostrophes, merges) exists only because the title is the join key.
+- **One song looks like two.** The same hymn appears under different titles in two books, or the same tune under two names (DARWAL/DARWALL), so one song shows up as separate entries. Three hymns are still stored as two rows (one per book, the Great Hymns side with no tune).
+- **One text, several tunes.** A text sung to more than one tune (23 titles, 53 records) is a title with "versions" chosen by array index.
+- **Credits.** The copyright text splits PCO's single `author` field on commas and " and " and can only ever produce one words credit and one music credit; arrangers and translators cannot be expressed.
+- **Books are hard-coded** under about seven spellings; adding a book touches 4 lib modules, 3 components, 7 test files, 2 docs and every record of the JSON. The deploy ships only `.next`, so the data cannot be edited without a rebuild.
+
+Root cause: title text is doing the job of stable identifiers, both between books and between the catalog and PCO.
+
+## Decisions (from the user, 2026-10-03)
+
+| Topic | Decision |
+|---|---|
+| Users | Just the maintainer, one church. No multi-tenant work; avoid decisions that make it painful later. |
+| PCO practice | **One PCO song per text+tune pairing**, with that tune's composer in the author field. A PCO song is therefore one hymn to one tune. Build around this. |
+| Source of truth | Hybrid, as recommended below: PCO owns the service and the song; the app owns the hymnal index and the links. |
+| Scale | 2 to 5 years of history, 397 PCO songs, ~216 plans in two service types ("Sunday Morning", "Sunday Evening"). |
+| Hosting | PM2 on a self-hosted Linux box with persistent disk. SQLite is fine; a JSON export in git is the human-readable backup. |
+| Calendar | Seasons and themes only. No lectionary. Fit suggestions skipped. |
+| Writes to PCO | All trusted: item notes, create or edit songs, add/remove/reorder plan items, song tags. Only the maintainer edits plans, so refresh-before-write, no conflict detection. |
+| New PCO songs | The app creates them fully (title from the catalog; credits and copyright typed in the app). |
+| Outputs | Back into Planning Center, and a per-plan email to staff or clergy on demand. |
+| Workflow today | Start in PCO, then hunt for numbers and tunes for bulletin and item descriptions. That hunt is the tedious step to remove. |
+| Catalog scope | Hymnal material plus any PCO song the user chooses to pull in. |
+| "Used" semantics | Exact text and tune: an entry is used only when its own PCO song was scheduled. |
+| Tags | Mirror PCO tag groups; the app reads and assigns them in PCO. |
+| Numbers | Plain integers suffice for numbered books. Also needed: **books with no numbering** (the church's own "Chorus Book"), and an unnumbered location such as "front cover" (the Doxology). |
+| Credits | Labeled convention inside PCO's `author` field, parsed by the app into roles, edited through the app. Roles at start: Words, Music, Arr., Trans. (editable in settings). |
+| Where PCO writes go | A dedicated **item note category** on each song item. Numbers only by default; tune name optional via a setting. Item titles are left alone. |
+| Persistence wins | Save schedule selections per plan; a settings page instead of hard-coded strings. |
+| Vocabulary | **Hymn** = the words. **Tune** = the melody. **Song** = one hymn to one tune = one PCO song. **Number** = an entry in a book. Tables: `hymns`, `tunes`, `songs`, `entries`. |
+| Unused Hymns purpose | Pick hymns to introduce (a "to learn" shelf) and find forgotten favorites ("not sung since", needs history). CSV export of the list. |
+| Planning help | Add a song to a chosen PCO plan from the app. |
+| Dashboard (`/`) | Next Sunday's plans (AM/PM) with songs, numbers and status; stats (coverage per book, sung this year). |
+| Friction to fix | Schedule tab choices (version picker goes away with ID links); plans list navigation by date; a standard way to add books, including custom unnumbered ones. |
+| Order | Foundation first. |
+
+## What exists today (code map, 2026-10-03)
+
+- **Books:** Rejoice Hymns (`R-`) and Great Hymns of the Faith (`G-`) in `hymns.json` (929 records; `song_title`, `tune_name`, `great_hymns_of_the_faith`, `rejoice_hymns`; `-1` = not in book; `""` = no tune, 110 records; `0` once = front cover). 905 distinct titles, 23 with several tunes; 317 settings in both books. 8 descants/rounds stored as separate titles with their own numbers.
+- **PCO layer** (`lib/pco/`): HTTP Basic with one org-wide PAT; GET only; `guardUrl` allows only `https://api.planningcenteronline.com/services/v2/`, refuses `%` and userinfo, `redirect: "error"`, 15 s timeout, one 429 retry when `Retry-After` is at most 5 s. `pcoFetchAll` follows `links.next` and throws past `maxPages`. Getters wrapped in React `cache()`. Fetched: service types, plans, items (`include=song`), songs. Not fetched: arrangements, keys, tags, notes, plan history.
+- **Matching is by title everywhere.** Hymnbook lookup keyed by the plan item title (`lib/queries/plans.ts` → `matchHymns`); the Schedule tab re-matches on `normalizeTitle(item.title)`; Unused Hymns matches PCO song titles against hymnal titles plus `last_scheduled_at`, with a Levenshtein review bucket. Copyright joins by PCO song ID (`joinItemsToSongs`).
+- **Text generation is code:** `lib/copyright.ts` (author heuristic, hard-coded `CCLI Streaming License 1564484`), `lib/serviceSchedule.ts` (`Title (R-n/G-m)` under `Sunday AM M/D/YY`; `"Sunday Morning"`/`"Sunday Evening"` literals; prints `G-0` for the Doxology). Output leaves only via the clipboard.
+- **No persistence, no writes.** Schedule selections live in `PlanProvider`'s reducer and are lost on leaving the plan. In-process TTL caches only (`lib/ttlCache.ts`; the unused-hymns cache on `globalThis`).
+- **Deploy** (`.github/workflows/deploy.yml`): Node 20 on the runner, `npm ci`, `npm test`, `npm run build`, then a package of `.next` + `public` + package files with `npm ci --omit=dev --ignore-scripts`, scp to the server, `.env.production` written from secrets, `pm2 restart`. The server sources nvm. `next.config.ts` has `output: 'standalone'` (unused) and `typedRoutes: true`.
+- **Tests:** Vitest, node env, logic in `lib/`, stubbed-fetch helpers in `lib/pco/testing.ts`, no component/E2E harness.
+- **Pattern to copy for new pages:** the Unused Hymns page (server page → `lib/queries` → `initialResult` prop → client view with `useUrlState` → server action in `actions.ts` that calls `auth()`, pending in `useState`, caches on `globalThis`).
+
+## Recommendation
+
+### Principle: Planning Center owns the service and the song; the app owns the hymnal index and the links
+
+1. **Every join is by ID.** A catalog song carries its PCO song ID. Titles are for people and for *suggesting* links. This removes the title-matching bug class and makes renamed plan items harmless.
+2. **A PCO song is one hymn to one tune.** The catalog adds the identities PCO cannot express: the **hymn** (words, shared by tunes), the **tune** (shared by hymns) and the **entries** (book + number or position) that point at a song.
+3. **The catalog covers every hymnal entry whether or not a PCO song exists** (Unused Hymns needs them) plus any PCO song pulled in.
+4. **PCO stays the only store for credits, copyright and CCLI.** Credits follow a labeled convention inside `author` (`Words: Isaac Watts; Music: Lowell Mason; Arr.: John Doe`), parsed into typed rows in the local mirror and written back by the app's credit editor. Derived rows, not a second truth. Fields that do not parse are flagged, never mass-rewritten.
+5. **Tags live in PCO tag groups**, mirrored locally for filtering, assigned through the API.
+6. **A local SQLite database** holds the catalog, links, a PCO mirror refreshed by sync, user state (selections, settings, shelves), import runs and a write log. A JSON export keeps the catalog diffable in git.
+7. **Writes to PCO go through one module** with refresh-before-write, a preview, and an audit row.
+
+Why not the alternatives: *everything in PCO* has no place for never-sung entries, no shared tune identity, and would encode numbers in free text; *structured files in git* still need a rebuild per edit and cannot be edited on the server; *credits only in the app DB* means two sources that drift and stale PCO song pages and CCLI reports.
+
+### Storage: Node's built-in `node:sqlite`, hand-written SQL, migrations embedded in the build
+
+- **Why not a native driver:** the deploy package runs `npm ci --omit=dev --ignore-scripts`, which skips `better-sqlite3`'s binary download, and a runner-built binary must match the server's platform and Node ABI. `node:sqlite` (unflagged since Node 22.13) has no install step and no ABI coupling, so the deploy stays as it is.
+- **Node upgrade is due anyway:** Node 20 is end-of-life (April 2026). Pin Node 22 LTS in `.nvmrc`, `package.json#engines`, `@types/node@^22`, `deploy.yml` (`node-version: "22"`), and the server's nvm default. Phase 0 verifies `node --version`, `uname -m` and the `node:sqlite` import on the server.
+- **No ORM.** Ten small tables, one user: typed row mappers in `lib/db/*` (the `mappers.ts` style already used for PCO) and SQL in named functions. Migrations are TypeScript modules exporting SQL strings (`lib/db/migrations/0001_catalog.ts` …) applied in order by `migrate(db)` against a `schema_migrations` table, so they ship inside `.next` with no deploy changes. Fallback if the spike finds a blocker: Drizzle + `better-sqlite3`, dropping `--ignore-scripts` from the package step.
+- **Opening the DB:** `lib/db/index.ts` (`import "server-only"`) exposes `getDb()` that lazily opens `process.env.DATABASE_PATH` (default `./data/service-integrator.sqlite`, gitignored) and caches the handle on `globalThis` (convention 15). Nothing opens the DB at import time, so the credential-less CI build keeps working. `instrumentation.ts` `register()` (Node runtime only) runs `migrate()` and starts the schedulers (below). WAL mode, `foreign_keys = ON`.
+- **Tests:** `lib/db/testing.ts` opens `:memory:`, runs `migrate()`, and offers seed builders (`seedBook`, `seedHymn`, `seedSong`, `seedEntry`, `seedPcoSong`). Queries are tested against it; pages are not tested (no harness), so every decision lives in `lib/`.
+- **Backups:** a daily in-process `VACUUM INTO` to `DATABASE_BACKUP_DIR` keeping 14 files, plus the JSON export (Settings → Data, and a `scripts/export-catalog.ts`). `deploy.yml` writes `DATABASE_PATH` and `DATABASE_BACKUP_DIR` into `.env.production`, pointing outside `~/service-integrator` (the tar extracts there).
+
+### Data model
+
+```text
+books              id, code ('R','G','CB'), name, short_name, numbered (0/1), label_format ('R-{n}'; unnumbered: short_name),
+                   sort_order, active
+hymns              id, title, first_line, notes                               -- the words
+hymn_aliases       id, hymn_id, alias, normalized  UNIQUE(normalized)
+tunes              id, name, meter, notes                                     -- ST. ANNE
+tune_aliases       id, tune_id, alias, normalized  UNIQUE(normalized)
+songs              id, hymn_id, tune_id (null = unknown/none), pco_song_id (null, UNIQUE), linked_at,
+                   linked_by ('auto'|'manual'|'import'), notes                UNIQUE(hymn_id, tune_id)
+entries            id, book_id, song_id, number (int, null), position (int, null; order inside an unnumbered book),
+                   location_label ('front cover'), variant_note ('Descant, last chorus only')
+                   UNIQUE(book_id, number) [NULLs allowed], UNIQUE(book_id, song_id, variant_note)
+song_marks         song_id, mark ('to-learn'), note, created_at             -- the "to learn" shelf
+pco_songs          id (PCO id), title, author, copyright, ccli_number, admin, hidden, last_scheduled_at,
+                   updated_at, synced_at, ignored_at                         -- mirror
+pco_song_credits   pco_song_id, role, name, position, parse_status ('ok'|'legacy'|'unparsed')   -- derived
+pco_tag_groups     id, name, tags_for;   pco_tags  id, group_id, name;   pco_song_tags  pco_song_id, tag_id
+plan_occurrences   plan_id, service_type_id, plan_date, item_id, pco_song_id, sequence, synced_at   (phase 6)
+schedule_selections plan_id, item_id, option ('numbers'|'blank'|'custom'), custom_text, updated_at
+settings           key, value (JSON), updated_at
+import_runs        id, at, kind ('hymns-json'|'csv'), book_id, status ('preview'|'applied'|'discarded'),
+                   source_name, report (JSON), rows (JSON)
+sync_runs          id, kind ('pco-songs'|'tags'|'history'), started_at, finished_at, ok, message, counts (JSON)
+write_log          id, at, kind ('item-note'|'song'|'item'|'tags'|'email'), target, payload (JSON), result (JSON)
+schema_migrations  id, applied_at
+```
+
+Settings keys (typed in `lib/settings.ts` with defaults so the app works before anything is saved): `ccliLicenseNumber`, `scheduleHeaderLabels` (`{ "<serviceTypeId>": "Sunday AM" }`), `hymnNoteCategoryName` (default "Hymnal"), `hymnNoteTemplate` (`{numbers}` or `{numbers} · {tune}`), `numberSeparator` (` / `), `creditRoles` (`["Words","Music","Arr.","Trans."]`), `creditPhrases` (`{"Words":"Words by", …}`), `emailRecipients`, `emailSubjectTemplate`.
+
+### Credits convention (`lib/credits.ts`, pure, tested)
+
+- Grammar: `credits := group (";" group)*`, `group := label ":" names`, `names := name ("," name)*`; labels are the settings roles, case-insensitive; `Words & Music: X` fills both roles. Example: `Words: Isaac Watts; Music: Lowell Mason; Arr.: John Doe`.
+- `parseCredits(author, roles)` returns `{ status: "ok", credits }`, `{ status: "legacy", credits }` (today's comma/" and " heuristic from `lib/copyright.ts` lines 25-74, kept as the fallback so existing songs keep working) or `{ status: "unparsed" }`.
+- `renderCredits(credits)` writes the convention back; `renderCreditLine(credits, phrases)` produces `Words by A and B. Music by C. Arr. by D.` and `Words and Music by X` when the same names hold both roles. `formatCopyrightText` takes credits and settings instead of an author string; its characterization tests move under the legacy parser, and the CCLI line reads `ccliLicenseNumber`.
+- The credit editor (song page) shows parse status, offers a guided split for `legacy`/`unparsed`, and writes the convention to PCO (`PATCH /songs/{id}`) only when the user saves.
+
+### PCO writes and sync (`lib/pco/`)
+
+- `client.ts` gains `pcoMutate<T>(method: "POST" | "PATCH" | "DELETE", path, body?)`: same `guardUrl`, `redirect: "error"`, timeout and 429 policy; `cache: "no-store"`; a 422 becomes `PcoValidationError extends PcoError` carrying PCO's `errors[].detail`. `jsonApi(type, attributes, relationships?)` builds bodies. `testing.ts` keys stub routes by `"METHOD url"` and captures bodies.
+- `pacer.ts`: a token bucket on `globalThis` (80 requests per 20 s, leaving headroom under PCO's 100) that sync jobs await before each request; interactive page loads are not paced.
+- `writes.ts` is the **only** module that mutates PCO: `upsertItemNote`, `deleteItemNote`, `createSong`, `updateSong`, `createItem`, `deleteItem`, `reorderItems`, `assignTags`. Each performs its fresh read, writes, and returns what changed; the caller logs a `write_log` row.
+- New read getters: `getItemNoteCategories(st)`, `getItemNotes(st, plan, item)` (or `include=item_notes` on items), `getTagGroups()`, `getSongTags(songId)`, `getSongSchedules(songId)`.
+- Orchestrations in `lib/queries/`: `syncHymnNotes(st, plan)` (preview = `diffHymnNotes` in `lib/hymnNotes.ts`, pure; confirm = writes), `createSongInPlanningCenter(songId, form)`, `addSongToPlan(st, plan, pcoSongId)`, `assignSongTags`, `syncPcoSongs()` (4 requests, on demand and hourly), `syncTags()`, `syncPlanHistory()` (phase 6: list plans per service type, compare `updated_at` with stored, refetch items only for changed plans; initial backfill ~220 paced requests ≈ 1 minute).
+- Schedulers: `instrumentation.ts` starts `setInterval` jobs (songs hourly, history daily) guarded by a `globalThis` flag; each run writes a `sync_runs` row shown on Settings and the dashboard. Server actions trigger the same functions on demand and call `auth()` first.
+- **Spike checklist (Phase 0, against a throwaway plan with the PAT):** `GET /service_types/{st}/item_note_categories`; create/update/delete of `…/items/{id}/item_notes` with the `item_note_category` relationship, and whether `include=item_notes` works on the items list; `POST /songs` and whether a default arrangement is created automatically; `POST …/plans/{p}/items` with `relationships.song` (is an arrangement required?); `DELETE …/items/{id}`; `POST …/plans/{p}/item_reorder`; `GET /tag_groups?include=tags`, `include=tags` on `/songs`, and the `assign_tags` payload; whether `last_scheduled_at` counts future plans; whether `where[updated_at]` filtering works on plans. Record findings in `docs/superpowers/plans/2026-10-04-song-catalog.md`.
+
+### Import from `hymns.json` (one time, `lib/import/hymnsJson.ts`, pure, tested against the real file)
+
+- Books R and G (numbered). Each record → song (hymn by `normalizeTitle`, tune by normalized name; empty tune = null and flagged) with one entry per book where the number is not `-1`.
+- Split pairs (Rejoice row with tune + Great row with empty tune, same hymn, unambiguous) merge into one song with two entries; ambiguous ones ("Thank You, Lord") go to the report.
+- "(Descant …)" / "(A Round)" parentheticals become `entries.variant_note` on the song with the base title and the record's tune (a round with a different tune is its own song).
+- `0` → `number = null, location_label = 'front cover'`.
+- A small alias/typo merge list (DARWAL→DARWALL, "Alter", "Ten Thousands", "Hallelujah! What a Savior" pairs, …) is applied and listed.
+- The run is stored in `import_runs`; its report (counts: 3 split pairs, 8 variants, 110 empty tunes, merges) is the first reconcile work list. The test pins those counts.
+
+### Linking replaces matching (`lib/reconcile.ts`, pure)
+
+- `suggestLinks(pcoSongs, catalogIndex)` scores candidates with `normalizeTitle`, aliases, the trailing-parenthetical tune hint (`/\s*\(.*\)\s*$/` from `lib/unusedHymns.ts`) and `levenshtein`/`isNearMatch` (moved out of `lib/unusedHymns.ts`), returning `reason: "exact" | "alias" | "tune-hint" | "near"`. Exact unique matches auto-link (`linked_by = 'auto'`, undoable); the rest are chosen from suggestions or search, created as a new catalog song, or ignored.
+- Catalog songs without a link are "never in PCO" (unused by definition) and offer "Create in Planning Center".
+
+### What the existing features become
+
+- **Plan pages / Schedule tab:** numbers come from `item.songId → songs.pco_song_id → entries`. The version picker disappears (one PCO song is one catalog song); choices become Numbers / Leave blank / Custom and persist. An unlinked song shows inline suggestions and a one-click Link instead of "Song not found in hymn books".
+- **Unused Hymns:** a filter on the catalog home (`?used=never`, later `?notSince=`): never linked, or linked and never scheduled. Export CSV. The review bucket disappears except for import flags. `/unused-hymns` redirects.
+- **Copyright text:** rendered from credit roles and settings.
+- **Schedule text:** prefixes, order and labels from `books` (`R-396 / G-317`; `G-Front Cover`; unnumbered books print their short name).
+
+## Pages and navigation (from the UX design)
+
+Top bar: **Plans · Catalog** (Reports in phase 6), a Settings icon beside Sign Out (`NAV_UTILITY_ITEMS`). Catalog sub-nav from `CATALOG_SECTIONS` in `lib/routes.ts`: Songs · Tunes · Books · Reconcile · Import. Unused Hymns leaves the top bar in phase 2 (catalog filter). Param parsers beside `parsePcoId`: `parseCatalogId` (`/^[1-9][0-9]{0,9}$/`) and `parseBookCode` (`/^[A-Za-z][A-Za-z0-9_-]{0,7}$/`).
+
+```text
+app/(app)/
+  page.tsx                          dashboard (phase 3: next Sunday AM/PM, link + note status; phase 6: stats)
+  catalog/
+    layout.tsx                      CatalogSectionNav (useSelectedLayoutSegment) + children; fetches nothing
+    page.tsx · loading.tsx          songs home: getCatalogSongs() → CatalogSongsView (q, book, linked, used, sort, page in URL)
+    songs/new/page.tsx              SongForm (also reached with ?pcoSongId=&returnTo=)
+    songs/[songId]/page.tsx …       SongDetailView: HymnCard, TuneCard, EntriesCard, PcoLinkCard, CreditsCard, TagsCard, HistoryCard
+    tunes/page.tsx, tunes/[tuneId]/page.tsx
+    books/page.tsx, books/[bookCode]/page.tsx   browse by number or position
+    reconcile/page.tsx · actions.ts ReconcileView: unlinked PCO songs with suggestions, unlinked catalog songs, auto-link review
+    import/page.tsx, import/[runId]/page.tsx · actions.ts
+    actions.ts                      catalog edits
+  settings/page.tsx · actions.ts    one form per card; Export JSON; Sync now; sync status
+  reports/page.tsx                  phase 6
+  plans/[serviceTypeId]/[planId]/actions.ts   linkPcoSong, saveScheduleSelection, syncHymnNotes, emailPlanSummary, addSongToPlan
+```
+
+Plan pages: `PlanDetail` gains `catalog: Record<pcoSongId, CatalogMatch>`, `books`, `selections`, `notes`, `scheduleSettings`; `PlanHeader` (already a connector) renders `SyncHymnNotesAction` and `EmailSummaryAction`, each opening a `ui/Dialog` (native `<dialog>`) with a preview and a confirm; `ServiceSchedule` renders `ScheduleSongCard` per song item with `EntryNumbers` or `LinkToCatalogInline`.
+
+Forms convention (documented once): `lib/forms.ts` `FormState` + field readers; validators in `lib/catalog/validation.ts`; actions `(prev, formData) => FormState` that call `auth()`, parse, write in a transaction, `revalidatePath`, redirect on create; client uses `useActionState`, a shared `ui/SubmitButton` (`useFormStatus`), `useOptimistic` only for rows that disappear or chips that toggle.
+
+## Phases
+
+Each phase is one PR to `main`, a complete feature, four gates green, every `(app)` route ƒ dynamic, docs updated. Land `refactor/multi-page-routing` first (it is an ancestor-clean fast-forward of `main`); start the new work in a fresh worktree branched from `main` (or from the routing tip if the merge slips; phase 0 touches only new files, `deploy.yml` and docs).
+
+| Phase | Goal | Touches | User sees | Removed |
+|---|---|---|---|---|
+| **0 Spike & plumbing** | Prove PCO writes and SQLite on the server; ship plumbing with no product change | Node 22 pin (`.nvmrc`, engines, `@types/node`, `deploy.yml`, server nvm); `lib/db/{index,migrate,testing}.ts` + `migrations/0001`; `instrumentation.ts`; `lib/pco/client.ts` `pcoMutate`, `pacer.ts`, `testing.ts` method-keyed stubs; `deploy.yml` env (`DATABASE_PATH`, `DATABASE_BACKUP_DIR`); spike notes; architecture.md "Database" and "Writes to Planning Center" sections, conventions 17-18 | Nothing new (Settings shows "database: ok") | — |
+| **1 Catalog core** | Browsable catalog seeded from `hymns.json` with a review report | Schema (books, hymns, tunes, aliases, songs, entries, import_runs, settings); `lib/queries/catalog.ts`; `lib/catalog/{ids,filter,validation}.ts`; `lib/import/hymnsJson.ts`; `/catalog`, songs/tunes/books pages, `/catalog/import`; `CATALOG_SECTIONS`, nav; `ui/Segmented`, `ui/Dialog` | Search and filter by book; song, tune, book pages; the seed report | Nothing yet (plan pages still read `hymns.json`) |
+| **2 ID links** | Numbers come from links; the hunt disappears from the Schedule tab | `pco_songs` mirror + `syncPcoSongs`; `lib/reconcile.ts`; `/catalog/reconcile`; `/catalog/songs/new` (first form); `getPlanDetail` → `catalog`/`books`; `ScheduleSongCard`, `LinkToCatalogInline`, `EntryNumbers`; plan `actions.ts` (`linkPcoSong`); behavior commits flipping `lib/serviceSchedule.test.ts` and `lib/scheduleSelections.test.ts` (version picker removed); catalog `?used=never` + CSV export (`lib/csv.ts`); `/unused-hymns` → redirect | Auto-linked exact matches; one-click Link on unlinked songs; renamed items keep numbers; Unused Hymns as a catalog filter with CSV | `hymns.json`, `lib/hymnCatalog.ts`, `lib/hymnMatch.ts`, `computeUnusedHymns`, `lib/queries/unusedHymns.ts`, `UnusedHymns/*`, `HymnData`/`HymnVersion`, `selectedVersionIndex` |
+| **3 Persist, settings, hymnal notes, dashboard v1** | Choices survive; numbers land in PCO; the app opens on next Sunday | `schedule_selections`, `settings`, `write_log`; `lib/settings.ts`, `/settings`; `lib/hymnNotes.ts` (`formatHymnNote`, `diffHymnNotes`); `lib/pco/itemNotes.ts` + `writes.ts`; `SyncHymnNotesAction`/`Dialog`; `saveScheduleSelection`; copyright/schedule read settings; `/` dashboard (next AM/PM plans, link and note status, to-dos) | Persisted selections; Settings; "Sync hymn notes" with per-item preview; a dashboard | Hard-coded CCLI number and service-type literals |
+| **4 PCO song lifecycle & outputs** | Create songs in PCO, typed credits, tags, add to plan, email | `lib/credits.ts` + `CreditsCard` editor; `createSongInPlanningCenter`; `addSongToPlan` (song page → pick an upcoming plan); `pco_song_credits`, tag mirror + `TagsCard` + filters; `lib/email.ts` (Nodemailer over `SMTP_URL`, `EMAIL_FROM`) + `EmailSummaryAction` | "Create in Planning Center" prefilled; credits with roles; tag filters; add to plan; Email button | The author heuristic becomes the legacy parser only |
+| **5 Catalog editing & books** | Day-to-day edits and new books without touching files | Remaining forms (entries, rename, aliases, merge hymns/tunes with preview, add/reorder books incl. unnumbered); `lib/catalog/merge.ts`; `lib/import/bookCsv.ts` + preview/apply; `exportCatalogJson`; `song_marks` "to learn" shelf; plans list date navigation (month jump / upcoming vs past) | Edit anything; import a book from CSV with a validation report; JSON backup; a "to learn" shelf | The seed-from-`hymns.json` button and its module |
+| **6 History & reports** | What was sung over 2-5 years, and planning help from it | `plan_occurrences` + `syncPlanHistory` (paced, incremental); `lib/queries/history.ts`, `lib/reports.ts`, `/reports`; `HistoryCard`; `?notSince=` on the catalog; dashboard stats; repeat warnings on the plan page; item reorder if the spike confirmed it | Reports by frequency, last sung, not sung since; song history; stats | `last_scheduled_at` stops being the only usage signal |
+
+Docs per phase in `docs/architecture.md`: Database and Writes sections (0); Overview table rows, route map, recipe "Add a catalog page", convention 19 (a parser per ID kind) (1); recipe "Add a server-action form", the selections exception to "server data stays in props" (2); recipes "Add a PCO write" and "Add a setting" (3); "Add a book" and "Import a book from CSV" in README too (5); "Add a report" and pacer notes (6). `CLAUDE.md` gets one line about migrations.
+
+## Verification
+
+- **Gates per PR:** `npm test`, `npm run lint`, `npm run typecheck`, `npm run build` (every `(app)` route ƒ). CI runs `npm test` before deploy.
+- **Phase 0:** on the server, `node --version` ≥ 22.13 and `node -e "require('node:sqlite')"`; `curl` the spike endpoints with the PAT against a throwaway plan and record results; after deploy, `/settings` shows the database path and migration count; a `VACUUM INTO` backup file appears.
+- **Phase 1:** the import test pins counts (929 records → N songs, 3 split pairs, 8 variants, 110 empty tunes); `/catalog` search for "Amazing Grace" shows R and G numbers; `/catalog/books/G` lists Doxology as "Front cover".
+- **Phase 2:** `/catalog/reconcile` after Sync shows the auto-link count; a plan with a renamed item ("Amazing Grace (Acoustic)") shows numbers on the Schedule tab; Copy All text matches the pinned new format; `/unused-hymns` redirects; CSV downloads and opens in a spreadsheet.
+- **Phase 3:** choose Custom text, leave the plan, return: it persists; "Sync hymn notes" preview lists create/update/unchanged per item, confirm writes notes visible in the PCO plan UI, a second sync shows all unchanged; `/` shows next Sunday's AM and PM plans.
+- **Phase 4:** create a catalog song in PCO, see it in PCO with the labeled author string, link stored; edit credits of a legacy song and see the copyright text change; Email sends to the configured recipients and logs a row; Add to plan appears as a new item in PCO.
+- **Phase 5:** add a "Chorus Book" (unnumbered), import a CSV with a deliberate duplicate number and see the report block it; mark a song "to learn" and filter on it; export JSON and diff against the previous export.
+- **Phase 6:** after backfill, a song page shows its history; `/reports` last-sung agrees with PCO's `last_scheduled_at` for a sample of songs; sync runs appear on Settings.
+- **Browser checks** while signed in with `npm run dev`; prefetch behavior under `npm run build && npm start`.
+
+## Risks and defaults
+
+1. **`node:sqlite` is still marked experimental** (stability 1.1) even though unflagged. Default: use it behind `lib/db/index.ts` so a swap to `better-sqlite3` touches one file; the spike confirms the import works inside `next start`.
+2. **Item note categories** must exist per service type (the API does not create them). Default: category named "Hymnal" (setting); Settings lists found categories and warns; sync skips a service type with a clear message rather than writing to `description`.
+3. **The labeled author convention** changes what PCO shows and 397 songs do not follow it. Default: never mass-rewrite; legacy parser for existing fields; write the convention only when the user edits credits.
+4. **Rate limit during backfill.** Default: the pacer at 80/20 s; backfill runs from the scheduler, not from a page render.
+5. **Behavior changes** (version picker removed, `G-0` → `G-Front Cover`, settings-driven header) each land in their own commit that flips the pinned assertions.
+6. **Email transport.** Default: Nodemailer over SMTP with a Google Workspace app password; Resend if SMTP is blocked from the host.
+7. **The in-flight routing branch.** Default: merge it first; if it slips, base phase 0 on its tip and rebase once.
+
+## Final confirmations (user, 2026-10-03)
+
+- **Storage driver:** `node:sqlite` with hand-written SQL and build-embedded migrations; Node 22 LTS. Drizzle + `better-sqlite3` is the documented fallback only.
+- **Version picker:** removed. Schedule tab choices are Numbers / Leave blank / Custom, persisted per plan. Its own behavior commit flips the pinned tests.
+- **Unnumbered books in schedule text:** configurable per book through `books.label_format`, defaulting to the book's short name (`Title (R-396 / Chorus Book)`).
+- **Branching:** land `refactor/multi-page-routing` to `main` first, then start phase 0 in a new worktree branched from `main`.
+
+## First concrete steps when implementation starts
+
+1. Confirm the routing branch has merged and `main` deployed; `git worktree add ../service-integrator-catalog -b feat/catalog-0-spike main`.
+2. Phase 0 spike: Node 22 on runner and server; `node:sqlite` import inside `next start`; the PCO endpoint checks listed above against a throwaway plan; write findings to `docs/superpowers/plans/2026-10-04-song-catalog.md`.
+3. Phase 0 plumbing PR: `lib/db/*` with `migrate()` and `:memory:` tests, `instrumentation.ts`, `pcoMutate` + `pacer.ts` + method-keyed stubs with tests, `deploy.yml` env additions, architecture.md sections. Four gates green; no product change.
+4. Then phase 1 as tabled.
+
+## Execution
+
+Decisions the orchestrator made where the plan was silent or inconsistent. They override the sections above.
+
+**Branches and worktree.** All work happens in `/Users/davidpolar/dev/service-integrator-catalog` (a sibling worktree of the main checkout, which stays on `main`). One branch per phase, each stacked on the previous one: `feat/catalog-0-spike`, `feat/catalog-1-core`, `feat/catalog-2-links`, `feat/catalog-3-persist`, `feat/catalog-4-pco-songs`, `feat/catalog-5-editing`, `feat/catalog-6-history`. Nothing is pushed and no PR is opened without the user.
+
+**Node.** CI and the server run Node 22 LTS (`.nvmrc`); local development may run a newer Node. Write code against the **Node 22.13** API: check the "Added in" notes in the Node docs before using any `node:sqlite` method or option, because CI runs the tests on 22. The orchestrator re-runs the tests on Node 22 at the end of each phase.
+
+**Migrations.** One migration per phase, applied in order, never edited once committed (a change is a new migration):
+
+| File | Phase | Tables |
+|---|---|---|
+| `0001_init.ts` | 0 | `settings`, `sync_runs` |
+| `0002_catalog.ts` | 1 | `books`, `hymns`, `hymn_aliases`, `tunes`, `tune_aliases`, `songs`, `entries`, `import_runs` |
+| `0003_pco_songs.ts` | 2 | `pco_songs` |
+| `0004_selections.ts` | 3 | `schedule_selections`, `write_log` |
+| `0005_credits_tags.ts` | 4 | `pco_song_credits`, `pco_tag_groups`, `pco_tags`, `pco_song_tags` |
+| `0006_marks.ts` | 5 | `song_marks` (and any book changes) |
+| `0007_history.ts` | 6 | `plan_occurrences` |
+
+**Database access.**
+- `getDb()` opens the file, sets the pragmas and runs `migrate()` once on first open (idempotent). `instrumentation.ts` calls it at boot so a bad database shows up in the log at once, but a boot failure is logged, not thrown: plan pages do not need the database until phase 2, and Settings shows the error.
+- Layering mirrors `lib/pco` + `lib/queries`: `lib/db/<area>.ts` holds SQL in named functions that take `db: DatabaseSync` first and are tested on `:memory:` (`lib/db/testing.ts`); `lib/queries/<area>.ts` (server-only) calls `getDb()` and `@/lib/pco` and is what pages import. Writes run inside `withTransaction(db, fn)` with a synchronous `fn`.
+- `sync_runs.kind` also takes `'backup'`, so the daily `VACUUM INTO` is listed on Settings like the sync jobs.
+
+**hymns.json.** Phase 2 removes every *runtime* reader of it (`lib/hymnCatalog.ts`, `lib/hymnMatch.ts`, Unused Hymns). The file itself stays as the seed import's input until phase 5 removes the seed module; then the file goes too, replaced by the JSON export.
+
+**Seed import.** Preview always works; apply refuses when the catalog already has books, so the seed can never run twice.
+
+**Server steps belong to the user.** The orchestrator cannot reach the server. Before phase 0 merges, the user installs Node 22 with nvm, makes it the default, and runs `pm2 update` so the PM2 daemon and the app move to it. `deploy.yml` checks `node:sqlite` on the server before extracting the package, so a deploy to an old Node fails and leaves the running build in place.
+
+**Agent rules** (every implementer brief):
+- Work only inside the worktree above, with absolute paths. Never touch `/Users/davidpolar/dev/service-integrator` (the main checkout).
+- Stay inside your listed file set. Commit with explicit paths (`git commit -m "…" -- <paths>`), retrying if `index.lock` is held, so agents sharing the tree never commit each other's files.
+- One conventional commit per logical step; a behavior change gets its own commit that flips the assertions it changes. Every message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Follow `docs/architecture.md` (conventions and recipes) and `CLAUDE.md`.
+- Before each commit run the tests for what you touched (`npx vitest run <files>`) and `npm run lint`. When another agent shares the tree, never run `next build`, `next typegen` or `npm run typecheck` unless your brief says you own them (all three write `.next/`); the orchestrator runs the full gates after every wave.
+- Report in at most 200 words: commits, files, test counts, deviations from the plan, open questions. No file dumps.
+
+## Spike findings
+
+_Pending: filled in by the phase 0 spike._
