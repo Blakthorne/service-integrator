@@ -1,5 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { groupPlansByDate, sortPlanDates } from "./plansByDate";
+import {
+    PLAN_DATES_PER_PAGE,
+    groupPlansByDate,
+    localYmd,
+    pageOfMonth,
+    planMonths,
+    sortPlanDates,
+    splitPlanDates,
+} from "./plansByDate";
 
 // Characterization tests: they pin how the plans list orders and groups plans
 // and orders its date headings, work that moved from an API route and the
@@ -161,5 +169,70 @@ describe("sortPlanDates", () => {
         ]);
 
         expect(sortPlanDates(grouped)).toEqual(Object.keys(grouped));
+    });
+});
+
+describe("localYmd", () => {
+    test("gives a moment's date on the local calendar", () => {
+        expect(localYmd(new Date(2026, 9, 4, 23, 59))).toBe("2026-10-04");
+        expect(localYmd(new Date(2027, 0, 9, 0, 1))).toBe("2027-01-09");
+    });
+});
+
+describe("splitPlanDates", () => {
+    const DATES = ["2026-10-11", "2026-10-04", "2026-09-27", "2026-10-18", "2026-09-20"];
+
+    test("gives the dates from today on, soonest first, and the earlier ones, newest first", () => {
+        expect(splitPlanDates(DATES, "2026-10-04")).toEqual({
+            upcoming: ["2026-10-04", "2026-10-11", "2026-10-18"],
+            past: ["2026-09-27", "2026-09-20"],
+        });
+    });
+
+    test("counts a plan dated today as upcoming all day", () => {
+        expect(splitPlanDates(["2026-10-04"], "2026-10-04")).toEqual({ upcoming: ["2026-10-04"], past: [] });
+        expect(splitPlanDates(["2026-10-04"], "2026-10-05")).toEqual({ upcoming: [], past: ["2026-10-04"] });
+    });
+
+    test("splits no dates into nothing, and leaves its argument alone", () => {
+        expect(splitPlanDates([], "2026-10-04")).toEqual({ upcoming: [], past: [] });
+        const dates = [...DATES];
+        splitPlanDates(dates, "2026-10-04");
+        expect(dates).toEqual(DATES);
+    });
+});
+
+describe("planMonths", () => {
+    test("lists each month once, in the order the dates reach it, with its label and count", () => {
+        expect(planMonths(["2026-10-04", "2026-09-27", "2026-09-20", "2025-12-28", "2026-09-06"])).toEqual([
+            { month: "2026-10", label: "October 2026", dates: 1 },
+            { month: "2026-09", label: "September 2026", dates: 3 },
+            { month: "2025-12", label: "December 2025", dates: 1 },
+        ]);
+    });
+
+    test("leaves out a date that does not start with a year and a month", () => {
+        expect(planMonths(["", "soon", "2026-1-04", "2026-10"])).toEqual([
+            { month: "2026-10", label: "October 2026", dates: 1 },
+        ]);
+        expect(planMonths([])).toEqual([]);
+    });
+});
+
+describe("pageOfMonth", () => {
+    const PAST = ["2026-09-27", "2026-09-20", "2026-08-30", "2026-08-23", "2026-07-26"];
+
+    test("gives the page that holds the month's first date in the list's order", () => {
+        expect(pageOfMonth(PAST, "2026-09", 2)).toBe(1);
+        expect(pageOfMonth(PAST, "2026-08", 2)).toBe(2);
+        expect(pageOfMonth(PAST, "2026-07", 2)).toBe(3);
+    });
+
+    test("pages 25 dates at a time by default, and is null for a month with no date", () => {
+        expect(PLAN_DATES_PER_PAGE).toBe(25);
+        const many = Array.from({ length: 60 }, (_, index) => `2026-${String(12 - Math.floor(index / 5)).padStart(2, "0")}-01`);
+        expect(pageOfMonth(many, "2026-07")).toBe(2);
+        expect(pageOfMonth(PAST, "2026-06")).toBeNull();
+        expect(pageOfMonth([], "2026-06")).toBeNull();
     });
 });
