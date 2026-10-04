@@ -11,7 +11,7 @@ import {
     seedWriteLog,
 } from "@/lib/db/testing";
 import { recentWrites } from "@/lib/db/writeLog";
-import { InvalidPcoIdError } from "@/lib/pco";
+import { InvalidPcoIdError, fetchPlanItems, getPlanItems } from "@/lib/pco";
 import {
     PCO_BASE,
     calledRequests,
@@ -34,6 +34,18 @@ vi.mock("@/lib/db", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/db")>()),
     getDb,
 }));
+
+// The real barrel, with its two reads of a plan's items wrapped in spies
+// that call through, so a test can tell which one the sync uses: React's
+// cache() does not cache outside a server render, so here both read anew.
+vi.mock("@/lib/pco", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("@/lib/pco")>();
+    return {
+        ...actual,
+        getPlanItems: vi.fn(actual.getPlanItems),
+        fetchPlanItems: vi.fn(actual.fetchPlanItems),
+    };
+});
 
 import {
     SYNC_IN_PROGRESS_MESSAGE,
@@ -482,6 +494,9 @@ describe("syncHymnNotes", () => {
             },
         });
 
+        vi.mocked(getPlanItems).mockClear();
+        vi.mocked(fetchPlanItems).mockClear();
+
         const preview = await previewHymnNotes(ST, PLAN);
         expect(preview.kind === "ready" && preview.items.map(({ action }) => action)).toEqual([
             "create",
@@ -490,9 +505,19 @@ describe("syncHymnNotes", () => {
             "dedupe",
             "unchanged",
         ]);
+        expect(getPlanItems).toHaveBeenCalledTimes(1);
+        expect(fetchPlanItems).not.toHaveBeenCalled();
         const result = await syncHymnNotes(ST, PLAN);
 
+        // The sync reads through fetchPlanItems, never the cache()d
+        // getPlanItems, which in a server request would hand back the
+        // preview's read; `reads` alone cannot tell them apart here.
+        expect(fetchPlanItems).toHaveBeenCalledTimes(1);
+        expect(fetchPlanItems).toHaveBeenCalledWith(ST, PLAN);
+        expect(getPlanItems).toHaveBeenCalledTimes(1);
         expect(reads).toBe(2);
+        const itemReads = fetchMock.mock.calls.filter(([url]) => url === urls.items);
+        expect(itemReads[1][1]).toMatchObject({ cache: "no-store" });
         expect(writesSent(fetchMock).map(({ method, url }) => `${method} ${url}`)).toEqual([
             `POST ${urls.notes("1")}`,
             `DELETE ${urls.note("4", "9005")}`,
