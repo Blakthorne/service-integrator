@@ -149,6 +149,10 @@ describe("createSongAction", () => {
         ["a backslash address", "/\\example.com"],
         ["the sign-in page", "/auth/signin"],
         ["text that is not a path", "catalog"],
+        ["a path a browser resolves to another host", "/.//evil.example/phish"],
+        ["a path whose dot-dot segment makes it another host", "/a/..//x"],
+        ["a path with a dot segment and a backslash", "/.\\/x"],
+        ["a path with an encoded dot segment", "/%2e//evil.example/phish"],
     ])("goes to the new song instead of %s", async (_name, returnTo) => {
         expect(await redirectedTo(submit({ returnTo }))).toBe("/catalog/songs/42");
         expect(revalidatePath).toHaveBeenCalledTimes(2);
