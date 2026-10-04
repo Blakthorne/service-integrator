@@ -8,6 +8,7 @@ import {
     getCatalogSong,
     getCatalogSongLabel,
 } from "@/lib/queries/catalog";
+import { getMirroredPcoSong } from "@/lib/queries/catalogEdit";
 import { routes } from "@/lib/routes";
 
 type CatalogSongPageProps = PageProps<"/catalog/songs/[songId]">;
@@ -24,15 +25,18 @@ export async function generateMetadata({
 }
 
 /**
- * A catalog song: where it is in the books, its hymn and its tune. An ID
- * that is not a catalog ID, or that no song has, ends in `not-found.tsx`.
- * The page reads only the local database, so it has no `loading.tsx`: a
- * link to it keeps the previous page on screen until it is ready.
+ * A catalog song: where it is in the books, its hymn and its tune, and the
+ * Planning Center song it is linked to, as the app's copy of the library
+ * has it. An ID that is not a catalog ID, or that no song has, ends in
+ * `not-found.tsx`. The page reads only the local database, so it has no
+ * `loading.tsx`: a link to it keeps the previous page on screen until it is
+ * ready.
  */
 export default async function CatalogSongPage({ params }: CatalogSongPageProps) {
     const songId = parseCatalogId((await params).songId) ?? notFound();
     const song = getCatalogSong(songId) ?? notFound();
     const books = getCatalogBooks();
+    const pcoSong = song.pcoSongId === null ? null : getMirroredPcoSong(song.pcoSongId);
     const tune = song.tune;
 
     return (
@@ -50,7 +54,7 @@ export default async function CatalogSongPage({ params }: CatalogSongPageProps) 
                     { label: song.hymn.title },
                 ]}
             />
-            <SongDetailView song={song} books={books} />
+            <SongDetailView song={song} books={books} pcoSong={pcoSong} />
         </div>
     );
 }
