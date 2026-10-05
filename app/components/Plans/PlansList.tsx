@@ -9,7 +9,7 @@ import {
     splitPlanDates,
     type MonthJump,
 } from "@/lib/plansByDate";
-import { parsePage } from "@/lib/urlState";
+import { pageUpdates, parsePage } from "@/lib/urlState";
 import type { PlanSummary } from "@/lib/domain";
 import JumpToMonth from "./JumpToMonth";
 import PlanDateCard from "./PlanDateCard";
@@ -39,8 +39,10 @@ const SECTION_HEADING = "text-xl font-semibold text-gray-900 dark:text-gray-100"
  *
  * The page number lives in `?page=` (page 1 has none), changed without a
  * server round trip, and each page change, a jump too, adds a history entry,
- * so Back returns to the previous page. Each row links to the plan's page:
- * the service type is a real link stretched over the row.
+ * so Back returns to the previous page. Going to the page already shown
+ * (a jump to a month on it) writes nothing and adds none (`pageUpdates`).
+ * Each row links to the plan's page: the service type is a real link
+ * stretched over the row.
  */
 export default function PlansList({
     dates,
@@ -57,10 +59,10 @@ export default function PlansList({
     const currentDates = past.slice(startIndex, startIndex + PLAN_DATES_PER_PAGE);
 
     function goToPage(page: number) {
-        setSearchParams(
-            { page: page === 1 ? null : String(page) },
-            { history: "push" }
-        );
+        const updates = pageUpdates(page, currentPage);
+        if (updates !== null) {
+            setSearchParams(updates, { history: "push" });
+        }
     }
 
     function handleJump(month: string): MonthJump {

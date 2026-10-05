@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+    pageUpdates,
     parseEnum,
     parsePage,
     urlWithSearchParams,
@@ -82,6 +83,32 @@ describe("parsePage", () => {
             expect(parsePage("5", Number.NaN)).toBe(5);
             expect(parsePage("5", Number.POSITIVE_INFINITY)).toBe(5);
         });
+    });
+});
+
+describe("pageUpdates", () => {
+    test("sets the page, and removes the parameter for page 1, which has none", () => {
+        expect(pageUpdates(3, 1)).toEqual({ page: "3" });
+        expect(pageUpdates(1, 3)).toEqual({ page: null });
+        expect(withSearchParams("?q=x&page=3", pageUpdates(1, 3)!)).toBe("?q=x");
+    });
+
+    test("is null for the page already shown, so nothing is written", () => {
+        expect(pageUpdates(3, 3)).toBeNull();
+        expect(pageUpdates(1, 1)).toBeNull();
+    });
+
+    test.each([
+        ["a page past the last", "?page=99", 5],
+        ["a page with leading zeros", "?page=005", 5],
+        ["an explicit page 1", "?page=1", 1],
+        ["text that is not a page", "?page=abc", 1],
+    ])("the page shown is not the page the URL spells, with %s", (_name, search, shown) => {
+        // A list of 5 pages shows `shown`; writing it changes the URL (a push would add an entry for no change).
+        expect(parsePage(new URLSearchParams(search).get("page"), 5)).toBe(shown);
+        const location = { pathname: "/plans", search, hash: "" };
+        expect(urlWithSearchParams(location, { page: shown === 1 ? null : String(shown) })).not.toBeNull();
+        expect(pageUpdates(shown, shown)).toBeNull();
     });
 });
 
