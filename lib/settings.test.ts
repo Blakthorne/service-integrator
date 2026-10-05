@@ -13,6 +13,7 @@ import {
     EMAIL_SUBJECT_PLACEHOLDERS,
     HEADER_LABEL_MAX_LENGTH,
     NUMBER_SEPARATOR_MAX_LENGTH,
+    REPEAT_WARNING_WEEKS_MAX,
     SETTINGS,
     SETTING_KEYS,
     defaultScheduleHeaderLabel,
@@ -52,6 +53,7 @@ describe("the registry", () => {
             "creditPhrases",
             "emailRecipients",
             "emailSubjectTemplate",
+            "repeatWarningWeeks",
         ]);
         for (const key of SETTING_KEYS) {
             expect(SETTINGS[key].defaultValue).toEqual(DEFAULT_SETTINGS[key]);
@@ -75,6 +77,7 @@ describe("the registry", () => {
             },
             emailRecipients: [],
             emailSubjectTemplate: "Songs for {date} · {service}",
+            repeatWarningWeeks: 6,
         });
     });
 
@@ -425,6 +428,56 @@ describe("emailSubjectTemplate", () => {
         expect(parsed("emailSubjectTemplate", "x".repeat(EMAIL_SUBJECT_MAX_LENGTH))).toEqual({
             value: "x".repeat(EMAIL_SUBJECT_MAX_LENGTH),
         });
+    });
+});
+
+describe("repeatWarningWeeks", () => {
+    const MESSAGE = "Enter a whole number of weeks from 0 to 52; 0 turns the warnings off.";
+
+    test("is 6 weeks until one is saved, and at most a year", () => {
+        expect(DEFAULT_SETTINGS.repeatWarningWeeks).toBe(6);
+        expect(REPEAT_WARNING_WEEKS_MAX).toBe(52);
+    });
+
+    test("is a whole number of weeks from 0, which turns the warnings off, to 52", () => {
+        for (const weeks of [0, 1, 6, 8, 52]) {
+            expect(parsed("repeatWarningWeeks", weeks)).toEqual({ value: weeks });
+        }
+    });
+
+    test("takes the digits a form posts, with spaces around them", () => {
+        expect(parsed("repeatWarningWeeks", "6")).toEqual({ value: 6 });
+        expect(parsed("repeatWarningWeeks", " 12 ")).toEqual({ value: 12 });
+        expect(parsed("repeatWarningWeeks", "0")).toEqual({ value: 0 });
+        expect(parsed("repeatWarningWeeks", "007")).toEqual({ value: 7 });
+    });
+
+    test("refuses a fraction, a negative number, one over 52, and anything that is not a number", () => {
+        for (const value of [
+            1.5,
+            -1,
+            53,
+            1000,
+            Number.NaN,
+            Number.POSITIVE_INFINITY,
+            "",
+            "  ",
+            "six",
+            "1.5",
+            "-1",
+            "53",
+            "+6",
+            "1e1",
+            "6 weeks",
+            "99999999999999999999",
+            true,
+            null,
+            undefined,
+            [6],
+            { weeks: 6 },
+        ]) {
+            expect([value, parsed("repeatWarningWeeks", value)]).toEqual([value, { message: MESSAGE }]);
+        }
     });
 });
 

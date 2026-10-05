@@ -34,6 +34,7 @@ export const SETTINGS_CARD_TITLES = {
     hymnalNotes: "Hymnal notes",
     credits: "Credits",
     email: "Email",
+    repeatWarnings: "Repeat warnings",
 } as const;
 
 /** What each setting is called on the page, and the card that edits it. */
@@ -58,6 +59,7 @@ export const SETTING_DESCRIPTIONS: Readonly<
     creditPhrases: { label: "Credit phrases", card: SETTINGS_CARD_TITLES.credits },
     emailRecipients: { label: "Email recipients", card: SETTINGS_CARD_TITLES.email },
     emailSubjectTemplate: { label: "Email subject", card: SETTINGS_CARD_TITLES.email },
+    repeatWarningWeeks: { label: "Repeat warning window", card: SETTINGS_CARD_TITLES.repeatWarnings },
 };
 
 /** The longest stored value an issue shows. */
@@ -78,6 +80,8 @@ function defaultInWords(key: SettingKey): string {
                 .join(", ");
         case "emailRecipients":
             return "no recipients";
+        case "repeatWarningWeeks":
+            return `${DEFAULT_SETTINGS.repeatWarningWeeks} weeks`;
         default:
             return JSON.stringify(DEFAULT_SETTINGS[key]);
     }

@@ -66,6 +66,12 @@ export interface AppSettings {
      * `{service}` its service type's name (see `EMAIL_SUBJECT_PLACEHOLDERS`).
      */
     emailSubjectTemplate: string;
+    /**
+     * A plan's song item warns when its song was sung in a past plan within
+     * this many weeks ("Sung Sep 20 (2 weeks ago)"): a whole number from 0
+     * to `REPEAT_WARNING_WEEKS_MAX`, where 0 turns the warnings off.
+     */
+    repeatWarningWeeks: number;
 }
 
 export type SettingKey = keyof AppSettings;
@@ -87,6 +93,7 @@ export const DEFAULT_SETTINGS: Readonly<AppSettings> = Object.freeze({
     }),
     emailRecipients: Object.freeze([]),
     emailSubjectTemplate: "Songs for {date} · {service}",
+    repeatWarningWeeks: 6,
 });
 
 /** What a parser made of a value: the setting's value, or why it is not one, fit to show. */
@@ -122,6 +129,8 @@ export const EMAIL_RECIPIENTS_MAX = 25;
 export const EMAIL_ADDRESS_MAX_LENGTH = 254;
 /** The longest email subject template taken. */
 export const EMAIL_SUBJECT_MAX_LENGTH = 150;
+/** The most weeks the repeat warning looks back: a year. */
+export const REPEAT_WARNING_WEEKS_MAX = 52;
 
 /**
  * The placeholders a plan email's subject may hold, as `{name}`: the plan's
@@ -473,6 +482,27 @@ function parseEmailSubjectTemplate(value: unknown): SettingParse<string> {
     return { ok: true, value: text };
 }
 
+/**
+ * The repeat warning's window in weeks: a whole number from 0 (no warnings)
+ * to `REPEAT_WARNING_WEEKS_MAX`, given as a number (what is stored) or as the
+ * digits a form posts, which may have spaces around them.
+ */
+function parseRepeatWarningWeeks(value: unknown): SettingParse<number> {
+    const text = typeof value === "string" ? value.trim() : null;
+    const weeks = text !== null && /^[0-9]+$/.test(text) ? Number(text) : value;
+    if (
+        typeof weeks !== "number" ||
+        !Number.isInteger(weeks) ||
+        weeks < 0 ||
+        weeks > REPEAT_WARNING_WEEKS_MAX
+    ) {
+        return refuse(
+            `Enter a whole number of weeks from 0 to ${REPEAT_WARNING_WEEKS_MAX}; 0 turns the warnings off.`
+        );
+    }
+    return { ok: true, value: weeks };
+}
+
 /** Every setting's default and parser, by key. */
 export const SETTINGS: { readonly [K in SettingKey]: SettingDefinition<AppSettings[K]> } = {
     ccliLicenseNumber: {
@@ -510,6 +540,10 @@ export const SETTINGS: { readonly [K in SettingKey]: SettingDefinition<AppSettin
     emailSubjectTemplate: {
         defaultValue: DEFAULT_SETTINGS.emailSubjectTemplate,
         parse: parseEmailSubjectTemplate,
+    },
+    repeatWarningWeeks: {
+        defaultValue: DEFAULT_SETTINGS.repeatWarningWeeks,
+        parse: parseRepeatWarningWeeks,
     },
 };
 

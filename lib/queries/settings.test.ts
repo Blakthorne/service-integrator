@@ -131,8 +131,19 @@ describe("saveSettings", () => {
             creditPhrases: DEFAULT_SETTINGS.creditPhrases,
             emailRecipients: DEFAULT_SETTINGS.emailRecipients,
             emailSubjectTemplate: DEFAULT_SETTINGS.emailSubjectTemplate,
+            repeatWarningWeeks: DEFAULT_SETTINGS.repeatWarningWeeks,
         });
         expect(listStoredSettings(db)[0]).toMatchObject({ updatedAt: T0.toISOString() });
+    });
+
+    test("saves the repeat warning window as a number, from the digits a form posts or a number", () => {
+        expect(saveSettings({ repeatWarningWeeks: " 8 " })).toEqual({ ok: true, saved: ["repeatWarningWeeks"] });
+        expect(getSettings().settings.repeatWarningWeeks).toBe(8);
+        expect(listStoredSettings(db)).toEqual([expect.objectContaining({ key: "repeatWarningWeeks", value: "8" })]);
+        expect(saveSettings({ repeatWarningWeeks: 0 })).toEqual({ ok: true, saved: ["repeatWarningWeeks"] });
+        expect(getSettings().settings.repeatWarningWeeks).toBe(0);
+        expect(saveSettings({ repeatWarningWeeks: 53 })).toMatchObject({ ok: false });
+        expect(getSettings().settings.repeatWarningWeeks).toBe(0);
     });
 
     test("saves the credit and email settings, lists and phrases included, as they parse", () => {

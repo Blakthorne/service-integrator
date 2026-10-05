@@ -49,6 +49,26 @@ describe("SETTING_DESCRIPTIONS", () => {
     });
 });
 
+describe("the repeat warning setting", () => {
+    test("is named, and edited by the Repeat warnings card", () => {
+        expect(SETTING_DESCRIPTIONS.repeatWarningWeeks).toEqual({
+            label: "Repeat warning window",
+            card: "Repeat warnings",
+        });
+        expect(SETTINGS_CARD_TITLES.repeatWarnings).toBe("Repeat warnings");
+    });
+
+    test("names itself and its default when its stored value no longer parses", () => {
+        expect(describeSettingIssue(issue("repeatWarningWeeks", "99", "Too many."))).toEqual({
+            label: "Repeat warning window",
+            card: "Repeat warnings",
+            stored: "99",
+            message: "Too many.",
+            usingDefault: "The default is in use: 6 weeks.",
+        });
+    });
+});
+
 describe("describeSettingIssue", () => {
     test("names the setting, its card, what is stored, why it is refused and what is used", () => {
         expect(describeSettingIssue(issue("ccliLicenseNumber", '"abc"', "Digits only."))).toEqual({
@@ -65,6 +85,7 @@ describe("describeSettingIssue", () => {
         expect(usingDefault("numberSeparator")).toBe('The default is in use: " / ".');
         expect(usingDefault("hymnNoteCategoryName")).toBe('The default is in use: "Hymnal".');
         expect(usingDefault("hymnNoteIncludesTune")).toBe("The default is in use: no.");
+        expect(usingDefault("repeatWarningWeeks")).toBe("The default is in use: 6 weeks.");
         expect(usingDefault("scheduleHeaderLabels")).toBe(
             "The default is in use: no labels of its own, so each service type gets its default header."
         );
