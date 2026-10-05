@@ -211,7 +211,8 @@ describe("getPlanDetail", () => {
 });
 
 describe("getPlanDetail's repeat warnings", () => {
-    const TODAY = new Date("2026-10-04T12:00:00.000Z");
+    // Noon by the clock of the machine the tests run on, so the date is the same in every time zone.
+    const TODAY = new Date(2026, 9, 4, 12, 0, 0);
 
     /** The plan's items: songs 20, 30 and 40 at items 2, 3 and 4, and a header. */
     const detailRoutes = () => planDetailRoutes();
@@ -333,7 +334,7 @@ describe("getPlanDetail's repeat warnings", () => {
     test("is as of the day it is read on", async () => {
         plan("501", "2026-09-27", "20");
         expect((await warnings())["2"]).toMatchObject({ daysAgo: 7 });
-        vi.setSystemTime(new Date("2026-11-10T12:00:00.000Z"));
+        vi.setSystemTime(new Date(2026, 10, 10, 12, 0, 0));
         // 44 days on: out of the window.
         expect(await warnings()).toEqual({});
     });

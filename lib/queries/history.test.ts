@@ -42,8 +42,8 @@ const itemsUrl = (serviceTypeId: string, planId: string) =>
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-/** Noon UTC on Sunday 2026-10-04, which is that date wherever the tests run. */
-const T0 = new Date("2026-10-04T12:00:00.000Z");
+/** Noon on Sunday 2026-10-04 by the clock of the machine the tests run on, so that its date is that date in every time zone. */
+const T0 = new Date(2026, 9, 4, 12, 0, 0);
 const after = (ms: number) => new Date(T0.getTime() + ms);
 
 /** An item of a fake plan: a song item when it has a song. */

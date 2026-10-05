@@ -376,6 +376,9 @@ describe("getDashboard", () => {
 });
 
 describe("getDashboard's history figures", () => {
+    /** Noon on 2026-10-04 by the clock of the machine the tests run on, so that its date is that date in every time zone. */
+    const TODAY = new Date(2026, 9, 4, 12, 0, 0);
+
     /** A plan of the history on `date` holding Planning Center songs `songs`. */
     function plan(date: string, ...songs: string[]): void {
         const planId = seedHistoryPlan(db, { planDate: date });
@@ -386,7 +389,7 @@ describe("getDashboard's history figures", () => {
 
     test("is empty, with no run, before the first history sync", async () => {
         stubFetchRoutes(routes());
-        const { history } = await getDashboard(NOW);
+        const { history } = await getDashboard(TODAY);
         expect(history).toEqual({
             today: "2026-10-04",
             since: "2021-10-04",
@@ -410,7 +413,7 @@ describe("getDashboard's history figures", () => {
         finishSyncRun(db, run, { ok: true, message: "Synced 4 plans" }, NOW);
         stubFetchRoutes(routes());
 
-        const { history } = await getDashboard(NOW);
+        const { history } = await getDashboard(TODAY);
 
         expect(history?.coverage.map(({ code, name, entries, sungRecently, sungEver }) => [code, name, entries, sungRecently, sungEver])).toEqual([
             ["R", "Rejoice Hymns", 2, 1, 2],
@@ -424,7 +427,7 @@ describe("getDashboard's history figures", () => {
         plan("2021-10-04", "77");
         plan("2021-10-03", "88");
         stubFetchRoutes(routes());
-        const coverage = (await getDashboard(NOW)).history?.coverage;
+        const coverage = (await getDashboard(TODAY)).history?.coverage;
         expect(coverage?.[0]).toMatchObject({ code: "R", sungRecently: 1, sungEver: 2 });
     });
 
@@ -433,7 +436,7 @@ describe("getDashboard's history figures", () => {
         db.exec("DROP TABLE plan_occurrences");
         stubFetchRoutes(routes());
 
-        const dashboard = await getDashboard(NOW);
+        const dashboard = await getDashboard(TODAY);
 
         expect(dashboard.history).toBeNull();
         expect(error).toHaveBeenCalledWith("Failed to read the plan history for the dashboard:", expect.any(Error));
@@ -446,7 +449,7 @@ describe("getDashboard's history figures", () => {
             throw new Error("Could not open the database at /srv/data/x: denied");
         });
         stubFetchRoutes(routes());
-        expect((await getDashboard(NOW)).history).toBeNull();
+        expect((await getDashboard(TODAY)).history).toBeNull();
     });
 });
 

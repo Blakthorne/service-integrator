@@ -131,7 +131,8 @@ describe("syncPlanHistoryNow", () => {
     });
 });
 
-const NOW = new Date("2026-10-04T12:00:00.000Z");
+/** Noon on Sunday 2026-10-04 by the clock of the machine the tests run on, so that its date is that date in every time zone. */
+const NOW = new Date(2026, 9, 4, 12, 0, 0);
 const MORNING = "1405391";
 const EVENING = "1486055";
 
