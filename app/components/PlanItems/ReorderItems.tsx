@@ -51,9 +51,13 @@ interface ReorderItemsProps {
  * (convention 15). While the order is written the dialog cannot be
  * dismissed and a second click on Confirm does nothing; the browser may
  * still close it (Chromium lets a third Escape through), and the answer
- * then opens it again. A reorder that was made, or refused because the plan
- * had changed, revalidates the plan, so the page behind shows Planning
- * Center's order, and closing its outcome ends the mode.
+ * then opens it again. Cancel and Review new order do nothing meanwhile (they
+ * are `aria-disabled`, as `ui/SubmitButton` is while it runs): Cancel would
+ * leave the mode and lose the answer, and Review would open a preview over
+ * the write, whose Confirm would be dead. So the answer always has the mode
+ * to land in. A reorder that was made, or refused because the plan had
+ * changed, revalidates the plan, so the page behind shows Planning Center's
+ * order, and closing its outcome ends the mode.
  *
  * A keyboard user keeps their place. A row that moves is moved in the DOM,
  * and the browser takes focus off a node that is moved, so the button
@@ -82,6 +86,8 @@ export default function ReorderItems({ onDone }: ReorderItemsProps) {
     const rows = useMemo(() => orderRows(items, shown, order), [items, shown, order]);
     const moved = movedCount(shown, order);
     const writing = dialog.phase === "writing";
+    /** Review new order has nothing to show before an item has moved, and must not replace the write in flight. */
+    const cannotReview = moved === 0 || writing;
 
     // The mode replaced the table the person was on; say what to do.
     useEffect(() => {
@@ -115,11 +121,18 @@ export default function ReorderItems({ onDone }: ReorderItemsProps) {
     }
 
     function review() {
-        if (moved === 0) {
+        if (cannotReview) {
             return;
         }
         setDialog({ phase: "preview" });
         setOpen(true);
+    }
+
+    function cancel() {
+        // Leaving the mode while the order is written would lose the answer.
+        if (!writing) {
+            onDone();
+        }
     }
 
     async function confirm() {
@@ -140,7 +153,9 @@ export default function ReorderItems({ onDone }: ReorderItemsProps) {
             writingRef.current = false;
         }
         setDialog({ phase: "result", outcome });
-        // Open again if the browser closed the dialog while the order was written.
+        // Open again if the browser closed the dialog while the order was
+        // written: the mode cannot have been left (Cancel waits), so the
+        // outcome, a refusal or a failure too, is always shown.
         setOpen(true);
     }
 
@@ -177,17 +192,24 @@ export default function ReorderItems({ onDone }: ReorderItemsProps) {
                     </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-3">
-                    <button type="button" onClick={onDone} className={buttonClasses("secondary")}>
+                    <button
+                        type="button"
+                        onClick={cancel}
+                        // aria-disabled, not disabled, so it keeps focus while the order is written.
+                        aria-disabled={writing}
+                        className={buttonClasses("secondary", writing)}
+                    >
                         Cancel
                     </button>
                     <button
                         ref={reviewRef}
                         type="button"
                         onClick={review}
-                        // aria-disabled, not disabled, so it keeps focus when nothing has moved.
-                        aria-disabled={moved === 0}
+                        // aria-disabled, not disabled, so it keeps focus when nothing has moved,
+                        // and when the browser closes the dialog on the order being written.
+                        aria-disabled={cannotReview}
                         title={moved === 0 ? "Move an item first" : undefined}
-                        className={buttonClasses("primary", moved === 0)}
+                        className={buttonClasses("primary", cannotReview)}
                     >
                         Review new order
                     </button>
