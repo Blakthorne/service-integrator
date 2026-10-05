@@ -4,6 +4,7 @@ import { BOOK_CSV_MAX_BYTES, cleanSourceName } from "@/lib/catalog/validation";
 import { getDb } from "@/lib/db";
 import { applyImportRun, findApplyRefusal, previewBookCsvRun } from "@/lib/db/catalogImport";
 import {
+    createImportRun,
     discardImportRun,
     findImportRun,
     findImportRunLabel,
@@ -12,20 +13,26 @@ import {
     type ImportRunErrorReason,
 } from "@/lib/db/importRuns";
 import type { ImportCounts, ImportRunDetail, ImportRunSummary } from "@/lib/domain";
+import { planHymnsJsonImport } from "@/lib/import/hymnsJson";
+import { hymnsJsonRecords } from "@/lib/import/hymnsJsonFile";
 import { labelOr } from "./catalog";
 
 /**
- * The catalog's imports, for the Import pages and their actions: preview a
- * book's CSV file; review a run, the seed's or a file's; apply or discard it.
- * Synchronous, like the database. A preview, apply and discard return a
- * refusal (a file too large, a run already applied, a book file whose plan
- * changed) rather than throwing, so an action can show it; anything
- * unexpected, such as a database that cannot be opened, still throws.
+ * The catalog's imports, for the Import pages and their actions: preview the
+ * seed from hymns.json, or a book's CSV file; review a run, apply or discard
+ * it. Synchronous, like the database. A preview, apply and discard return a
+ * refusal (a file too large, a run already applied, a catalog that already
+ * has books, a book file whose plan changed) rather than throwing, so an
+ * action can show it; anything unexpected, such as a database that cannot
+ * be opened, still throws.
  *
- * The seed from hymns.json is gone: it cannot be previewed any more. The runs
- * it stored are still listed and reviewed from their stored report, and one
- * that was never applied can still be, while the catalog is empty.
+ * The seed stays until production has applied it; it, its planner and
+ * hymns.json can be removed after that. Applying it refuses once the
+ * catalog has books, so it can never run twice.
  */
+
+/** What the seed import reads. */
+export const SEED_SOURCE_NAME = "hymns.json";
 
 /** Why a run cannot be applied or discarded, with a message fit to show. */
 export interface ImportRunRefusal {
@@ -35,6 +42,20 @@ export interface ImportRunRefusal {
 
 function refusalOf(reason: ImportRunErrorReason): ImportRunRefusal {
     return { reason, message: new ImportRunError(reason).message };
+}
+
+/**
+ * Plan the seed import from hymns.json and store it as a preview, returning
+ * the new run's id for its review page. Previewing always works; applying is
+ * what refuses once the catalog has books.
+ */
+export function previewSeedImport(): number {
+    const plan = planHymnsJsonImport(hymnsJsonRecords);
+    return createImportRun(getDb(), {
+        kind: "hymns-json",
+        sourceName: SEED_SOURCE_NAME,
+        ...plan,
+    });
 }
 
 /** What previewing a book's CSV file did: the new run's id, or why there is none. */
@@ -68,7 +89,7 @@ export function previewBookCsvImport(
         : { ok: true, runId };
 }
 
-/** Every import run, newest first: the book files' and the seed's. */
+/** Every import run, newest first: the seed's and the book files'. */
 export function getCatalogImportRuns(): ImportRunSummary[] {
     return listImportRuns(getDb());
 }
