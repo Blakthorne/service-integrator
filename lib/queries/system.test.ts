@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { MIGRATIONS } from "@/lib/db/migrations";
 import { finishSyncRun, startSyncRun } from "@/lib/db/syncRuns";
 import { openTestDb } from "@/lib/db/testing";
 
@@ -34,8 +35,8 @@ describe("getDatabaseStatus", () => {
         expect(getDatabaseStatus()).toEqual({
             ok: true,
             path: "/srv/data/service-integrator.sqlite",
-            appliedMigrations: 1,
-            latestMigration: "0001_init",
+            appliedMigrations: MIGRATIONS.length,
+            latestMigration: MIGRATIONS.at(-1)?.id,
             lastBackup: null,
             backupDir: "/srv/data/backups",
         });

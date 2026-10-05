@@ -20,6 +20,7 @@ import {
     pruneBackups,
 } from "./backup";
 import { openDatabase } from "./connection";
+import { MIGRATIONS } from "./migrations";
 import { openTestDb } from "./testing";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -128,7 +129,7 @@ describe("backupDatabase", () => {
             ]);
             expect(
                 copy.prepare("SELECT id FROM schema_migrations").all()
-            ).toEqual([{ id: "0001_init" }]);
+            ).toEqual(MIGRATIONS.map(({ id }) => ({ id })));
         } finally {
             copy.close();
         }

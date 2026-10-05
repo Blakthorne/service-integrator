@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
+    CATALOG_SECTIONS,
     NAV_ITEMS,
     NAV_UTILITY_ITEMS,
     PLAN_TABS,
+    catalogSectionFor,
     navAriaCurrent,
     pcoWebUrls,
     routes,
@@ -14,6 +16,17 @@ describe("routes", () => {
         expect(routes.plans()).toBe("/plans");
         expect(routes.unusedHymns()).toBe("/unused-hymns");
         expect(routes.settings()).toBe("/settings");
+        expect(routes.catalog()).toBe("/catalog");
+        expect(routes.catalogTunes()).toBe("/catalog/tunes");
+        expect(routes.catalogBooks()).toBe("/catalog/books");
+        expect(routes.catalogImport()).toBe("/catalog/import");
+    });
+
+    test("catalog builders put the id or code at the end", () => {
+        expect(routes.catalogSong(42)).toBe("/catalog/songs/42");
+        expect(routes.catalogTune(7)).toBe("/catalog/tunes/7");
+        expect(routes.catalogBook("G")).toBe("/catalog/books/G");
+        expect(routes.catalogImportRun(3)).toBe("/catalog/import/3");
     });
 
     test("plan builders put the ids in order", () => {
@@ -35,6 +48,14 @@ describe("routes", () => {
             routes.planItem("1", "2", "3"),
             routes.unusedHymns(),
             routes.settings(),
+            routes.catalog(),
+            routes.catalogSong(1),
+            routes.catalogTunes(),
+            routes.catalogTune(1),
+            routes.catalogBooks(),
+            routes.catalogBook("R"),
+            routes.catalogImport(),
+            routes.catalogImportRun(1),
         ];
         for (const href of all) {
             expect(href).toMatch(/^\/[^?#]*$/);
@@ -44,75 +65,86 @@ describe("routes", () => {
 });
 
 describe("NAV_ITEMS", () => {
-    const [plans, unusedHymns] = NAV_ITEMS;
+    const [plans, catalog, unusedHymns] = NAV_ITEMS;
 
-    test("lists Plans, then Unused Hymns", () => {
+    test("lists Plans, Catalog, then Unused Hymns", () => {
         expect(NAV_ITEMS.map((item) => item.label)).toEqual([
             "Plans",
+            "Catalog",
             "Unused Hymns",
         ]);
     });
 
     test("hrefs come from the route builders", () => {
         expect(plans.href).toBe(routes.plans());
+        expect(catalog.href).toBe(routes.catalog());
         expect(unusedHymns.href).toBe(routes.unusedHymns());
     });
 
-    // [pathname, Plans active, Unused Hymns active]
-    const cases: [string, boolean, boolean][] = [
-        ["/", true, false],
-        ["/plans", true, false],
-        ["/plans/1405391/98765", true, false],
-        ["/plans/1405391/98765/schedule", true, false],
-        ["/plans/1405391/98765/items/4321", true, false],
-        ["/plansx", false, false],
-        ["/plans-archive", false, false],
-        ["/unused-hymns", false, true],
-        ["/unused-hymns/anything", false, true],
-        ["/unused-hymnsx", false, false],
-        ["/settings", false, false],
-        ["/auth/signin", false, false],
-        ["/something-else", false, false],
-        ["", false, false],
+    // [pathname, Plans active, Catalog active, Unused Hymns active]
+    const cases: [string, boolean, boolean, boolean][] = [
+        ["/", true, false, false],
+        ["/plans", true, false, false],
+        ["/plans/1405391/98765", true, false, false],
+        ["/plans/1405391/98765/schedule", true, false, false],
+        ["/plans/1405391/98765/items/4321", true, false, false],
+        ["/plansx", false, false, false],
+        ["/plans-archive", false, false, false],
+        ["/catalog", false, true, false],
+        ["/catalog/songs/42", false, true, false],
+        ["/catalog/books/G", false, true, false],
+        ["/catalogx", false, false, false],
+        ["/unused-hymns", false, false, true],
+        ["/unused-hymns/anything", false, false, true],
+        ["/unused-hymnsx", false, false, false],
+        ["/settings", false, false, false],
+        ["/auth/signin", false, false, false],
+        ["/something-else", false, false, false],
+        ["", false, false, false],
     ];
 
     test.each(cases)(
-        "%j: Plans active=%s, Unused Hymns active=%s",
-        (pathname, plansActive, unusedActive) => {
+        "%j: Plans active=%s, Catalog active=%s, Unused Hymns active=%s",
+        (pathname, plansActive, catalogActive, unusedActive) => {
             expect(plans.isActive(pathname)).toBe(plansActive);
+            expect(catalog.isActive(pathname)).toBe(catalogActive);
             expect(unusedHymns.isActive(pathname)).toBe(unusedActive);
         }
     );
 
     test("tolerates a trailing slash", () => {
         expect(plans.isActive("/plans/")).toBe(true);
+        expect(catalog.isActive("/catalog/")).toBe(true);
         expect(unusedHymns.isActive("/unused-hymns/")).toBe(true);
     });
 });
 
 describe("navAriaCurrent", () => {
-    const [plans, unusedHymns] = NAV_ITEMS;
+    const [plans, catalog, unusedHymns] = NAV_ITEMS;
 
     type Current = "page" | "true" | undefined;
-    // [pathname, Plans, Unused Hymns]
-    const cases: [string, Current, Current][] = [
+    // [pathname, Plans, Catalog, Unused Hymns]
+    const cases: [string, Current, Current, Current][] = [
         // "/" only redirects to /plans, which is the Plans item's own page.
-        ["/", "true", undefined],
-        ["/plans", "page", undefined],
-        ["/plans/1405391/98765", "true", undefined],
-        ["/plans/1405391/98765/schedule", "true", undefined],
-        ["/plans/1405391/98765/items/4321", "true", undefined],
-        ["/plansx", undefined, undefined],
-        ["/unused-hymns", undefined, "page"],
-        ["/unused-hymns/anything", undefined, "true"],
-        ["/unused-hymnsx", undefined, undefined],
-        ["/auth/signin", undefined, undefined],
+        ["/", "true", undefined, undefined],
+        ["/plans", "page", undefined, undefined],
+        ["/plans/1405391/98765", "true", undefined, undefined],
+        ["/plans/1405391/98765/schedule", "true", undefined, undefined],
+        ["/plans/1405391/98765/items/4321", "true", undefined, undefined],
+        ["/plansx", undefined, undefined, undefined],
+        ["/catalog", undefined, "page", undefined],
+        ["/catalog/songs/42", undefined, "true", undefined],
+        ["/unused-hymns", undefined, undefined, "page"],
+        ["/unused-hymns/anything", undefined, undefined, "true"],
+        ["/unused-hymnsx", undefined, undefined, undefined],
+        ["/auth/signin", undefined, undefined, undefined],
     ];
 
     test.each(cases)(
-        "%j: Plans %s, Unused Hymns %s",
-        (pathname, plansValue, unusedValue) => {
+        "%j: Plans %s, Catalog %s, Unused Hymns %s",
+        (pathname, plansValue, catalogValue, unusedValue) => {
             expect(navAriaCurrent(plans, pathname)).toBe(plansValue);
+            expect(navAriaCurrent(catalog, pathname)).toBe(catalogValue);
             expect(navAriaCurrent(unusedHymns, pathname)).toBe(unusedValue);
         }
     );
@@ -161,12 +193,46 @@ describe("NAV_UTILITY_ITEMS", () => {
 
     test("never marks it and a section link as the current page at once", () => {
         const items = [...NAV_ITEMS, ...NAV_UTILITY_ITEMS];
-        for (const pathname of ["/", "/plans", "/unused-hymns", "/settings"]) {
+        for (const pathname of ["/", "/plans", "/catalog", "/unused-hymns", "/settings"]) {
             const pages = items.filter(
                 (item) => navAriaCurrent(item, pathname) === "page"
             );
             expect(pages.length).toBeLessThanOrEqual(1);
         }
+    });
+});
+
+describe("CATALOG_SECTIONS", () => {
+    test("lists Songs, Tunes, Books and Import, linked by the builders", () => {
+        expect(CATALOG_SECTIONS.map((section) => section.label)).toEqual([
+            "Songs",
+            "Tunes",
+            "Books",
+            "Import",
+        ]);
+        expect(CATALOG_SECTIONS.map((section) => section.href)).toEqual([
+            routes.catalog(),
+            routes.catalogTunes(),
+            routes.catalogBooks(),
+            routes.catalogImport(),
+        ]);
+    });
+
+    test.each<[string | null, string | undefined]>([
+        [null, "Songs"],
+        ["songs", "Songs"],
+        ["tunes", "Tunes"],
+        ["books", "Books"],
+        ["import", "Import"],
+        ["reconcile", undefined],
+        ["(group)", undefined],
+    ])("segment %j belongs to %s", (segment, label) => {
+        expect(catalogSectionFor(segment)?.label).toBe(label);
+    });
+
+    test("no segment belongs to two sections", () => {
+        const segments = CATALOG_SECTIONS.flatMap((section) => section.segments);
+        expect(new Set(segments).size).toBe(segments.length);
     });
 });
 

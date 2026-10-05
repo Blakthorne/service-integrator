@@ -11,12 +11,15 @@ export default function Navigation() {
             aria-label="Main"
             className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700"
         >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* At 320 px the three links, the gear and Sign Out need the
+                narrow gutter phones use for <main> too. */}
+            <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-16">
                     <div className="flex items-center">
-                        {/* Hidden on phones, where it would crowd the links and
-                            Sign Out. The Plans link goes to the same page. */}
-                        <div className="hidden sm:flex flex-shrink-0 items-center">
+                        {/* Hidden below md, where it would crowd the links
+                            into the gear and Sign Out. The Plans link goes to
+                            the same page. */}
+                        <div className="hidden md:flex flex-shrink-0 items-center">
                             <Link
                                 href={routes.plans()}
                                 className="text-lg font-semibold text-gray-900 dark:text-gray-100"

@@ -9,9 +9,11 @@ import type { Route } from "next";
  * as `/plans/${string}/${string}` would not compile. The literal type lets
  * `<Link>` match it against the route table.
  *
- * IDs are Planning Center ids: digit strings that `parsePcoId` has already
- * validated, so they are interpolated without encoding. Never pass anything
- * else (a title, free text, a raw URL parameter).
+ * Every id or code they take has already been validated, so it is interpolated
+ * without encoding: Planning Center ids are digit strings from `parsePcoId`,
+ * catalog ids are integers from `parseCatalogId` and book codes come from
+ * `parseBookCode` (letters, digits, `-` and `_`). Never pass anything else (a
+ * title, free text, a raw URL parameter).
  */
 export const routes = {
     home: () => "/" as const,
@@ -24,6 +26,14 @@ export const routes = {
         `/plans/${serviceTypeId}/${planId}/items/${itemId}` as const,
     unusedHymns: () => "/unused-hymns" as const,
     settings: () => "/settings" as const,
+    catalog: () => "/catalog" as const,
+    catalogSong: (songId: number) => `/catalog/songs/${songId}` as const,
+    catalogTunes: () => "/catalog/tunes" as const,
+    catalogTune: (tuneId: number) => `/catalog/tunes/${tuneId}` as const,
+    catalogBooks: () => "/catalog/books" as const,
+    catalogBook: (bookCode: string) => `/catalog/books/${bookCode}` as const,
+    catalogImport: () => "/catalog/import" as const,
+    catalogImportRun: (runId: number) => `/catalog/import/${runId}` as const,
 };
 
 /** An entry of the top navigation bar. */
@@ -46,6 +56,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
         label: "Plans",
         isActive: (pathname) =>
             pathname === routes.home() || isAtOrBelow(pathname, routes.plans()),
+    },
+    {
+        href: routes.catalog(),
+        label: "Catalog",
+        isActive: (pathname) => isAtOrBelow(pathname, routes.catalog()),
     },
     {
         href: routes.unusedHymns(),
@@ -111,6 +126,39 @@ export const PLAN_TABS = [
         href: routes.planSchedule,
     },
 ] as const satisfies readonly PlanTab[];
+
+/** A section of the catalog, shown in its sub-navigation. */
+export interface CatalogSection {
+    /**
+     * The segment below the catalog layout on this section's pages, route
+     * groups skipped, as `catalogLayoutSegment(useSelectedLayoutSegments())`
+     * gives it (`lib/catalog/sections.ts`): `null` is the songs list at
+     * `/catalog` itself, and a song page's segment is `"songs"`. Not
+     * `useSelectedLayoutSegment()`, which returns `"(list)"` at `/catalog`,
+     * the route group the songs list sits in.
+     */
+    segments: readonly (string | null)[];
+    label: string;
+    href: Route;
+}
+
+/** The catalog's sections, in display order. A new section adds its folder plus an entry here. */
+export const CATALOG_SECTIONS: readonly CatalogSection[] = [
+    { segments: [null, "songs"], label: "Songs", href: routes.catalog() },
+    { segments: ["tunes"], label: "Tunes", href: routes.catalogTunes() },
+    { segments: ["books"], label: "Books", href: routes.catalogBooks() },
+    { segments: ["import"], label: "Import", href: routes.catalogImport() },
+];
+
+/**
+ * The catalog section that a segment from `catalogLayoutSegment` belongs to,
+ * or undefined for a segment no section claims (a route group among them).
+ */
+export function catalogSectionFor(
+    segment: string | null
+): CatalogSection | undefined {
+    return CATALOG_SECTIONS.find((section) => section.segments.includes(segment));
+}
 
 const PCO_WEB_ORIGIN = "https://services.planningcenteronline.com";
 
