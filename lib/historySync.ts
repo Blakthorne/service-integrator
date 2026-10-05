@@ -12,7 +12,11 @@ import { addDaysToYmd } from "./format";
  * (the app's own "add to a plan" is one), so a plan that looks unchanged may
  * not be. The sync therefore reads, beyond the plans a listing shows
  * changed, every plan that is upcoming or recent, each time it runs, and
- * every other plan once a week.
+ * every other plan once a week. That weekly pass is tracked by each plan's
+ * own `items_synced_at` (a plan whose last reading is a week old is read
+ * again), not by a record of the last full run: it never reads a plan
+ * twice for want of that record, a plan whose read failed stays due, and a
+ * pass that stops part-way resumes where it stopped.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;

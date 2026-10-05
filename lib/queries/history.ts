@@ -82,7 +82,10 @@ async function readSongItems(plan: Pick<HistoryPlan, "serviceTypeId" | "planId">
  * `include=song`, paced, the latest date first): plans never read or
  * changed, every upcoming plan and every plan of the last 8 weeks (the spike
  * found that edits made through the API do not move `updated_at`), and any
- * other plan whose last reading is a week old, which is the weekly pass.
+ * other plan whose last reading is a week old, which is the weekly pass. The
+ * pass is tracked by each plan's own `items_synced_at`, not by a marker for
+ * the whole run, so it never reads a plan twice for want of a record, and
+ * one that fails part-way picks up where it stopped.
  * Each plan's songs replace what it held in a transaction of their own,
  * right after its read, so a sync that fails part-way keeps what it did,
  * and a plan whose read failed is still unread and is tried again by the
