@@ -31,7 +31,9 @@ function labelsIn(song: CatalogSongSummary, bookCode: string): string {
  * one column for each of `books` (in the order given) holding the song's
  * labels in that book, whether the song is linked to a Planning Center song
  * ("yes" or "no"), the date it was last scheduled as `YYYY-MM-DD` ("" when
- * it never was), and a column for each mark ("To learn": "yes" or "no").
+ * it never was), the date it was last sung (the last past plan it was in,
+ * from the plan history: "" when it never was, or the history has not been
+ * read), and a column for each mark ("To learn": "yes" or "no").
  */
 export function catalogSongsCsvRecords(
     songs: readonly CatalogSongSummary[],
@@ -44,6 +46,7 @@ export function catalogSongsCsvRecords(
             ...books.map(({ name }) => name),
             "Linked",
             "Last scheduled",
+            "Last sung",
             ...SONG_MARKS.map((mark) => SONG_MARK_LABELS[mark]),
         ],
         ...songs.map((song) => [
@@ -52,6 +55,7 @@ export function catalogSongsCsvRecords(
             ...books.map(({ code }) => labelsIn(song, code)),
             song.pcoSongId === null ? "no" : "yes",
             lastScheduledDate(song.lastScheduledAt) ?? "",
+            song.lastSungAt ?? "",
             ...SONG_MARKS.map((mark) => (song.marks.includes(mark) ? "yes" : "no")),
         ]),
     ];
