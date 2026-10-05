@@ -13,6 +13,8 @@ import {
     type SyncRunKind,
     type SyncRunOutcome,
 } from "@/lib/db/syncRuns";
+import { isHistorySyncDue } from "@/lib/historySync";
+import { describePlanHistorySync, syncPlanHistory } from "@/lib/queries/history";
 import { describePcoSongsSync, syncPcoSongs } from "@/lib/queries/sync";
 import { describeTagsSync, syncTags } from "@/lib/queries/tags";
 
@@ -110,10 +112,31 @@ export const tagsJob: Job = {
 };
 
 /**
+ * The plan history sync, daily: mirror the songs of every Planning Center
+ * plan, which the reports, the song pages, the dashboard and the plans'
+ * repeat warnings read (see `syncPlanHistory`). It is checked hourly and
+ * soon after boot, and runs when it never ran, when its last run did not
+ * succeed (it failed, or a restart interrupted it), or when its last
+ * success is a day old (`isHistorySyncDue`), so a restart (every deploy is
+ * one) never stretches the gap much past a day. "Sync history now" runs it
+ * on demand through `runJob`.
+ */
+export const historyJob: Job = {
+    kind: "history",
+    everyMs: HOUR_MS,
+    atBoot: true,
+    isDue: (db, now) => isHistorySyncDue(latestSyncRun(db, "history"), now),
+    run: async (db) => {
+        const counts = await syncPlanHistory(db);
+        return { message: describePlanHistorySync(counts), counts };
+    },
+};
+
+/**
  * The jobs `startJobs()` schedules, checked in this order. A new job is one
  * entry here, as the song sync is.
  */
-export const JOBS: readonly Job[] = [backupJob, pcoSongsJob, tagsJob];
+export const JOBS: readonly Job[] = [backupJob, pcoSongsJob, tagsJob, historyJob];
 
 /**
  * What `runJob` resolves to: the run it started or joined, as recorded

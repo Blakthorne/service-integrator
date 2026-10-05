@@ -15,8 +15,11 @@ import { openTestDb, seedHymn, seedPcoSong, seedSong } from "@/lib/db/testing";
 import {
     PCO_BASE,
     calledUrls,
+    itemResource,
     json,
     listPage,
+    planResource,
+    serviceTypeResource,
     songResource,
     stubFetchRoutes,
     stubPcoCredentials,
@@ -28,6 +31,7 @@ import {
     BOOT_DELAY_MS,
     JOBS,
     backupJob,
+    historyJob,
     pcoSongsJob,
     runIfDue,
     runJob,
@@ -467,6 +471,93 @@ describe("tagsJob", () => {
             ["pco-songs", true],
         ]);
         expect(songTagRows()).toHaveLength(2);
+    });
+});
+
+describe("historyJob", () => {
+    const SERVICE_TYPES = `${PCO_BASE}/service_types?per_page=100`;
+    const PLANS = `${PCO_BASE}/service_types/1405391/plans?order=-sort_date&per_page=100`;
+    const ITEMS = `${PCO_BASE}/service_types/1405391/plans/501/items?include=song&per_page=100`;
+
+    function stubPlanning() {
+        stubPcoCredentials();
+        stubPcoPacer();
+        return stubFetchRoutes({
+            [SERVICE_TYPES]: listPage([serviceTypeResource({}, "1405391")]),
+            [PLANS]: listPage([planResource({ id: "501" }, { sort_date: "2026-09-27T08:00:00Z" })]),
+            [ITEMS]: listPage([
+                itemResource("1", { title: "Amazing Grace", sequence: 1 }, { song: { data: { type: "Song", id: "77" } } }),
+                itemResource("2", { title: "Offering", item_type: "item", sequence: 2 }),
+            ]),
+        });
+    }
+
+    test("is scheduled: checked every hour and soon after boot, and run when due", () => {
+        expect(JOBS).toContain(historyJob);
+        expect(historyJob).toMatchObject({ kind: "history", everyMs: HOUR_MS, atBoot: true });
+        expect(historyJob.isDue).toBeTypeOf("function");
+    });
+
+    test("is due when it never ran (so at boot), not for a day after a success, and then due daily", () => {
+        expect(historyJob.isDue?.(db, T0)).toBe(true);
+        const id = startSyncRun(db, "history", T0);
+        finishSyncRun(db, id, { ok: true, message: "Synced 216 plans" }, T0);
+        expect(historyJob.isDue?.(db, hoursAfterT0(1))).toBe(false);
+        expect(historyJob.isDue?.(db, hoursAfterT0(23))).toBe(false);
+        expect(historyJob.isDue?.(db, hoursAfterT0(24))).toBe(true);
+    });
+
+    test("is due again when its last run failed or was interrupted by a restart", () => {
+        const failed = startSyncRun(db, "history", T0);
+        finishSyncRun(db, failed, { ok: false, message: "status: 500" }, T0);
+        expect(historyJob.isDue?.(db, hoursAfterT0(1))).toBe(true);
+
+        const interrupted = startSyncRun(db, "history", hoursAfterT0(2));
+        expect(historyJob.isDue?.(db, hoursAfterT0(3))).toBe(false);
+        finishInterruptedRuns(db, hoursAfterT0(3));
+        expect(latestSyncRun(db, "history")).toMatchObject({ id: interrupted, ok: false });
+        expect(historyJob.isDue?.(db, hoursAfterT0(4))).toBe(true);
+    });
+
+    test("syncs the plan history and records what it did", async () => {
+        stubPlanning();
+
+        await runJob(historyJob, openDb);
+
+        expect(latestSyncRun(db, "history")).toMatchObject({
+            ok: true,
+            message: "Synced 1 plan (1 song item): read 1 plan, 1 added",
+            counts: { plans: 1, added: 1, changed: 0, removed: 0, read: 1, weekly: 0, occurrences: 1 },
+        });
+        expect(db.prepare("SELECT pco_song_id FROM plan_occurrences").all()).toEqual([{ pco_song_id: "77" }]);
+    });
+
+    test("runs at boot only when it never ran, then is checked hourly", async () => {
+        vi.useFakeTimers();
+        const fetchMock = stubPlanning();
+        startJobs({ jobs: [historyJob], openDb });
+
+        await vi.advanceTimersByTimeAsync(BOOT_DELAY_MS);
+        await vi.waitFor(() => expect(latestSyncRun(db, "history")?.ok).toBe(true));
+        const requests = calledUrls(fetchMock).length;
+        expect(requests).toBeGreaterThan(0);
+
+        // The hourly checks find it not due.
+        await vi.advanceTimersByTimeAsync(3 * HOUR_MS);
+        expect(calledUrls(fetchMock)).toHaveLength(requests);
+        expect(recentSyncRuns(db).filter(({ kind }) => kind === "history")).toHaveLength(1);
+    });
+
+    test("records a sync that failed", async () => {
+        stubPcoCredentials();
+        stubPcoPacer();
+        stubFetchRoutes({ [SERVICE_TYPES]: () => json({ errors: [] }, { status: 500 }) });
+
+        await runJob(historyJob, openDb);
+        expect(latestSyncRun(db, "history")).toMatchObject({
+            ok: false,
+            message: expect.stringContaining("status: 500"),
+        });
     });
 });
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PcoError } from "./client";
 import { InvalidPcoIdError } from "./ids";
-import { fetchPlanItems, getItemNoteCategories, getPlanItems } from "./planItems";
+import { fetchPlanItems, fetchPlanSongItems, getItemNoteCategories, getPlanItems } from "./planItems";
 import {
     PCO_AUTH,
     PCO_BASE,
@@ -15,6 +15,7 @@ import {
     songResource,
     stubFetchRoutes,
     stubPcoCredentials,
+    stubPcoPacer,
 } from "./testing";
 
 beforeEach(stubPcoCredentials);
@@ -29,6 +30,73 @@ const PLAN = "81234567";
 const itemsUrl = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items?include=song,item_notes&per_page=100`;
 
 const songLink = (id: string) => ({ song: { data: { type: "Song" as const, id } } });
+
+describe("fetchPlanSongItems", () => {
+    const songItemsUrl = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items?include=song&per_page=100`;
+
+    test("reads the plan's items with their songs, paced, and keeps the song items in sequence order", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        const fetchMock = stubFetchRoutes({
+            [songItemsUrl]: listPage(
+                [
+                    itemResource("3", { title: "Holy, Holy, Holy", sequence: 3 }, songLink("88")),
+                    itemResource("1", { title: "Welcome", item_type: "header", sequence: 1 }),
+                    itemResource("2", { title: "Amazing Grace", sequence: 2 }, songLink("77")),
+                    itemResource("4", { title: "Offering", item_type: "item", sequence: 4 }),
+                    // A song item whose song was deleted, which Planning Center turns into a plain item.
+                    itemResource("5", { title: "Gone", sequence: 5 }),
+                    itemResource("6", { title: "A header with a song", item_type: "header", sequence: 6 }, songLink("99")),
+                ],
+                { included: [songResource("77"), songResource("88")] }
+            ),
+        });
+
+        const items = await fetchPlanSongItems(ST, PLAN, { paced: true });
+
+        expect(calledUrls(fetchMock)).toEqual([songItemsUrl]);
+        expect(acquire).toHaveBeenCalledTimes(1);
+        expect(fetchMock.mock.calls[0][1]).toMatchObject({
+            cache: "no-store",
+            headers: { Authorization: PCO_AUTH },
+        });
+        expect(items.map((item) => [item.id, item.sequence, item.songId, item.title])).toEqual([
+            ["2", 2, "77", "Amazing Grace"],
+            ["3", 3, "88", "Holy, Holy, Holy"],
+        ]);
+    });
+
+    test("is unpaced unless asked, and follows links.next", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        const second = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items?include=song&offset=100&per_page=100`;
+        const fetchMock = stubFetchRoutes({
+            [songItemsUrl]: listPage([itemResource("1", { sequence: 1 }, songLink("77"))], { next: second, total: 2 }),
+            [second]: listPage([itemResource("2", { sequence: 2 }, songLink("88"))], { total: 2 }),
+        });
+
+        const items = await fetchPlanSongItems(ST, PLAN);
+
+        expect(items.map((item) => item.id)).toEqual(["1", "2"]);
+        expect(calledUrls(fetchMock)).toEqual([songItemsUrl, second]);
+        expect(acquire).not.toHaveBeenCalled();
+    });
+
+    test("is empty for a plan without songs", async () => {
+        stubFetchRoutes({ [songItemsUrl]: listPage([]) });
+        await expect(fetchPlanSongItems(ST, PLAN)).resolves.toEqual([]);
+    });
+
+    test("refuses an id that is not a Planning Center id before fetching", async () => {
+        const fetchMock = stubFetchRoutes({});
+        await expect(fetchPlanSongItems("../x", PLAN)).rejects.toBeInstanceOf(InvalidPcoIdError);
+        await expect(fetchPlanSongItems(ST, "1/../2")).rejects.toBeInstanceOf(InvalidPcoIdError);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("lets a missing plan's 404 through", async () => {
+        stubFetchRoutes({ [songItemsUrl]: () => json({ errors: [] }, { status: 404 }) });
+        await expect(fetchPlanSongItems(ST, PLAN)).rejects.toMatchObject({ name: "PcoError", status: 404 });
+    });
+});
 
 describe("getPlanItems", () => {
     test("requests the plan's items with their songs and returns them sorted by sequence", async () => {

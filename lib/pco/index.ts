@@ -19,8 +19,9 @@ export {
     type PcoId,
 } from "./ids";
 export { orNotFound } from "./next";
-export { getServiceType, getServiceTypes } from "./serviceTypes";
+export { fetchServiceTypes, getServiceType, getServiceTypes } from "./serviceTypes";
 export {
+    fetchAllPlans,
     getAllPlans,
     getNextPlan,
     getPlan,
@@ -31,6 +32,7 @@ export {
 } from "./plans";
 export {
     fetchPlanItems,
+    fetchPlanSongItems,
     getItemNoteCategories,
     getPlanItems,
     type PlanItems,

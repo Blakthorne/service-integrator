@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import type { Plan, PlanSummary } from "../domain";
-import { pcoFetch, pcoFetchAll } from "./client";
+import { pcoFetch, pcoFetchAll, type PcoRequestOptions } from "./client";
 import { assertPcoId } from "./ids";
 import { toPlan } from "./mappers";
 import type {
@@ -9,7 +9,7 @@ import type {
     PcoPlanResource,
     PcoSingleResponse,
 } from "./resources";
-import { getServiceTypes } from "./serviceTypes";
+import { fetchServiceTypes, getServiceTypes } from "./serviceTypes";
 
 /** Up to 2,000 plans per service type; beyond that the fetch fails loudly. */
 const MAX_PLAN_PAGES = 20;
@@ -33,6 +33,47 @@ export const getPlansForServiceType = cache(
         return data.map((plan) => toPlan(plan, id));
     }
 );
+
+/**
+ * Every plan of every service type (archived ones included), for the
+ * history sync: each type's plans paged 100 at a time, each request paced
+ * (it waits its turn at the shared pacer) and not wrapped in `cache()`,
+ * since a job runs outside any request and must read Planning Center afresh
+ * every time.
+ *
+ * It returns the whole listing or throws: PcoError for a failed page, an
+ * error past MAX_PLAN_PAGES pages for a type, and an error when a type sent
+ * fewer plans than its first page's `total_count` said it has (a plan was
+ * added or removed while it was read, and offset paging skipped one), since
+ * the sync takes a plan missing from the listing to be gone. A plan sent
+ * twice, as such a change can also cause, appears once. Plans are in
+ * service-type order, newest first within a type.
+ */
+export async function fetchAllPlans({ paced = false }: PcoRequestOptions = {}): Promise<Plan[]> {
+    const serviceTypes = await fetchServiceTypes({ paced });
+    const plans = new Map<string, Plan>();
+    for (const serviceType of serviceTypes) {
+        const id = assertPcoId(serviceType.id);
+        const { data, totalCount } = await pcoFetchAll<PcoPlanResource>(
+            `/service_types/${id}/plans?order=-sort_date&per_page=100`,
+            "plans",
+            { maxPages: MAX_PLAN_PAGES, paced }
+        );
+        const sent = new Set<string>();
+        for (const resource of data) {
+            sent.add(resource.id);
+            if (!plans.has(resource.id)) {
+                plans.set(resource.id, toPlan(resource, id));
+            }
+        }
+        if (sent.size < totalCount) {
+            throw new Error(
+                `Planning Center listed ${totalCount} plans for service type ${id} but sent ${sent.size}: the plans changed while they were read`
+            );
+        }
+    }
+    return [...plans.values()];
+}
 
 /** What getAllPlans returns. */
 export interface AllPlans {

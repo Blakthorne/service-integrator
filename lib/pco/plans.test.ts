@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PcoError } from "./client";
 import { InvalidPcoIdError } from "./ids";
 import {
+    fetchAllPlans,
     fetchUpcomingPlans,
     getAllPlans,
     getNextPlan,
@@ -18,6 +19,7 @@ import {
     serviceTypeResource,
     stubFetchRoutes,
     stubPcoCredentials,
+    stubPcoPacer,
 } from "./testing";
 
 beforeEach(stubPcoCredentials);
@@ -45,6 +47,91 @@ const eveningPlan = planResource(
     { id: "201" },
     { sort_date: "2026-10-04T18:00:00Z", dates: "October 4, 2026" }
 );
+
+describe("fetchAllPlans", () => {
+    const SERVICE_TYPES = `${PCO_BASE}/service_types?per_page=100`;
+    const ARCHIVED = "999";
+
+    function serviceTypes() {
+        return listPage([
+            serviceTypeResource({ name: "Sunday Morning" }, MORNING),
+            serviceTypeResource({ name: "Sunday Evening", sequence: 2 }, EVENING),
+            serviceTypeResource({ name: "Old Midweek", archived_at: "2023-01-01T00:00:00Z" }, ARCHIVED),
+        ]);
+    }
+
+    test("lists the plans of every service type, archived ones too, each request paced", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        const fetchMock = stubFetchRoutes({
+            [SERVICE_TYPES]: serviceTypes(),
+            [plansUrl(MORNING)]: listPage([morningPlan, olderMorningPlan]),
+            [plansUrl(EVENING)]: listPage([eveningPlan]),
+            [plansUrl(ARCHIVED)]: listPage([]),
+        });
+
+        const plans = await fetchAllPlans({ paced: true });
+
+        expect(calledUrls(fetchMock)).toEqual([
+            SERVICE_TYPES,
+            plansUrl(MORNING),
+            plansUrl(EVENING),
+            plansUrl(ARCHIVED),
+        ]);
+        expect(acquire).toHaveBeenCalledTimes(4);
+        expect(plans.map((plan) => [plan.id, plan.serviceTypeId, plan.sortDate])).toEqual([
+            ["101", MORNING, "2026-10-04T08:00:00Z"],
+            ["100", MORNING, "2026-09-27T08:00:00Z"],
+            ["201", EVENING, "2026-10-04T18:00:00Z"],
+        ]);
+        expect(plans[0].updatedAt).toBe("2026-10-02T15:00:00Z");
+    });
+
+    test("is unpaced unless asked, and follows links.next", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        const second = `${PCO_BASE}/service_types/${MORNING}/plans?offset=100&order=-sort_date&per_page=100`;
+        const fetchMock = stubFetchRoutes({
+            [SERVICE_TYPES]: listPage([serviceTypeResource({}, MORNING)]),
+            [plansUrl(MORNING)]: listPage([morningPlan], { next: second, total: 2 }),
+            [second]: listPage([olderMorningPlan], { total: 2 }),
+        });
+
+        const plans = await fetchAllPlans();
+
+        expect(plans.map((plan) => plan.id)).toEqual(["101", "100"]);
+        expect(calledUrls(fetchMock)).toEqual([SERVICE_TYPES, plansUrl(MORNING), second]);
+        expect(acquire).not.toHaveBeenCalled();
+    });
+
+    test("gives a plan sent twice once", async () => {
+        stubFetchRoutes({
+            [SERVICE_TYPES]: listPage([serviceTypeResource({}, MORNING)]),
+            [plansUrl(MORNING)]: listPage([morningPlan, olderMorningPlan, morningPlan], { total: 2 }),
+        });
+        expect((await fetchAllPlans()).map((plan) => plan.id)).toEqual(["101", "100"]);
+    });
+
+    test("throws rather than give part of a listing when a type sent fewer plans than it listed", async () => {
+        stubFetchRoutes({
+            [SERVICE_TYPES]: listPage([serviceTypeResource({}, MORNING)]),
+            [plansUrl(MORNING)]: listPage([morningPlan], { total: 2 }),
+        });
+        await expect(fetchAllPlans()).rejects.toThrow(
+            `Planning Center listed 2 plans for service type ${MORNING} but sent 1: the plans changed while they were read`
+        );
+    });
+
+    test("throws when the service types cannot be read, or one type's plans cannot", async () => {
+        stubFetchRoutes({ [SERVICE_TYPES]: () => json({ errors: [] }, { status: 500 }) });
+        await expect(fetchAllPlans()).rejects.toBeInstanceOf(PcoError);
+
+        stubFetchRoutes({
+            [SERVICE_TYPES]: serviceTypes(),
+            [plansUrl(MORNING)]: listPage([morningPlan]),
+            [plansUrl(EVENING)]: () => json({ errors: [] }, { status: 403 }),
+        });
+        await expect(fetchAllPlans()).rejects.toMatchObject({ status: 403 });
+    });
+});
 
 describe("getPlansForServiceType", () => {
     test("requests the type's plans newest first, 100 per page, and maps them", async () => {
