@@ -508,6 +508,45 @@ Decisions the orchestrator made where the plan was silent or inconsistent. They 
 - Past seed runs still render, so their report types and views stay.
 - A fresh database is then restored from a backup file (Database section), not seeded. The PR description must say to apply the seed in production **before** this phase deploys.
 
+### Phase 6 design (history and reports)
+
+**Schema (`0007_history.ts`).**
+- `history_plans`: `plan_id` PK, `service_type_id`, `plan_date` (`YYYY-MM-DD` from `sort_date`), PCO's `updated_at`, `items_synced_at`.
+- `plan_occurrences`: `plan_id`, `item_id`, `pco_song_id`, `sequence`, `plan_date`, `service_type_id`, `synced_at`, primary key `(plan_id, item_id)`, with indexes on `pco_song_id` and `plan_date`.
+- Occurrences are a mirror: a plan's rows are replaced whenever its items are read again.
+
+**Sync (`syncPlanHistory`, paced, through `runJob`, kind `history`).**
+- List every plan per service type (about 3 requests), upsert `history_plans`, and drop the rows of plans that PCO no longer lists.
+- Read items (`include=song`) again for:
+  - plans whose `updated_at` changed;
+  - plans never read;
+  - every upcoming plan and every plan from the last 8 weeks, because API edits do not move `updated_at` (spike);
+  - every plan once a week (a full pass, tracked by the last full run).
+- Each plan's occurrences are replaced in their own transaction, after its fetch.
+- The first backfill is about 220 paced requests, roughly a minute or two at the adaptive budget.
+- A daily job runs it, plus at boot when it has never run. "Sync history now" lives on Settings and Reports.
+
+**Reports** (`/reports`, Reports in the top bar between Catalog and the utilities).
+- `lib/reports.ts` (pure) builds the reports from occurrences, and `lib/queries/reports.ts` serves them. "Sung" counts **past** plans only (dated before today); upcoming plans are "scheduled".
+  - **Most sung**: per period (last 12 months, this year, all time), with counts and catalog numbers.
+  - **Last sung**: every linked song with its last past date.
+  - **Not sung since `<date>`**: linked songs whose last past occurrence is before the date, or that were never sung.
+- Each report links to the songs and exports CSV.
+
+**Elsewhere.**
+- **Song page.** A HistoryCard lists every occurrence: date, service type, a link to the plan, upcoming ones marked.
+- **Catalog list.** `?notSince=YYYY-MM-DD` as a filter.
+- **Dashboard.** Stats:
+  - coverage per active book (the share of its entries whose song was sung in the last 5 years, and ever);
+  - songs sung this year;
+  - the last history sync.
+- **Plan page.** Each song card warns when the song was sung within the last `repeatWarningWeeks` weeks (a new setting, default 6), for example "Sung Sep 20 (2 weeks ago)".
+
+**Item reorder** (the spike confirmed `item_reorder` with every item id).
+- On the plan page, a "Reorder items" mode (up/down per item), then a preview of the new order, then Confirm.
+- Confirm re-reads the plan's items, refuses if items were added or removed since the preview, sends every id in the new order, logs `write_log` (`kind: "item"`) and revalidates.
+- An event-handler action with `useState` (convention 15).
+
 **Agent rules** (every implementer brief):
 - Work only inside your phase's worktree (named in your brief), with absolute paths. Never touch `/Users/davidpolar/dev/service-integrator` (the main checkout).
 - Stay inside your listed file set. Commit with explicit paths (`git commit -m "…" -- <paths>`), retrying if `index.lock` is held, so agents sharing the tree never commit each other's files.
