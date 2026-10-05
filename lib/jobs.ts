@@ -8,9 +8,12 @@ import {
     finishSyncRun,
     latestSyncRun,
     startSyncRun,
+    type SyncRun,
     type SyncRunCounts,
     type SyncRunKind,
+    type SyncRunOutcome,
 } from "@/lib/db/syncRuns";
+import { describePcoSongsSync, syncPcoSongs } from "@/lib/queries/sync";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -68,42 +71,89 @@ export const backupJob: Job = {
 };
 
 /**
- * The jobs `startJobs()` schedules. A new job is one entry here, such as an
- * hourly sync: `{ kind: "pco-songs", everyMs: HOUR_MS, atBoot: true, run }`.
+ * The Planning Center song sync, hourly and soon after boot: mirror the song
+ * library and make the auto-links it allows (see `syncPcoSongs`). "Sync now"
+ * runs it on demand through `runJob`.
  */
-export const JOBS: readonly Job[] = [backupJob];
+export const pcoSongsJob: Job = {
+    kind: "pco-songs",
+    everyMs: HOUR_MS,
+    atBoot: true,
+    run: async (db) => {
+        const counts = await syncPcoSongs(db);
+        return { message: describePcoSongsSync(counts), counts };
+    },
+};
+
+/**
+ * The jobs `startJobs()` schedules. A new job is one entry here, as the
+ * song sync is.
+ */
+export const JOBS: readonly Job[] = [backupJob, pcoSongsJob];
+
+/**
+ * What `runJob` resolves to: the run it started or joined, as recorded
+ * (`run.ok` says whether the job succeeded, `run.message` what it did or why
+ * it failed); or `run: null` and why, when no run could be recorded because
+ * the database could not be opened or written.
+ */
+export type RunJobResult = { run: SyncRun } | { run: null; error: string };
 
 /**
  * The runs in progress, by kind. They live on globalThis because a run
  * started on demand (a server action) and a scheduled one (started from the
  * instrumentation hook) use different copies of this module (convention 15),
- * and must still see each other.
+ * and must still see each other. Bump the version if what a run resolves to
+ * changes, so that no copy joins a run whose result it cannot read.
  */
-const RUNNING_GLOBAL = Symbol.for("service-integrator.jobs.running.v1");
+const RUNNING_GLOBAL = Symbol.for("service-integrator.jobs.running.v2");
 
 /** Set once the jobs are scheduled in this process. */
 const STARTED_GLOBAL = Symbol.for("service-integrator.jobs.started.v1");
 
-function runningJobs(): Map<SyncRunKind, Promise<void>> {
+function runningJobs(): Map<SyncRunKind, Promise<RunJobResult>> {
     const scope = globalThis as unknown as {
-        [RUNNING_GLOBAL]?: Map<SyncRunKind, Promise<void>>;
+        [RUNNING_GLOBAL]?: Map<SyncRunKind, Promise<RunJobResult>>;
     };
     return (scope[RUNNING_GLOBAL] ??= new Map());
 }
 
-async function execute(job: Job, openDb: () => DatabaseSync): Promise<void> {
+/**
+ * Record, now, how run `id` of `job` (started at `startedAt`) ended, and give
+ * the run as recorded. Throws when the end cannot be recorded.
+ */
+function finishRun(
+    db: DatabaseSync,
+    job: Job,
+    id: number,
+    startedAt: Date,
+    outcome: Required<SyncRunOutcome>
+): SyncRun {
+    const finishedAt = new Date();
+    finishSyncRun(db, id, outcome, finishedAt);
+    return {
+        id,
+        kind: job.kind,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        ...outcome,
+    };
+}
+
+async function execute(job: Job, openDb: () => DatabaseSync): Promise<RunJobResult> {
+    const startedAt = new Date();
     let db: DatabaseSync;
     let id: number;
     try {
         db = openDb();
-        id = startSyncRun(db, job.kind);
+        id = startSyncRun(db, job.kind, startedAt);
     } catch (error) {
         console.error(`Job ${job.kind} could not start:`, error);
-        return;
+        return { run: null, error: errorMessage(error) };
     }
     try {
         const result = (await job.run(db)) ?? {};
-        finishSyncRun(db, id, {
+        const run = finishRun(db, job, id, startedAt, {
             ok: true,
             message: result.message ?? null,
             counts: result.counts ?? null,
@@ -111,29 +161,39 @@ async function execute(job: Job, openDb: () => DatabaseSync): Promise<void> {
         console.log(
             `Job ${job.kind} finished${result.message ? `: ${result.message}` : ""}`
         );
+        return { run };
     } catch (error) {
         console.error(`Job ${job.kind} failed:`, error);
         try {
-            finishSyncRun(db, id, { ok: false, message: errorMessage(error) });
+            return {
+                run: finishRun(db, job, id, startedAt, {
+                    ok: false,
+                    message: errorMessage(error),
+                    counts: null,
+                }),
+            };
         } catch (recordError) {
             console.error(
                 `Job ${job.kind}: could not record the failure:`,
                 recordError
             );
+            return { run: null, error: errorMessage(error) };
         }
     }
 }
 
 /**
- * Run `job` now and record the run in `sync_runs`; resolves when it is done.
- * Never throws or rejects: a failure is logged and recorded as a failed run
- * (only logged, if the database cannot be opened). A call while a run of the
- * same kind is in progress joins that run instead of starting another.
+ * Run `job` now and record the run in `sync_runs`. Resolves, when it is
+ * done, to that run as recorded, `ok` false when the job failed; or, when no
+ * run could be recorded (the database could not be opened or written), to
+ * `run: null` and why. Never an older run, and never throws or rejects:
+ * every failure is logged too. A call while a run of the same kind is in
+ * progress joins that run instead of starting another, and resolves to it.
  */
 export function runJob(
     job: Job,
     openDb: () => DatabaseSync = getDb
-): Promise<void> {
+): Promise<RunJobResult> {
     const running = runningJobs();
     const current = running.get(job.kind);
     if (current) {

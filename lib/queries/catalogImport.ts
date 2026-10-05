@@ -12,8 +12,8 @@ import {
     type ImportRunErrorReason,
 } from "@/lib/db/importRuns";
 import type { ImportCounts, ImportRunDetail, ImportRunSummary } from "@/lib/domain";
-import { hymnCatalog } from "@/lib/hymnCatalog";
 import { planHymnsJsonImport } from "@/lib/import/hymnsJson";
+import { hymnsJsonRecords } from "@/lib/import/hymnsJsonFile";
 import { labelOr } from "./catalog";
 
 /**
@@ -44,7 +44,7 @@ function refusalOf(reason: ImportRunErrorReason): ImportRunRefusal {
  * what refuses once the catalog has books.
  */
 export function previewSeedImport(): number {
-    const plan = planHymnsJsonImport(hymnCatalog);
+    const plan = planHymnsJsonImport(hymnsJsonRecords);
     return createImportRun(getDb(), {
         kind: "hymns-json",
         sourceName: SEED_SOURCE_NAME,

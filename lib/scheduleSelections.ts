@@ -1,23 +1,24 @@
 import type { PlanItem, ScheduleSelection } from "./domain";
+import { catalogMatchFor, type ScheduleCatalog } from "./serviceSchedule";
 
-/** What a song's radio buttons can pick besides a hymn version. */
-export type ScheduleOption = NonNullable<ScheduleSelection["selectedOption"]>;
+/** What a song's radio buttons pick: its numbers, leave it blank, or custom text. */
+export type ScheduleOption = ScheduleSelection["option"];
 
 /**
- * The Schedule tab's choices, keyed by plan item ID. An item without an entry
- * shows its defaults (see `defaultSelection`).
+ * The Schedule tab's choices, keyed by plan item ID: an option, custom text
+ * typed before any option was chosen, or both. An item without an option
+ * shows its default (see `defaultOption`).
  */
-export type ScheduleSelections = Readonly<Record<string, ScheduleSelection>>;
+export type ScheduleSelections = Readonly<
+    Record<string, Partial<ScheduleSelection>>
+>;
 
 /** A change made on the Schedule tab. */
 export type ScheduleSelectionsAction =
     | {
           type: "chooseOption";
           itemId: string;
-          /** "Leave blank" or "Custom"; undefined when a hymn version is picked. */
-          option: ScheduleOption | undefined;
-          /** The picked hymn version; undefined for "Leave blank" and "Custom". */
-          versionIndex: number | undefined;
+          option: ScheduleOption;
       }
     | {
           type: "setCustomText";
@@ -25,15 +26,8 @@ export type ScheduleSelectionsAction =
           text: string;
       };
 
-/**
- * Pick an option for a song: a hymn version (`option` undefined and
- * `versionIndex` set), "Leave blank" or "Custom" (no `versionIndex`).
- */
-export type ChooseOption = (
-    itemId: string,
-    option: ScheduleOption | undefined,
-    versionIndex?: number
-) => void;
+/** Pick a song's option: its numbers, "blank" or "custom". */
+export type ChooseOption = (itemId: string, option: ScheduleOption) => void;
 
 /** Save the custom text typed for a song. */
 export type SetCustomText = (itemId: string, text: string) => void;
@@ -42,32 +36,24 @@ export type SetCustomText = (itemId: string, text: string) => void;
  * Apply a Schedule-tab change. Pure: it returns a new state and leaves the
  * old one alone, so a debounced update applied later never undoes a newer one.
  *
- * Mirrors what ServiceSchedule did to its items before the selections moved
- * here, field for field:
- * - `chooseOption` sets `selectedOption`, keeps the custom text for "Custom"
- *   (or starts it at "") and clears it otherwise, and sets
- *   `selectedVersionIndex` to the index passed. For "Leave blank" and "Custom"
- *   that is `undefined`, stored as a key with an undefined value, so it
- *   overrides the default version 0 when merged (`mergeScheduleSelections`).
- * - `setCustomText` sets only `customText`.
+ * - `chooseOption` sets the option. "custom" keeps the custom text already
+ *   typed (or starts it at ""); "numbers" and "blank" drop it, so choosing
+ *   Custom again starts empty.
+ * - `setCustomText` sets only the custom text.
  */
 export function scheduleSelectionsReducer(
     state: ScheduleSelections,
     action: ScheduleSelectionsAction
 ): ScheduleSelections {
-    const current: ScheduleSelection | undefined = state[action.itemId];
+    const current: Partial<ScheduleSelection> | undefined = state[action.itemId];
     switch (action.type) {
         case "chooseOption":
             return {
                 ...state,
-                [action.itemId]: {
-                    selectedOption: action.option,
-                    customText:
-                        action.option === "Custom"
-                            ? current?.customText || ""
-                            : undefined,
-                    selectedVersionIndex: action.versionIndex,
-                },
+                [action.itemId]:
+                    action.option === "custom"
+                        ? { option: "custom", customText: current?.customText || "" }
+                        : { option: action.option },
             };
         case "setCustomText":
             return {
@@ -78,26 +64,53 @@ export function scheduleSelectionsReducer(
 }
 
 /**
- * What an item shows before anything is chosen: a song starts on its first
- * hymn version, and other items have no selections.
+ * Whether an item can print numbers: it is a song whose Planning Center song
+ * is linked to a catalog song in at least one book.
  */
-export function defaultSelection(
-    item: Pick<PlanItem, "itemType">
-): ScheduleSelection {
-    return item.itemType === "song" ? { selectedVersionIndex: 0 } : {};
+export function hasNumbers(
+    item: Pick<PlanItem, "itemType" | "songId">,
+    catalog: ScheduleCatalog
+): boolean {
+    if (item.itemType !== "song") {
+        return false;
+    }
+    return (catalogMatchFor(catalog, item.songId)?.entries.length ?? 0) > 0;
 }
 
 /**
- * The items as the Schedule tab sees them: each item with its default
- * selections, overridden by any it has in `selections`. Returns new objects in
- * the same order and modifies nothing.
+ * The option an item starts on: "numbers" when it can print numbers (see
+ * `hasNumbers`), otherwise "blank".
+ */
+export function defaultOption(
+    item: Pick<PlanItem, "itemType" | "songId">,
+    catalog: ScheduleCatalog
+): ScheduleOption {
+    return hasNumbers(item, catalog) ? "numbers" : "blank";
+}
+
+/**
+ * The items as the Schedule tab sees them: each item with its option and any
+ * custom text. The option is the one chosen, or the default
+ * (`defaultOption`), so a song linked while the tab is open turns to its
+ * numbers unless something else was chosen for it. "numbers" needs numbers:
+ * an item that has none (its song was unlinked since) shows "blank". Returns
+ * new objects in the same order and modifies nothing.
  */
 export function mergeScheduleSelections<
-    T extends Pick<PlanItem, "id" | "itemType">,
->(items: readonly T[], selections: ScheduleSelections): (T & ScheduleSelection)[] {
-    return items.map((item) => ({
-        ...item,
-        ...defaultSelection(item),
-        ...selections[item.id],
-    }));
+    T extends Pick<PlanItem, "id" | "itemType" | "songId">,
+>(
+    items: readonly T[],
+    selections: ScheduleSelections,
+    catalog: ScheduleCatalog
+): (T & ScheduleSelection)[] {
+    return items.map((item) => {
+        const chosen: Partial<ScheduleSelection> | undefined = selections[item.id];
+        const numbers = hasNumbers(item, catalog);
+        const option = chosen?.option ?? (numbers ? "numbers" : "blank");
+        return {
+            ...item,
+            ...chosen,
+            option: option === "numbers" && !numbers ? "blank" : option,
+        };
+    });
 }

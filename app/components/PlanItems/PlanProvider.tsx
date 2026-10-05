@@ -8,7 +8,8 @@ import {
     useReducer,
 } from "react";
 import type {
-    HymnData,
+    CatalogMatch,
+    LinkSuggestion,
     Plan,
     PlanItemWithSong,
     ScheduleSelection,
@@ -29,11 +30,28 @@ export interface PlanContextValue {
     serviceType: ServiceType;
     /** The plan's items sorted by sequence, each joined to its song. */
     items: PlanItemWithSong[];
-    /** Hymnbook matches for the song items' titles. */
-    hymns: HymnData[];
-    /** `items` with the Schedule tab's selections merged in (songs default to version 0). */
+    /**
+     * The catalog song each song item's Planning Center song is linked to,
+     * by Planning Center song id.
+     */
+    catalog: Record<string, CatalogMatch>;
+    /**
+     * The best few catalog songs for each song item's Planning Center song
+     * that is not linked and not set aside, by Planning Center song id.
+     */
+    suggestions: Record<string, LinkSuggestion[]>;
+    /**
+     * Why the catalog could not be read, or null. `catalog` is then empty,
+     * and the plan's pages work without it.
+     */
+    catalogError: string | null;
+    /**
+     * `items` with the Schedule tab's selections merged in: a song with
+     * numbers starts on Numbers, every other item on Leave blank (see
+     * `mergeScheduleSelections`).
+     */
     scheduleItems: (PlanItemWithSong & ScheduleSelection)[];
-    /** Pick a song's hymn version, "Leave blank" or "Custom". Stable across renders. */
+    /** Choose a song's option: Numbers, Leave blank or Custom. Stable across renders. */
     chooseOption: ChooseOption;
     /** Save a song's custom text. Stable across renders. */
     setCustomText: SetCustomText;
@@ -59,17 +77,18 @@ interface PlanProviderProps {
  * the provider by plan, so another plan starts with no selections.
  */
 export default function PlanProvider({ detail, children }: PlanProviderProps) {
-    const { plan, serviceType, items, hymns } = detail;
+    const { plan, serviceType, items, catalog, suggestions, catalogError } = detail;
     const [selections, dispatch] = useReducer(scheduleSelectionsReducer, {});
 
+    // The defaults follow the catalog links, so a song linked from the tab
+    // turns to its numbers when the layout re-renders with the new `catalog`.
     const scheduleItems = useMemo(
-        () => mergeScheduleSelections(items, selections),
-        [items, selections]
+        () => mergeScheduleSelections(items, selections, catalog),
+        [items, selections, catalog]
     );
 
     const chooseOption = useCallback<ChooseOption>(
-        (itemId, option, versionIndex) =>
-            dispatch({ type: "chooseOption", itemId, option, versionIndex }),
+        (itemId, option) => dispatch({ type: "chooseOption", itemId, option }),
         []
     );
 
@@ -83,7 +102,9 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             plan,
             serviceType,
             items,
-            hymns,
+            catalog,
+            suggestions,
+            catalogError,
             scheduleItems,
             chooseOption,
             setCustomText,
@@ -92,7 +113,9 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             plan,
             serviceType,
             items,
-            hymns,
+            catalog,
+            suggestions,
+            catalogError,
             scheduleItems,
             chooseOption,
             setCustomText,

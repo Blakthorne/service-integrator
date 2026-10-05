@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { hymnCatalog } from "@/lib/hymnCatalog";
 import { planHymnsJsonImport, type HymnsJsonImport } from "@/lib/import/hymnsJson";
+import { hymnsJsonRecords } from "@/lib/import/hymnsJsonFile";
 import {
     countCatalog,
     findBook,
@@ -51,7 +51,7 @@ describe("applyImportRun with the real seed", () => {
     let runId: number;
 
     beforeAll(() => {
-        seed = planHymnsJsonImport(hymnCatalog);
+        seed = planHymnsJsonImport(hymnsJsonRecords);
     });
 
     beforeEach(() => {

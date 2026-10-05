@@ -1,7 +1,8 @@
 /**
  * The app's domain types: the one place where the shapes of service types,
- * plans, plan items, songs and hymnbook matches are declared. Pure types, safe
- * to import from client and server code alike.
+ * plans, plan items, songs, the Schedule tab's selections and the song
+ * catalog are declared. Pure types, safe to import from client and server
+ * code alike.
  *
  * Raw Planning Center (JSON:API) shapes live in lib/pco/resources.ts, and
  * lib/pco/mappers.ts turns them into these.
@@ -77,32 +78,16 @@ export interface PlanItem {
 export type PlanItemWithSong = PlanItem & { song: Song | null };
 
 /**
- * One tune version of a hymn in the hymnbooks. Numbers are strings, and "-1"
- * means the hymn is not in that book.
- */
-export interface HymnVersion {
-    id: string;
-    tune_name: string;
-    rejoice_hymns_number: string;
-    great_hymns_number: string;
-}
-
-/** The hymnbook match for a requested song title, with every tune version. */
-export interface HymnData {
-    /** The title as it was requested, not the hymnbook's spelling. */
-    song_title: string;
-    versions: HymnVersion[];
-}
-
-/**
- * The choices made for one song on the Schedule tab. This is UI state, not
- * PCO data, so it is kept apart from PlanItem and combined with it only where
- * a view needs both (`PlanItem & ScheduleSelection`).
+ * The choice made for one song on the Schedule tab: print its numbers from
+ * its catalog link ("numbers"), leave it blank ("blank": just its title), or
+ * print custom text ("custom"). This is UI state, not PCO data, so it is kept
+ * apart from PlanItem and combined with it only where a view needs both
+ * (`PlanItem & ScheduleSelection`).
  */
 export interface ScheduleSelection {
-    selectedOption?: "Leave blank" | "Custom";
+    option: "numbers" | "blank" | "custom";
+    /** What "custom" prints. Kept while Custom is chosen; another choice drops it. */
     customText?: string;
-    selectedVersionIndex?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +198,17 @@ export interface CatalogSongSummary {
     tuneName: string | null;
     /** The tune's other names, which search also matches. */
     tuneAliases: string[];
+    /** The Planning Center song it is linked to, or null when it is not linked. */
     pcoSongId: string | null;
+    /** How its link was made; null when it is not linked (or a newer build made it). */
+    linkedBy: SongLinkSource | null;
+    /**
+     * When its Planning Center song was last scheduled, as Planning Center
+     * gives it (counting upcoming plans): null when it is not linked, the
+     * mirror lacks the song, or the song was never scheduled. A song is used
+     * when this is set.
+     */
+    lastScheduledAt: string | null;
     /** Its entries in book order, then by number or position. */
     entries: LabelledEntry[];
 }
@@ -418,4 +413,118 @@ export interface SeedImportReport {
     songsWithoutTune: SeedSongWithoutTune[];
     possibleDuplicates: SeedPossibleDuplicate[];
     skippedEntries: SeedSkippedEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Planning Center links
+//
+// A catalog song links to at most one Planning Center song, and a Planning
+// Center song to at most one catalog song (`songs.pco_song_id`). The app
+// mirrors the Planning Center song library in the database (`pco_songs`,
+// refreshed by the `pco-songs` sync), so a link never points at nothing and
+// Reconcile can list the songs that have no catalog song yet. Rows of the
+// mirror are never deleted: a song gone from Planning Center is marked
+// removed.
+// ---------------------------------------------------------------------------
+
+/**
+ * A song of the Planning Center library with every field the mirror keeps.
+ * Unlike `Song`, which a plan item carries, it has Planning Center's dates and
+ * hidden flag, and no notes. A field Planning Center leaves empty is null.
+ */
+export interface PcoLibrarySong {
+    id: string;
+    title: string;
+    author: string | null;
+    copyright: string | null;
+    ccliNumber: number | null;
+    admin: string | null;
+    themes: string | null;
+    /** Hidden from the library in Planning Center. */
+    hidden: boolean;
+    /**
+     * When it was last scheduled, as Planning Center gives it: org-local time
+     * labelled UTC ("Z"), counting upcoming plans too. Null when it never was.
+     */
+    lastScheduledAt: string | null;
+    /** When it was created in Planning Center. */
+    createdAt: string | null;
+    /** When it last changed in Planning Center. */
+    updatedAt: string | null;
+}
+
+/** A row of the mirror: a library song, and what the app has noted about it. */
+export interface MirroredPcoSong extends PcoLibrarySong {
+    /** When a sync, or a link made from a page, last read it from Planning Center. */
+    syncedAt: string;
+    /** When a sync found it gone from Planning Center; null while it is there. */
+    removedAt: string | null;
+    /** When Reconcile's Ignore set it aside as not hymnal material; null otherwise. */
+    ignoredAt: string | null;
+    /**
+     * When an auto-link of it was undone, so that no sync links it again
+     * (a manual link still can); null otherwise.
+     */
+    autoLinkBlockedAt: string | null;
+}
+
+/**
+ * Why a catalog song is suggested for a Planning Center song, strongest
+ * first. The Planning Center title is the hymn's title ("exact") or one of
+ * its aliases ("alias"); or it is the hymn's title or alias with the song's
+ * tune named in a trailing parenthetical ("tune-hint", as in "Abba, Father
+ * (PRITCHARD)"); or it is nearly the hymn's title or an alias, or is one with
+ * a parenthetical that names no tune of that song ("near"). The first three
+ * are strong: a sync may link on one of them without asking.
+ */
+export type LinkReason = "exact" | "alias" | "tune-hint" | "near";
+
+/** A catalog song as a plan page shows it for an item whose Planning Center song links to it. */
+export interface CatalogMatch {
+    /** The catalog song's id. */
+    songId: number;
+    /** Its hymn's title. */
+    title: string;
+    /** Its tune's name; null when the tune is unknown. */
+    tuneName: string | null;
+    /** Its entries, labelled, in book order, then by number or position. */
+    entries: LabelledEntry[];
+}
+
+/** A catalog song suggested as the link for a Planning Center song. */
+export interface LinkSuggestion extends CatalogMatch {
+    reason: LinkReason;
+    /**
+     * The Planning Center song this catalog song is already linked to, or
+     * null. Linking it to another one is refused until that link is undone.
+     */
+    pcoSongId: string | null;
+}
+
+/** A Planning Center song with no catalog song yet, with the catalog songs it may be. */
+export interface UnlinkedPcoSong {
+    pcoSong: MirroredPcoSong;
+    /** The best few suggestions, best first (see `suggestLinks` in lib/reconcile.ts). */
+    suggestions: LinkSuggestion[];
+}
+
+/** A link a sync made on its own, as Reconcile lists it for review, with Undo. */
+export interface AutoLinkedSong extends CatalogMatch {
+    pcoSongId: string;
+    /** The Planning Center song's title; null when the mirror lacks it. */
+    pcoTitle: string | null;
+    linkedAt: string;
+}
+
+/** A catalog song as a picker lists it: enough to find it, label it and link it. */
+export interface CatalogSongOption {
+    songId: number;
+    /** Its hymn's title. */
+    title: string;
+    /** Its tune's name; null when the tune is unknown. */
+    tuneName: string | null;
+    /** Its entries' labels, in book order. */
+    labels: string[];
+    /** The Planning Center song it is linked to, or null. */
+    pcoSongId: string | null;
 }

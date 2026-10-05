@@ -17,6 +17,12 @@ interface SegmentedProps<T extends string> {
     onChange: (next: T) => void;
     /** Names the group for screen readers, such as "Filter by book". */
     ariaLabel: string;
+    /**
+     * The id of text about the choice, such as a form's error about it. Every
+     * button names it in `aria-describedby`, so it is read wherever focus
+     * lands in the group (in place of an option's `title`).
+     */
+    describedBy?: string;
 }
 
 /**
@@ -31,6 +37,7 @@ export default function Segmented<T extends string>({
     options,
     onChange,
     ariaLabel,
+    describedBy,
 }: SegmentedProps<T>) {
     return (
         <div
@@ -45,6 +52,7 @@ export default function Segmented<T extends string>({
                         key={option.value}
                         type="button"
                         aria-pressed={isActive}
+                        aria-describedby={describedBy}
                         title={option.title}
                         onClick={() => onChange(option.value)}
                         // The focus ring is inset, since the group's overflow

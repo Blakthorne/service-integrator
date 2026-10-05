@@ -7,6 +7,7 @@ import type {
     BookEntry,
     BookSummary,
     CatalogCounts,
+    CatalogMatch,
     CatalogSongDetail,
     CatalogSongSummary,
     Entry,
@@ -143,8 +144,10 @@ function aliasesByOwner(rows: Row[]): Map<number, string[]> {
 
 /**
  * Songs as list rows, in `orderBy` order, each with its hymn's and tune's
- * aliases and its labelled entries in book order. Four queries, whatever the
- * number of songs: the songs, their entries, and the two kinds of alias.
+ * aliases, its link and when its Planning Center song was last scheduled,
+ * and its labelled entries in book order. Four queries, whatever the number
+ * of songs: the songs (with their links), their entries, and the two kinds
+ * of alias.
  */
 function songSummaries(
     db: DatabaseSync,
@@ -159,10 +162,12 @@ function songSummaries(
 
     const songs = db
         .prepare(
-            `SELECT s.id, s.hymn_id, h.title, s.tune_id, t.name AS tune_name, s.pco_song_id
+            `SELECT s.id, s.hymn_id, h.title, s.tune_id, t.name AS tune_name, s.pco_song_id,
+                    s.linked_by, p.last_scheduled_at
              FROM songs s
              JOIN hymns h ON h.id = s.hymn_id
              LEFT JOIN tunes t ON t.id = s.tune_id
+             LEFT JOIN pco_songs p ON p.id = s.pco_song_id
              ${where}
              ORDER BY ${orderBy}`
         )
@@ -212,6 +217,8 @@ function songSummaries(
             tuneName: nullableText(row.tune_name),
             tuneAliases: tuneId === null ? [] : (tuneAliases.get(tuneId) ?? []),
             pcoSongId: nullableText(row.pco_song_id),
+            linkedBy: linkSource(row.linked_by),
+            lastScheduledAt: nullableText(row.last_scheduled_at),
             entries: entries.get(id) ?? [],
         };
     });
@@ -230,8 +237,8 @@ export function listCatalogSongs(db: DatabaseSync): CatalogSongSummary[] {
     return songSummaries(db, null, BY_TITLE);
 }
 
-/** "Amazing Grace (NEW BRITAIN)", or the title alone when the tune is unknown. */
-function songLabelOf(title: string, tuneName: string | null): string {
+/** A song's label, "Amazing Grace (NEW BRITAIN)", or the title alone when the tune is unknown. */
+export function songLabelOf(title: string, tuneName: string | null): string {
     return tuneName === null ? title : `${title} (${tuneName})`;
 }
 
@@ -321,6 +328,58 @@ export function findCatalogSongLabel(
         )
         .get(songId);
     return row ? songLabelOf(text(row.title), nullableText(row.tune_name)) : null;
+}
+
+/**
+ * The catalog songs linked to these Planning Center songs, by Planning
+ * Center song id, each with its hymn's title, its tune's name and its
+ * labelled entries in book order: what a plan page shows beside its items.
+ * Ids no song is linked to are left out. Two queries, however many ids, and
+ * none for no ids.
+ */
+export function findCatalogMatches(
+    db: DatabaseSync,
+    pcoSongIds: readonly string[]
+): Map<string, CatalogMatch> {
+    const matches = new Map<string, CatalogMatch>();
+    if (pcoSongIds.length === 0) {
+        return matches;
+    }
+    const ids = JSON.stringify([...new Set(pcoSongIds)]);
+    const linked = "s.pco_song_id IN (SELECT value FROM json_each(?))";
+    const entries = groupBy(
+        db
+            .prepare(
+                `SELECT ${ENTRY_COLUMNS}
+                 FROM entries e
+                 JOIN books b ON b.id = e.book_id
+                 JOIN songs s ON s.id = e.song_id
+                 WHERE ${linked}
+                 ORDER BY ${BOOK_ORDER}, ${PLACEMENT_ORDER}, ${VARIANT_ORDER}`
+            )
+            .all(ids)
+            .map(toLabelledEntry),
+        (entry) => entry.songId
+    );
+    const songs = db
+        .prepare(
+            `SELECT s.id, s.pco_song_id, h.title, t.name AS tune_name
+             FROM songs s
+             JOIN hymns h ON h.id = s.hymn_id
+             LEFT JOIN tunes t ON t.id = s.tune_id
+             WHERE ${linked}`
+        )
+        .all(ids);
+    for (const row of songs) {
+        const songId = int(row.id);
+        matches.set(text(row.pco_song_id), {
+            songId,
+            title: text(row.title),
+            tuneName: nullableText(row.tune_name),
+            entries: entries.get(songId) ?? [],
+        });
+    }
+    return matches;
 }
 
 // ---------------------------------------------------------------------------

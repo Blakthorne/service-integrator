@@ -1,0 +1,127 @@
+import type {
+    CatalogMatch,
+    LinkSuggestion,
+    PlanItemWithSong,
+} from "./domain";
+import type { ScheduleOption } from "./scheduleSelections";
+import { catalogMatchFor, formatScheduleNumbers } from "./serviceSchedule";
+
+/**
+ * What the Schedule tab shows for each song item: which card, which choices,
+ * and the words around them. Pure and safe on both sides: the tab's
+ * components take these decisions from here, so they are tested without a
+ * browser.
+ */
+
+/** What a plan's pages know of the catalog (see `PlanDetail`). */
+export interface ScheduleCatalogState {
+    /** The catalog song each linked Planning Center song is linked to, by its id. */
+    catalog: Readonly<Record<string, CatalogMatch>>;
+    /** Suggestions for each Planning Center song that is not linked and not set aside, by its id. */
+    suggestions: Readonly<Record<string, readonly LinkSuggestion[]>>;
+    /** Why the catalog could not be read, or null. */
+    catalogError: string | null;
+}
+
+/** Which card a song item gets. */
+export type ScheduleSongView =
+    /** Its Planning Center song is linked to a catalog song: its numbers. */
+    | { kind: "linked"; match: CatalogMatch }
+    /** Its Planning Center song is not linked: suggestions to link it to, and ways to find or create its catalog song. */
+    | { kind: "unlinked"; pcoSongId: string; suggestions: readonly LinkSuggestion[] }
+    /** Its Planning Center song was set aside on Reconcile as not hymnal material. */
+    | { kind: "ignored"; pcoSongId: string }
+    /** It schedules no Planning Center song. */
+    | { kind: "no-song" }
+    /** The catalog could not be read, so whether it is linked is not known. */
+    | { kind: "unknown" };
+
+/** The card for a song item (see `ScheduleSongView`). */
+export function scheduleSongView(
+    item: Pick<PlanItemWithSong, "songId">,
+    { catalog, suggestions, catalogError }: ScheduleCatalogState
+): ScheduleSongView {
+    if (item.songId === null) {
+        return { kind: "no-song" };
+    }
+    if (catalogError !== null) {
+        return { kind: "unknown" };
+    }
+    const match = catalogMatchFor(catalog, item.songId);
+    if (match) {
+        return { kind: "linked", match };
+    }
+    const found = catalogMatchFor(suggestions, item.songId);
+    if (found) {
+        return { kind: "unlinked", pcoSongId: item.songId, suggestions: found };
+    }
+    // `getPlanDetail` lists suggestions, perhaps none, for every song that
+    // is neither linked nor set aside.
+    return { kind: "ignored", pcoSongId: item.songId };
+}
+
+/**
+ * The choices a card offers, in order: Numbers only for a song linked to a
+ * catalog song in a book (as `hasNumbers` says), then Leave blank and
+ * Custom for every song.
+ */
+export function scheduleChoices(view: ScheduleSongView): ScheduleOption[] {
+    return view.kind === "linked" && view.match.entries.length > 0
+        ? ["numbers", "blank", "custom"]
+        : ["blank", "custom"];
+}
+
+/**
+ * What a card says, through its status region, once a Link made on it has
+ * gone through: "Linked: R-396 / G-317", the numbers the schedule text will
+ * print, or that the song is in no book. Null while the card still shows
+ * the song as not linked, before the action's revalidation has brought the
+ * link. Should the catalog be unreadable by then, just "Linked."
+ */
+export function linkedNotice(view: ScheduleSongView): string | null {
+    if (view.kind === "unlinked") {
+        return null;
+    }
+    if (view.kind !== "linked") {
+        return "Linked.";
+    }
+    const numbers = formatScheduleNumbers(view.match.entries);
+    return numbers === ""
+        ? "Linked. The song is in no book, so there are no numbers to print."
+        : `Linked: ${numbers}`;
+}
+
+/** The label of each choice. */
+export const SCHEDULE_OPTION_LABELS: Readonly<Record<ScheduleOption, string>> = {
+    numbers: "Numbers",
+    blank: "Leave blank",
+    custom: "Custom",
+};
+
+/**
+ * The Planning Center song's title when the item calls it something else
+ * ("Come, Thou Fount of Every Blessing" for an item titled "Come Thou Fount
+ * (Key of D)"), so a card can say what its suggestions were matched by; null
+ * when they are the same or the item has no song.
+ */
+export function differentSongTitle(
+    item: Pick<PlanItemWithSong, "title" | "song">
+): string | null {
+    const songTitle = item.song?.title.trim() ?? "";
+    return songTitle !== "" && songTitle !== item.title.trim() ? songTitle : null;
+}
+
+/**
+ * What the Schedule tab says when the catalog cannot be read (see
+ * `PlanDetail.catalogError`): "The catalog is unavailable: <why>. Numbers
+ * can't be shown." A reason that already ends a sentence gets no second
+ * full stop, and an empty one is left out.
+ */
+export function catalogUnavailableMessage(error: string): string {
+    const reason = error.trim();
+    if (reason === "") {
+        return "The catalog is unavailable. Numbers can't be shown.";
+    }
+    const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`;
+    return `The catalog is unavailable: ${sentence} Numbers can't be shown.`;
+}

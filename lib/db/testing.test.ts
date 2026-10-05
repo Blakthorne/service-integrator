@@ -5,6 +5,7 @@ import {
     seedBook,
     seedEntry,
     seedHymn,
+    seedPcoSong,
     seedSong,
     seedTune,
 } from "./testing";
@@ -179,6 +180,74 @@ describe("seedEntry", () => {
             position: null,
             location_label: "front cover",
             variant_note: "A Round",
+        });
+    });
+});
+
+describe("seedPcoSong", () => {
+    test("makes songs with ids 9000001, 9000002, … and numbered titles by default", () => {
+        const first = seedPcoSong(db);
+        const second = seedPcoSong(db);
+        expect([first, second]).toEqual(["9000001", "9000002"]);
+        expect(db.prepare("SELECT * FROM pco_songs WHERE id = ?").get(first)).toEqual({
+            id: "9000001",
+            title: "PCO Song 1",
+            author: null,
+            copyright: null,
+            ccli_number: null,
+            admin: null,
+            themes: null,
+            hidden: 0,
+            last_scheduled_at: null,
+            created_at: null,
+            updated_at: null,
+            synced_at: "2026-10-04T12:00:00.000Z",
+            removed_at: null,
+            ignored_at: null,
+            auto_link_blocked_at: null,
+        });
+    });
+
+    test("skips a default id that is taken", () => {
+        seedPcoSong(db, { id: "9000002" });
+        expect(seedPcoSong(db)).toBe("9000003");
+    });
+
+    test("takes every field", () => {
+        const id = seedPcoSong(db, {
+            id: "12345",
+            title: "Amazing Grace",
+            author: "John Newton",
+            copyright: "Public Domain",
+            ccliNumber: 22025,
+            admin: "Admin Co",
+            themes: "Grace",
+            hidden: true,
+            lastScheduledAt: "2026-09-27T08:00:00Z",
+            createdAt: "2019-01-01T00:00:00Z",
+            updatedAt: "2026-09-27T08:00:00Z",
+            syncedAt: "2026-10-04T13:00:00.000Z",
+            removedAt: "2026-10-04T14:00:00.000Z",
+            ignoredAt: "2026-10-04T15:00:00.000Z",
+            autoLinkBlockedAt: "2026-10-04T16:00:00.000Z",
+        });
+        expect(id).toBe("12345");
+        expect(db.prepare("SELECT * FROM pco_songs WHERE id = ?").get(id)).toEqual({
+            id: "12345",
+            title: "Amazing Grace",
+            author: "John Newton",
+            copyright: "Public Domain",
+            ccli_number: 22025,
+            admin: "Admin Co",
+            themes: "Grace",
+            hidden: 1,
+            last_scheduled_at: "2026-09-27T08:00:00Z",
+            created_at: "2019-01-01T00:00:00Z",
+            updated_at: "2026-09-27T08:00:00Z",
+            synced_at: "2026-10-04T13:00:00.000Z",
+            removed_at: "2026-10-04T14:00:00.000Z",
+            ignored_at: "2026-10-04T15:00:00.000Z",
+            auto_link_blocked_at: "2026-10-04T16:00:00.000Z",
         });
     });
 });

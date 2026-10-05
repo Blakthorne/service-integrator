@@ -46,3 +46,27 @@ export function getDatabaseStatus(): DatabaseStatus {
         return { ok: false, error: errorMessage(error) };
     }
 }
+
+/** The Planning Center song sync, for the Settings page: its latest run, or that it cannot be read. */
+export type PcoSongsSyncStatus =
+    | {
+          ok: true;
+          /** The latest run, finished or not, or null before the first. */
+          lastRun: SyncRun | null;
+      }
+    | { ok: false };
+
+/**
+ * The latest run of the Planning Center song sync (`pco-songs`), for the
+ * Settings page's sync card. Never throws: when the database cannot be read
+ * it logs the error and gives `{ ok: false }`, and the Database card above
+ * says why.
+ */
+export function getLastPcoSongsSync(): PcoSongsSyncStatus {
+    try {
+        return { ok: true, lastRun: latestSyncRun(getDb(), "pco-songs") };
+    } catch (error) {
+        console.error("Song sync status unavailable:", error);
+        return { ok: false };
+    }
+}

@@ -281,11 +281,48 @@ Decisions the orchestrator made where the plan was silent or inconsistent. They 
 
 **Pages.** `/catalog` (songs list, client-side filter/sort/page over all rows like Unused Hymns: `q`, `book`, `sort`, `page` in the URL through `useUrlState`; an empty catalog shows an `EmptyState` pointing at Import), `/catalog/songs/[songId]` (HymnCard with aliases and the hymn's other tunes, TuneCard with the tune's other hymns, EntriesCard), `/catalog/tunes` and `/catalog/tunes/[tuneId]`, `/catalog/books` and `/catalog/books/[bookCode]` (entries by number, or by position for an unnumbered book; the front cover first), `/catalog/import` (runs list + "Preview seed from hymns.json") and `/catalog/import/[runId]` (the report; Apply and Discard behind a `ui/Dialog` confirm; Apply refuses when books exist). `catalog/layout.tsx` renders `CatalogSectionNav` from `CATALOG_SECTIONS` (Songs · Tunes · Books · Import; Reconcile joins in phase 2) and fetches nothing. Nav: Plans · Catalog · Unused Hymns (Unused Hymns leaves in phase 2). New shared UI: `ui/Segmented`, `ui/Dialog` (native `<dialog>`), `ui/SubmitButton` (`useFormStatus`). Detail pages get `not-found.tsx`; list pages `loading.tsx`; `generateMetadata` reads the DB in a try/catch and never throws.
 
+### Phase 2 design (ID links)
+
+**Mirror (`0003_pco_songs.ts`).** `pco_songs`: `id` TEXT PRIMARY KEY (the PCO id), `title`, `author`, `copyright`, `ccli_number`, `admin`, `themes`, `hidden` (0/1), `last_scheduled_at` (PCO's value: org-local time labelled `Z`, and it counts upcoming plans), PCO's `created_at`/`updated_at`, `synced_at` (last seen by a sync), `removed_at` (gone from PCO; rows are never deleted, so links never dangle), `ignored_at` (Reconcile's "Ignore": not hymnal material), and **`auto_link_blocked_at`** (set when the user undoes an auto-link, so the next sync does not redo it; manual links still work). There is no foreign key from `songs.pco_song_id` (SQLite cannot add one without rebuilding `songs`); the link functions keep the two consistent.
+
+**Sync (`syncPcoSongs`).** One paced `pcoFetchAll('/songs?per_page=100')` (about 4 requests; not the `cache()`d getter), then in one transaction: upsert every song, set `removed_at` on rows the full listing no longer contains (only after a complete fetch), clear it on rows that came back, then auto-link. A `pco-songs` job runs it hourly and at boot (`JOBS` in `lib/jobs.ts`), and "Sync now" (Settings and Reconcile) runs it on demand through `runJob`.
+
+**Matching (`lib/reconcile.ts`, pure).** `levenshtein`/`isNearMatch` move from `lib/unusedHymns.ts` to `lib/fuzzy.ts`. A catalog index maps normalized hymn titles and aliases to songs, and normalized tune names and aliases to tunes. `suggestLinks(pcoSong, index)` returns ranked candidates with `reason`:
+- `exact`: the normalized PCO title is a hymn's title;
+- `alias`: it is a hymn alias;
+- `tune-hint`: a trailing parenthetical names a tune (`/\s*\(.*\)\s*$/`), so base title + tune pick one song;
+- `near`: `isNearMatch` on the normalized title.
+**Auto-link** only when: the PCO song is unlinked, not ignored, not removed and not blocked; it has exactly one candidate song with a strong reason (exact, alias or tune-hint); that catalog song is unlinked; and no other PCO song has the same unique strong candidate. It sets `linked_by = 'auto'`. A hymn with several tunes is never auto-linked from a bare title.
+
+**Linking.** Link and unlink are named functions in `lib/db/` used by every caller (sync, Reconcile, the plan page, the new-song form). Linking from a page also upserts the PCO song into the mirror first (one `GET /songs/{id}` when the row is missing), so a link made before the first sync is complete. One PCO song links to at most one catalog song and vice versa (`songs.pco_song_id` is UNIQUE): linking a song that is already linked elsewhere is refused with a clear message, never silently moved.
+
+**Plan pages.** `getPlanDetail` drops `hymns` and gains:
+- `catalog: Record<pcoSongId, CatalogMatch>`: song id, hymn title, tune name and labelled entries in book order, for every song item whose PCO song is linked;
+- `suggestions: Record<pcoSongId, LinkSuggestion[]>`: the top 3, for linked-able items that are not linked yet.
+`PlanItemDetail` and the copyright tab are unchanged. The Schedule tab renders a `ScheduleSongCard` per song item:
+- linked: the hymn and tune, `EntryNumbers` (`R-396 / G-317`) and the choices **Numbers** (default) / **Leave blank** / **Custom**;
+- unlinked, with a PCO song: `LinkToCatalogInline` (suggestions, each with a one-click Link; "Find in catalog" goes to Reconcile) and **Leave blank** (default) / **Custom**;
+- no PCO song: **Leave blank** / **Custom**.
+`linkPcoSong` in `plans/[serviceTypeId]/[planId]/actions.ts` checks the session, parses every id, links (`manual`) and revalidates the plan, so the numbers appear without leaving the tab.
+
+**Selections.** `ScheduleSelection` becomes `{ option: "numbers" | "blank" | "custom"; customText?: string }` (the phase 3 table's shape); `selectedVersionIndex` and the version picker go. The default is `numbers` for a linked song with entries, else `blank`.
+
+**Schedule text.** One line per song item in sequence: `numbers` → `Title (R-396 / G-317)` (labels in book order, from the link); `custom` with text → `Title (text)`; otherwise `Title`. The header stays as it is until phase 3. **Behavior commits**, each flipping only the assertions it changes: (1) numbers come from the catalog link and the version picker is gone; (2) labels are joined with `" / "` and the Doxology prints `G-Front Cover` (was `G-0`).
+
+**Catalog filters.** List rows gain the link state and the PCO song's `last_scheduled_at`. New URL filters: `linked` (`all` / `yes` / `no`) and `used` (`all` / `never`; never = not linked, or linked and never scheduled). "Export CSV" downloads the filtered rows from the browser (`lib/csv.ts`, RFC 4180, pure; no API route): title, tune, one column per book, linked, last scheduled.
+
+**Reconcile (`/catalog/reconcile`, in `CATALOG_SECTIONS`).** PCO songs not in the catalog (not ignored or removed), each with suggestions, Link, a searchable picker over every catalog song, "New catalog song" (`/catalog/songs/new?pcoSongId=&returnTo=`) and Ignore; recent auto-links with Undo (unlink + block); counts of catalog songs not in PCO (a link to `/catalog?linked=no`); the last sync and "Sync now". Ignored songs are listed collapsed with Unignore.
+
+**New song form (`/catalog/songs/new`).** The first form, and the model for later ones: `lib/forms.ts` (`FormState`, field readers), validators in `lib/catalog/validation.ts`, an action `(prev, formData) => FormState` that checks the session, parses, writes in `withTransaction`, revalidates and redirects on success; the client uses `useActionState` and `ui/SubmitButton`. Fields: the hymn (pick an existing one or type a new title), the tune (existing, new name, or none), an optional first entry (book + number) and the hidden `pcoSongId`/`returnTo` (validated as a safe internal path). With `pcoSongId` the form prefills from the PCO title (a tune hint fills the tune) and links on create. Duplicate song (same hymn and tune) or taken number → a field error with a link to what exists.
+
+**Removed in phase 2.** `/unused-hymns` becomes a permanent redirect to `/catalog?used=never`; `lib/queries/unusedHymns.ts`, `computeUnusedHymns`, `app/components/UnusedHymns/*`, the refresh action, `lib/hymnMatch.ts`, `HymnData`/`HymnVersion`, and the Unused Hymns nav item go. `lib/hymnCatalog.ts` goes too: the seed reads `hymns.json` through a server-only module in `lib/import/` until phase 5.
+
 **Agent rules** (every implementer brief):
 - Work only inside your phase's worktree (named in your brief), with absolute paths. Never touch `/Users/davidpolar/dev/service-integrator` (the main checkout).
 - Stay inside your listed file set. Commit with explicit paths (`git commit -m "…" -- <paths>`), retrying if `index.lock` is held, so agents sharing the tree never commit each other's files.
 - One conventional commit per logical step; a behavior change gets its own commit that flips the assertions it changes. Every message ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Follow `docs/architecture.md` (conventions and recipes) and `CLAUDE.md`.
+- Write a `\u` escape (convention 16) through a script that emits the backslash itself (for example Python's `chr(92)`), never by typing it into an editing tool: the tool layer decodes it into the literal character. Check with `grep -rnP '[^\x00-\x7F]' lib --include='*.ts'`.
 - Before each commit run the tests for what you touched (`npx vitest run <files>`) and `npm run lint`. When another agent shares the tree, never run `next build`, `next typegen` or `npm run typecheck` unless your brief says you own them (all three write `.next/`); the orchestrator runs the full gates after every wave.
 - Report in at most 200 words: commits, files, test counts, deviations from the plan, open questions. No file dumps.
 

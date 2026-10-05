@@ -1,7 +1,11 @@
 import { beforeAll, describe, expect, test } from "vitest";
-import { hymnCatalog } from "@/lib/hymnCatalog";
-import type { RawHymn } from "@/lib/unusedHymns";
-import { planHymnsJsonImport, SEED_BOOKS, type HymnsJsonImport } from "./hymnsJson";
+import {
+    planHymnsJsonImport,
+    SEED_BOOKS,
+    type HymnsJsonImport,
+    type RawHymn,
+} from "./hymnsJson";
+import { hymnsJsonRecords } from "./hymnsJsonFile";
 import { parsePlannedRows } from "./rows";
 
 /** A record: in Rejoice at `r` and Great Hymns at `g` (-1 for neither), to `tune` ("" for none). */
@@ -18,7 +22,7 @@ describe("planHymnsJsonImport on the real hymns.json", () => {
     let seed: HymnsJsonImport;
 
     beforeAll(() => {
-        seed = planHymnsJsonImport(hymnCatalog);
+        seed = planHymnsJsonImport(hymnsJsonRecords);
     });
 
     test("reads every record", () => {
@@ -386,7 +390,7 @@ describe("planHymnsJsonImport on the real hymns.json", () => {
     });
 
     test("plans the same rows and report every time", () => {
-        expect(planHymnsJsonImport(hymnCatalog)).toEqual(seed);
+        expect(planHymnsJsonImport(hymnsJsonRecords)).toEqual(seed);
     });
 });
 

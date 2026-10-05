@@ -9,12 +9,16 @@ import { useFormStatus } from "react-dom";
  */
 const VARIANT_CLASSES = {
     primary: {
-        colour: "bg-blue-600 focus:ring-blue-600 dark:focus:ring-blue-400",
+        colour: "text-white bg-blue-600 focus:ring-blue-600 dark:focus:ring-blue-400",
         hover: "hover:bg-blue-700",
     },
     danger: {
-        colour: "bg-red-600 focus:ring-red-500",
+        colour: "text-white bg-red-600 focus:ring-red-500",
         hover: "hover:bg-red-700",
+    },
+    secondary: {
+        colour: "text-gray-700 bg-white border border-gray-300 focus:ring-blue-600 dark:text-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:focus:ring-blue-400",
+        hover: "hover:bg-gray-50 dark:hover:bg-gray-600",
     },
 } as const;
 
@@ -23,7 +27,11 @@ interface SubmitButtonProps {
     children: React.ReactNode;
     /** The text while the form's action runs. Defaults to "Working…". */
     pendingLabel?: string;
-    /** "danger" is for an action that deletes or throws something away. Defaults to "primary". */
+    /**
+     * "danger" is for an action that deletes or throws something away, and
+     * "secondary" for a quieter one that should not draw the eye (Reconcile's
+     * Ignore, Undo and Unignore). Defaults to "primary".
+     */
     variant?: keyof typeof VARIANT_CLASSES;
 }
 
@@ -58,7 +66,7 @@ export default function SubmitButton({
                     event.preventDefault();
                 }
             }}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors ${colour} ${pending ? "opacity-60 cursor-not-allowed" : `cursor-pointer ${hover}`}`}
+            className={`px-4 py-2 text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 transition-colors ${colour} ${pending ? "opacity-60 cursor-not-allowed" : `cursor-pointer ${hover}`}`}
         >
             {pending ? pendingLabel : children}
         </button>

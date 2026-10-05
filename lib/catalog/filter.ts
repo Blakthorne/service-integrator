@@ -4,14 +4,28 @@ import { parseEnum, parsePage } from "@/lib/urlState";
 /**
  * Searching, filtering, sorting and paging the songs list (`/catalog`). The
  * page loads every song once; the view narrows them in the browser, with the
- * search (`?q=`), book (`?book=`), sort (`?sort=`) and page (`?page=`) in the
- * URL. Pure and safe on both sides.
+ * search (`?q=`), book (`?book=`), Planning Center link (`?linked=`), usage
+ * (`?used=`), sort (`?sort=`) and page (`?page=`) in the URL. Pure and safe
+ * on both sides.
  */
 
 /** How the songs list can be sorted: by title, or by number (within the chosen book). */
 export const CATALOG_SORTS = ["title", "number"] as const;
 
 export type CatalogSort = (typeof CATALOG_SORTS)[number];
+
+/**
+ * What the link filter keeps: every song, only the songs linked to a Planning
+ * Center song ("yes"), or only those that are not ("no").
+ */
+export const CATALOG_LINKED = ["all", "yes", "no"] as const;
+
+export type CatalogLinked = (typeof CATALOG_LINKED)[number];
+
+/** What the usage filter keeps: every song, or only the songs never scheduled ("never"). */
+export const CATALOG_USED = ["all", "never"] as const;
+
+export type CatalogUsed = (typeof CATALOG_USED)[number];
 
 /** Songs per page of the songs list. */
 export const CATALOG_PAGE_SIZE = 50;
@@ -22,6 +36,9 @@ export interface CatalogSongsQuery {
     q: string;
     /** A book's code as the catalog spells it, or null for every book. */
     book: string | null;
+    linked: CatalogLinked;
+    /** "never" keeps the songs for which `isUsed` is false: not linked, or linked to a song never scheduled. */
+    used: CatalogUsed;
     sort: CatalogSort;
     /** The page asked for, at least 1; `pageCatalogSongs` clamps it to the last page. */
     page: number;
@@ -34,9 +51,10 @@ interface QueryParams {
 
 /**
  * Read the songs list's view from the query string. A missing or unknown
- * value falls back: no search, every book, by title, page 1. `?book=` is
- * matched without regard to case against `bookCodes` (the catalog's codes)
- * and comes back as the catalog spells it.
+ * value falls back: no search, every book, linked or not, used or not, by
+ * title, page 1. `?book=` is matched without regard to case against
+ * `bookCodes` (the catalog's codes) and comes back as the catalog spells it;
+ * `?linked=` and `?used=` must be spelled exactly ("yes", "no", "never").
  */
 export function parseCatalogSongsQuery(
     params: QueryParams,
@@ -46,9 +64,21 @@ export function parseCatalogSongsQuery(
     return {
         q: params.get("q")?.trim() ?? "",
         book: bookCodes.find((code) => code.toLowerCase() === book) ?? null,
+        linked: parseEnum(params.get("linked"), CATALOG_LINKED, "all"),
+        used: parseEnum(params.get("used"), CATALOG_USED, "all"),
         sort: parseEnum(params.get("sort"), CATALOG_SORTS, "title"),
         page: parsePage(params.get("page")),
     };
+}
+
+/**
+ * Whether a song has been scheduled: its Planning Center song has a last
+ * scheduled date. Planning Center counts upcoming plans in it, so "used"
+ * means scheduled, not sung. A song that is not linked has no such date (the
+ * list reads it through the link), so it is never used.
+ */
+export function isUsed({ lastScheduledAt }: Pick<CatalogSongSummary, "lastScheduledAt">): boolean {
+    return lastScheduledAt !== null;
 }
 
 /** Accents a decomposed letter carries ("é" is "e" and U+0301). */
@@ -159,19 +189,28 @@ function matchesSearch(row: CatalogSongSummary, search: Search): boolean {
     );
 }
 
+/** Whether a row passes the link filter: linked to a Planning Center song, or not, as asked. */
+function matchesLinked(row: CatalogSongSummary, linked: CatalogLinked): boolean {
+    return linked === "all" || (row.pcoSongId !== null) === (linked === "yes");
+}
+
 /**
  * The rows that match `q` (see `matchesSearch`; a search with no letters or
  * digits matches every row) and, when `book` is a code, have an entry in
- * that book. Keeps the rows' order.
+ * that book; with `linked` "yes" or "no", are or are not linked to a Planning
+ * Center song; and with `used` "never", are not used (see `isUsed`). Keeps
+ * the rows' order.
  */
 export function filterCatalogSongs(
     rows: readonly CatalogSongSummary[],
-    { q, book }: Pick<CatalogSongsQuery, "q" | "book">
+    { q, book, linked, used }: Pick<CatalogSongsQuery, "q" | "book" | "linked" | "used">
 ): CatalogSongSummary[] {
     const search = prepareSearch(q);
     return rows.filter(
         (row) =>
             (book === null || row.entries.some(({ bookCode }) => bookCode === book)) &&
+            matchesLinked(row, linked) &&
+            (used === "all" || !isUsed(row)) &&
             (search === null || matchesSearch(row, search))
     );
 }
@@ -295,6 +334,20 @@ export function pageCatalogSongs(
 }
 
 /**
+ * Every row the view's filters leave, in the chosen sort order and not
+ * paged: what "Export CSV" writes. `bookCodes` are the catalog's book codes
+ * in book order.
+ */
+export function arrangeCatalogSongs(
+    rows: readonly CatalogSongSummary[],
+    query: Omit<CatalogSongsQuery, "page">,
+    bookCodes: readonly string[]
+): CatalogSongSummary[] {
+    const matching = filterCatalogSongs(rows, query);
+    return sortCatalogSongs(matching, query.sort, query.book, bookCodes);
+}
+
+/**
  * Filter, sort and page the songs list for a view: the whole of what the
  * view renders. `bookCodes` are the catalog's book codes in book order.
  */
@@ -304,7 +357,5 @@ export function selectCatalogSongs(
     bookCodes: readonly string[],
     pageSize: number = CATALOG_PAGE_SIZE
 ): CatalogSongsPage {
-    const matching = filterCatalogSongs(rows, query);
-    const sorted = sortCatalogSongs(matching, query.sort, query.book, bookCodes);
-    return pageCatalogSongs(sorted, query.page, pageSize);
+    return pageCatalogSongs(arrangeCatalogSongs(rows, query, bookCodes), query.page, pageSize);
 }

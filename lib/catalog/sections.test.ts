@@ -42,6 +42,7 @@ describe("catalogLayoutSegment", () => {
         expect(sectionOf(["tunes", "7"])).toBe("Tunes");
         expect(sectionOf(["books"])).toBe("Books");
         expect(sectionOf(["import", "3"])).toBe("Import");
-        expect(sectionOf(["reconcile"])).toBeUndefined();
+        expect(sectionOf(["reconcile"])).toBe("Reconcile");
+        expect(sectionOf(["nothing-here"])).toBeUndefined();
     });
 });

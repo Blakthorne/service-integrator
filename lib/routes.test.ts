@@ -14,12 +14,36 @@ describe("routes", () => {
     test("static routes", () => {
         expect(routes.home()).toBe("/");
         expect(routes.plans()).toBe("/plans");
-        expect(routes.unusedHymns()).toBe("/unused-hymns");
         expect(routes.settings()).toBe("/settings");
         expect(routes.catalog()).toBe("/catalog");
         expect(routes.catalogTunes()).toBe("/catalog/tunes");
         expect(routes.catalogBooks()).toBe("/catalog/books");
         expect(routes.catalogImport()).toBe("/catalog/import");
+    });
+
+    test("catalogFiltered puts the songs list's filters in the query", () => {
+        expect(routes.catalogFiltered({})).toBe("/catalog");
+        expect(routes.catalogFiltered({ linked: "no" })).toBe("/catalog?linked=no");
+        expect(routes.catalogFiltered({ used: "never" })).toBe("/catalog?used=never");
+        expect(routes.catalogFiltered({ linked: "yes", used: "never" })).toBe(
+            "/catalog?linked=yes&used=never"
+        );
+    });
+
+    test("the reconcile page and the new-song form", () => {
+        expect(routes.catalogReconcile()).toBe("/catalog/reconcile");
+        expect(routes.catalogSongNew()).toBe("/catalog/songs/new");
+        expect(routes.catalogSongNew({ pcoSongId: "123" })).toBe(
+            "/catalog/songs/new?pcoSongId=123"
+        );
+        expect(
+            routes.catalogSongNew({
+                pcoSongId: "123",
+                returnTo: "/plans/1/2/schedule?x=1&y=2",
+            })
+        ).toBe(
+            "/catalog/songs/new?pcoSongId=123&returnTo=%2Fplans%2F1%2F2%2Fschedule%3Fx%3D1%26y%3D2"
+        );
     });
 
     test("catalog builders put the id or code at the end", () => {
@@ -46,7 +70,6 @@ describe("routes", () => {
             routes.plan("1", "2"),
             routes.planSchedule("1", "2"),
             routes.planItem("1", "2", "3"),
-            routes.unusedHymns(),
             routes.settings(),
             routes.catalog(),
             routes.catalogSong(1),
@@ -56,6 +79,8 @@ describe("routes", () => {
             routes.catalogBook("R"),
             routes.catalogImport(),
             routes.catalogImportRun(1),
+            routes.catalogReconcile(),
+            routes.catalogSongNew(),
         ];
         for (const href of all) {
             expect(href).toMatch(/^\/[^?#]*$/);
@@ -65,87 +90,79 @@ describe("routes", () => {
 });
 
 describe("NAV_ITEMS", () => {
-    const [plans, catalog, unusedHymns] = NAV_ITEMS;
+    const [plans, catalog] = NAV_ITEMS;
 
-    test("lists Plans, Catalog, then Unused Hymns", () => {
-        expect(NAV_ITEMS.map((item) => item.label)).toEqual([
-            "Plans",
-            "Catalog",
-            "Unused Hymns",
-        ]);
+    test("lists Plans, then Catalog", () => {
+        expect(NAV_ITEMS.map((item) => item.label)).toEqual(["Plans", "Catalog"]);
     });
 
     test("hrefs come from the route builders", () => {
         expect(plans.href).toBe(routes.plans());
         expect(catalog.href).toBe(routes.catalog());
-        expect(unusedHymns.href).toBe(routes.unusedHymns());
     });
 
-    // [pathname, Plans active, Catalog active, Unused Hymns active]
-    const cases: [string, boolean, boolean, boolean][] = [
-        ["/", true, false, false],
-        ["/plans", true, false, false],
-        ["/plans/1405391/98765", true, false, false],
-        ["/plans/1405391/98765/schedule", true, false, false],
-        ["/plans/1405391/98765/items/4321", true, false, false],
-        ["/plansx", false, false, false],
-        ["/plans-archive", false, false, false],
-        ["/catalog", false, true, false],
-        ["/catalog/songs/42", false, true, false],
-        ["/catalog/books/G", false, true, false],
-        ["/catalogx", false, false, false],
-        ["/unused-hymns", false, false, true],
-        ["/unused-hymns/anything", false, false, true],
-        ["/unused-hymnsx", false, false, false],
-        ["/settings", false, false, false],
-        ["/auth/signin", false, false, false],
-        ["/something-else", false, false, false],
-        ["", false, false, false],
+    // [pathname, Plans active, Catalog active]
+    const cases: [string, boolean, boolean][] = [
+        ["/", true, false],
+        ["/plans", true, false],
+        ["/plans/1405391/98765", true, false],
+        ["/plans/1405391/98765/schedule", true, false],
+        ["/plans/1405391/98765/items/4321", true, false],
+        ["/plansx", false, false],
+        ["/plans-archive", false, false],
+        ["/catalog", false, true],
+        ["/catalog/songs/42", false, true],
+        ["/catalog/books/G", false, true],
+        ["/catalogx", false, false],
+        ["/unused-hymns", false, false],
+        ["/unused-hymns/anything", false, false],
+        ["/unused-hymnsx", false, false],
+        ["/settings", false, false],
+        ["/auth/signin", false, false],
+        ["/something-else", false, false],
+        ["", false, false],
     ];
 
     test.each(cases)(
-        "%j: Plans active=%s, Catalog active=%s, Unused Hymns active=%s",
-        (pathname, plansActive, catalogActive, unusedActive) => {
+        "%j: Plans active=%s, Catalog active=%s",
+        (pathname, plansActive, catalogActive) => {
             expect(plans.isActive(pathname)).toBe(plansActive);
             expect(catalog.isActive(pathname)).toBe(catalogActive);
-            expect(unusedHymns.isActive(pathname)).toBe(unusedActive);
         }
     );
 
     test("tolerates a trailing slash", () => {
         expect(plans.isActive("/plans/")).toBe(true);
         expect(catalog.isActive("/catalog/")).toBe(true);
-        expect(unusedHymns.isActive("/unused-hymns/")).toBe(true);
     });
 });
 
 describe("navAriaCurrent", () => {
-    const [plans, catalog, unusedHymns] = NAV_ITEMS;
+    const [plans, catalog] = NAV_ITEMS;
 
     type Current = "page" | "true" | undefined;
-    // [pathname, Plans, Catalog, Unused Hymns]
-    const cases: [string, Current, Current, Current][] = [
+    // [pathname, Plans, Catalog]
+    const cases: [string, Current, Current][] = [
         // "/" only redirects to /plans, which is the Plans item's own page.
-        ["/", "true", undefined, undefined],
-        ["/plans", "page", undefined, undefined],
-        ["/plans/1405391/98765", "true", undefined, undefined],
-        ["/plans/1405391/98765/schedule", "true", undefined, undefined],
-        ["/plans/1405391/98765/items/4321", "true", undefined, undefined],
-        ["/plansx", undefined, undefined, undefined],
-        ["/catalog", undefined, "page", undefined],
-        ["/catalog/songs/42", undefined, "true", undefined],
-        ["/unused-hymns", undefined, undefined, "page"],
-        ["/unused-hymns/anything", undefined, undefined, "true"],
-        ["/unused-hymnsx", undefined, undefined, undefined],
-        ["/auth/signin", undefined, undefined, undefined],
+        ["/", "true", undefined],
+        ["/plans", "page", undefined],
+        ["/plans/1405391/98765", "true", undefined],
+        ["/plans/1405391/98765/schedule", "true", undefined],
+        ["/plans/1405391/98765/items/4321", "true", undefined],
+        ["/plansx", undefined, undefined],
+        ["/catalog", undefined, "page"],
+        ["/catalog/songs/42", undefined, "true"],
+        ["/unused-hymns", undefined, undefined],
+        ["/unused-hymns/anything", undefined, undefined],
+        ["/unused-hymnsx", undefined, undefined],
+        ["/auth/signin", undefined, undefined],
     ];
 
     test.each(cases)(
-        "%j: Plans %s, Catalog %s, Unused Hymns %s",
-        (pathname, plansValue, catalogValue, unusedValue) => {
+        "%j: Plans %s, Catalog %s",
+        (pathname, plansValue, catalogValue) => {
             expect(navAriaCurrent(plans, pathname)).toBe(plansValue);
             expect(navAriaCurrent(catalog, pathname)).toBe(catalogValue);
-            expect(navAriaCurrent(unusedHymns, pathname)).toBe(unusedValue);
         }
     );
 
@@ -185,7 +202,7 @@ describe("NAV_UTILITY_ITEMS", () => {
         ["/settingsx", false, undefined],
         ["/", false, undefined],
         ["/plans", false, undefined],
-        ["/unused-hymns", false, undefined],
+        ["/catalog", false, undefined],
     ])("%j: Settings active=%s, aria-current=%s", (pathname, active, current) => {
         expect(settings.isActive(pathname)).toBe(active);
         expect(navAriaCurrent(settings, pathname)).toBe(current);
@@ -193,7 +210,7 @@ describe("NAV_UTILITY_ITEMS", () => {
 
     test("never marks it and a section link as the current page at once", () => {
         const items = [...NAV_ITEMS, ...NAV_UTILITY_ITEMS];
-        for (const pathname of ["/", "/plans", "/catalog", "/unused-hymns", "/settings"]) {
+        for (const pathname of ["/", "/plans", "/catalog", "/settings"]) {
             const pages = items.filter(
                 (item) => navAriaCurrent(item, pathname) === "page"
             );
@@ -203,17 +220,19 @@ describe("NAV_UTILITY_ITEMS", () => {
 });
 
 describe("CATALOG_SECTIONS", () => {
-    test("lists Songs, Tunes, Books and Import, linked by the builders", () => {
+    test("lists Songs, Tunes, Books, Reconcile and Import, linked by the builders", () => {
         expect(CATALOG_SECTIONS.map((section) => section.label)).toEqual([
             "Songs",
             "Tunes",
             "Books",
+            "Reconcile",
             "Import",
         ]);
         expect(CATALOG_SECTIONS.map((section) => section.href)).toEqual([
             routes.catalog(),
             routes.catalogTunes(),
             routes.catalogBooks(),
+            routes.catalogReconcile(),
             routes.catalogImport(),
         ]);
     });
@@ -224,7 +243,7 @@ describe("CATALOG_SECTIONS", () => {
         ["tunes", "Tunes"],
         ["books", "Books"],
         ["import", "Import"],
-        ["reconcile", undefined],
+        ["reconcile", "Reconcile"],
         ["(group)", undefined],
     ])("segment %j belongs to %s", (segment, label) => {
         expect(catalogSectionFor(segment)?.label).toBe(label);

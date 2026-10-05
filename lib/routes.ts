@@ -15,6 +15,12 @@ import type { Route } from "next";
  * `parseBookCode` (letters, digits, `-` and `_`). Never pass anything else (a
  * title, free text, a raw URL parameter).
  */
+/** Filters of the catalog's songs list that other pages link to. */
+export interface CatalogListFilters {
+    linked?: "yes" | "no";
+    used?: "never";
+}
+
 export const routes = {
     home: () => "/" as const,
     plans: () => "/plans" as const,
@@ -24,7 +30,6 @@ export const routes = {
         `/plans/${serviceTypeId}/${planId}/schedule` as const,
     planItem: (serviceTypeId: string, planId: string, itemId: string) =>
         `/plans/${serviceTypeId}/${planId}/items/${itemId}` as const,
-    unusedHymns: () => "/unused-hymns" as const,
     settings: () => "/settings" as const,
     catalog: () => "/catalog" as const,
     catalogSong: (songId: number) => `/catalog/songs/${songId}` as const,
@@ -34,6 +39,43 @@ export const routes = {
     catalogBook: (bookCode: string) => `/catalog/books/${bookCode}` as const,
     catalogImport: () => "/catalog/import" as const,
     catalogImportRun: (runId: number) => `/catalog/import/${runId}` as const,
+    /**
+     * The songs list with filters set, for links from other pages (Reconcile,
+     * the old Unused Hymns URL). The values are the list's own URL filters
+     * (see lib/catalog/filter.ts).
+     */
+    catalogFiltered: (filters: CatalogListFilters) => {
+        const query = new URLSearchParams();
+        if (filters.linked !== undefined) {
+            query.set("linked", filters.linked);
+        }
+        if (filters.used !== undefined) {
+            query.set("used", filters.used);
+        }
+        const search = query.toString();
+        return search === ""
+            ? ("/catalog" as const)
+            : (`/catalog?${search}` as const);
+    },
+    catalogReconcile: () => "/catalog/reconcile" as const,
+    /**
+     * The new-song form. With a Planning Center song it is prefilled from
+     * that song and links it on create; `returnTo` (a path that
+     * `safeCallbackUrl` accepts) is where the form goes back to afterwards.
+     */
+    catalogSongNew: (options: { pcoSongId?: string; returnTo?: string } = {}) => {
+        const query = new URLSearchParams();
+        if (options.pcoSongId !== undefined) {
+            query.set("pcoSongId", options.pcoSongId);
+        }
+        if (options.returnTo !== undefined) {
+            query.set("returnTo", options.returnTo);
+        }
+        const search = query.toString();
+        return search === ""
+            ? ("/catalog/songs/new" as const)
+            : (`/catalog/songs/new?${search}` as const);
+    },
 };
 
 /** An entry of the top navigation bar. */
@@ -61,11 +103,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
         href: routes.catalog(),
         label: "Catalog",
         isActive: (pathname) => isAtOrBelow(pathname, routes.catalog()),
-    },
-    {
-        href: routes.unusedHymns(),
-        label: "Unused Hymns",
-        isActive: (pathname) => isAtOrBelow(pathname, routes.unusedHymns()),
     },
 ];
 
@@ -147,6 +184,7 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     { segments: [null, "songs"], label: "Songs", href: routes.catalog() },
     { segments: ["tunes"], label: "Tunes", href: routes.catalogTunes() },
     { segments: ["books"], label: "Books", href: routes.catalogBooks() },
+    { segments: ["reconcile"], label: "Reconcile", href: routes.catalogReconcile() },
     { segments: ["import"], label: "Import", href: routes.catalogImport() },
 ];
 

@@ -75,11 +75,12 @@ describe("safeCallbackUrl", () => {
             "/caf%C3%A9",
             "/%E6%97%A5%E6%9C%AC",
             "/plans?q=%C3%A9+x",
-            "/%2F%2Fevil.com",
-            "/.//evil.com",
-            "/a\\b",
+            "/catalog/songs/new?pcoSongId=1&returnTo=%2Fcatalog%2Freconcile",
+            "/plans#%2F%2Fevil.com",
+            "/plans//x",
+            "/a/../b",
             "/!~",
-            "/a!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~",
+            "/a!\"#$%&'()*+,-./:;<=>?@[]^_`{|}~",
         ];
 
         test.each(accepted)("returns %j unchanged", (value) => {
@@ -119,7 +120,7 @@ describe("safeCallbackUrl", () => {
             ["/plans/\u2028x", "/plans/%E2%80%A8x"],
             ["/plans/\uff0f", "/plans/%EF%BC%8F"],
             ["/plans/%E6%97%A5", "/plans/%E6%97%A5"],
-            ["/plans/a%2Fb?q=%26", "/plans/a%2Fb?q=%26"],
+            ["/plans/a?q=%26%2F", "/plans/a?q=%26%2F"],
             ["/plans/\\evil", "/plans//evil"],
             // Protected pages whose names merely start with "auth".
             ["/authors", "/authors"],
@@ -134,6 +135,12 @@ describe("safeCallbackUrl", () => {
         test("a request that would be another host is refused", () => {
             expect(callbackUrlAfterMiddleware("//evil.com/x")).toBeNull();
             expect(callbackUrlAfterMiddleware("/\\evil.com")).toBeNull();
+            expect(callbackUrlAfterMiddleware("/.//evil.com")).toBeNull();
+            expect(callbackUrlAfterMiddleware("/a/..//evil.com")).toBeNull();
+        });
+
+        test("a request whose path holds an encoded slash is refused, so sign-in goes to the plans", () => {
+            expect(callbackUrlAfterMiddleware("/plans/a%2Fb?q=%26")).toBeNull();
         });
 
         test("the auth pages are refused: the middleware leaves them public, so they would loop", () => {
@@ -176,6 +183,65 @@ describe("safeCallbackUrl", () => {
         });
     });
 
+    describe("rejects a path that a browser resolves to another host", () => {
+        // Next's router resolves a redirect against the page's URL before it
+        // calls history.pushState, and resolving removes dot segments: these
+        // become "//evil.example/...", which a browser reads as another host.
+        const resolvedElsewhere: [string, string][] = [
+            ["a dot segment before two slashes", "/.//evil.example/phish"],
+            ["a dot-dot segment before two slashes", "/a/..//x"],
+            ["a dot segment and a backslash", "/.\\/x"],
+            ["dot-dot segments back to the root", "/a/b/../..//x"],
+            ["a dot-dot segment at the root", "/..//x"],
+            ["an encoded dot segment", "/%2e//evil.example/phish"],
+            ["an encoded dot segment, in capitals", "/%2E//evil.example/phish"],
+            ["an encoded dot-dot segment", "/a/%2e%2e//x"],
+            ["a half-encoded dot-dot segment", "/a/.%2E//x"],
+            ["a dot-dot segment encoded the other way", "/a/%2e.//x"],
+        ];
+
+        test.each(resolvedElsewhere)("the URL parser resolves %s to //", (_name, value) => {
+            expect(new URL(value, "https://x.test").pathname).toMatch(/^\/\//);
+        });
+
+        test.each(resolvedElsewhere)("rejects %s", (_name, value) => {
+            expect(safeCallbackUrl(value)).toBeNull();
+        });
+
+        test.each([
+            ["an encoded slash", "/%2F%2Fevil.example"],
+            ["an encoded slash, in lower case", "/%2f%2fevil.example"],
+            ["an encoded slash after a dot segment", "/.%2F/x"],
+            ["an encoded slash after a dot-dot segment", "/a/..%2F/x"],
+            ["an encoded backslash", "/%5C%5Cevil.example"],
+            ["an encoded backslash, in lower case", "/.%5c/x"],
+            ["an encoded dot and backslash", "/%2e%5c/x"],
+            ["an encoded dot inside a segment", "/file%2Ename"],
+        ])("rejects %s in the path, which a router that decodes it would make a separator", (_name, value) => {
+            expect(safeCallbackUrl(value)).toBeNull();
+        });
+
+        test.each([
+            ["in the path", "/a\\b"],
+            ["in the query", "/plans?q=a\\b"],
+            ["in the fragment", "/plans#a\\b"],
+        ])("rejects a backslash %s", (_name, value) => {
+            expect(safeCallbackUrl(value)).toBeNull();
+        });
+
+        test("keeps encoded slashes and dots in the query and the fragment, which are only data", () => {
+            expect(safeCallbackUrl("/plans?r=%2F%2Fevil.com&d=%2E%2E")).toBe(
+                "/plans?r=%2F%2Fevil.com&d=%2E%2E"
+            );
+            expect(safeCallbackUrl("/plans#%2e%2e%2f%5c")).toBe("/plans#%2e%2e%2f%5c");
+        });
+
+        test("accepts dot segments that stay on this site, unchanged", () => {
+            expect(safeCallbackUrl("/a/../b")).toBe("/a/../b");
+            expect(safeCallbackUrl("/./plans")).toBe("/./plans");
+        });
+    });
+
     describe("rejects the auth pages, which would loop", () => {
         test.each([
             "/auth",
@@ -193,6 +259,13 @@ describe("safeCallbackUrl", () => {
         ])("rejects %j", (value) => {
             expect(safeCallbackUrl(value)).toBeNull();
         });
+
+        test.each(["/x/../auth", "/x/../auth/signin", "/plans/../AUTH?x=1", "/./auth#x"])(
+            "rejects %j, whose dot segments lead to the auth pages",
+            (value) => {
+                expect(safeCallbackUrl(value)).toBeNull();
+            }
+        );
 
         test("allows a path that only contains auth, or only starts with those letters", () => {
             expect(safeCallbackUrl("/plans/auth")).toBe("/plans/auth");

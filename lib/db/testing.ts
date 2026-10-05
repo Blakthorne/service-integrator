@@ -1,6 +1,6 @@
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import { normalizeTuneName } from "@/lib/catalog/normalize";
-import type { SongLinkSource } from "@/lib/domain";
+import type { MirroredPcoSong, SongLinkSource } from "@/lib/domain";
 import { planHymnsJsonImport } from "@/lib/import/hymnsJson";
 import { normalizeTitle } from "@/lib/normalizeTitle";
 import { openDatabase } from "./connection";
@@ -255,4 +255,53 @@ export function seedImportRun(
         JSON.stringify(fields.report ?? empty.report),
         JSON.stringify(fields.rows ?? empty.rows)
     );
+}
+
+/** The fields of a song of the Planning Center mirror; `seedPcoSong` fills in the rest. */
+export type SeedPcoSongFields = Partial<MirroredPcoSong>;
+
+/** The first id `seedPcoSong` gives, plus the row's ordinal: 9000001, 9000002, … */
+const SEED_PCO_SONG_ID_BASE = 9_000_000;
+
+/**
+ * Insert a song into the Planning Center mirror and return its id. By
+ * default its id is the first free one of 9000001, 9000002, …, it is titled
+ * "PCO Song 1", "PCO Song 2", … with no credits, never scheduled, not
+ * hidden, synced at 2026-10-04 12:00 UTC, and neither removed, ignored nor
+ * blocked from auto-linking.
+ */
+export function seedPcoSong(db: DatabaseSync, fields: SeedPcoSongFields = {}): string {
+    const ordinal = nextOrdinal(db, "pco_songs");
+    let id = fields.id;
+    if (id === undefined) {
+        const taken = db.prepare("SELECT 1 FROM pco_songs WHERE id = ?");
+        let candidate = ordinal;
+        while (taken.get(String(SEED_PCO_SONG_ID_BASE + candidate))) {
+            candidate += 1;
+        }
+        id = String(SEED_PCO_SONG_ID_BASE + candidate);
+    }
+    db.prepare(
+        `INSERT INTO pco_songs (id, title, author, copyright, ccli_number, admin, themes, hidden,
+             last_scheduled_at, created_at, updated_at, synced_at, removed_at, ignored_at,
+             auto_link_blocked_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+        id,
+        fields.title ?? `PCO Song ${ordinal}`,
+        fields.author ?? null,
+        fields.copyright ?? null,
+        fields.ccliNumber ?? null,
+        fields.admin ?? null,
+        fields.themes ?? null,
+        fields.hidden ? 1 : 0,
+        fields.lastScheduledAt ?? null,
+        fields.createdAt ?? null,
+        fields.updatedAt ?? null,
+        fields.syncedAt ?? "2026-10-04T12:00:00.000Z",
+        fields.removedAt ?? null,
+        fields.ignoredAt ?? null,
+        fields.autoLinkBlockedAt ?? null
+    );
+    return id;
 }
