@@ -81,12 +81,13 @@ export function localDateStamp(date: Date): string {
  * the day, such as `catalog-unused-2026-10-04.csv` for the songs never
  * scheduled, or `catalog-g-unlinked-2026-10-04.csv` for the songs of book G
  * with no Planning Center song. The words are the book's code in lower case,
- * "linked" or "unlinked", "unused", the mark ("to-learn") and, for a search,
+ * "linked" or "unlinked", "unused", the mark ("to-learn"), the date of the
+ * not-sung-since filter ("not-sung-since-2025-10-04") and, for a search,
  * "search".
  */
 export function catalogCsvFilename(
     filters: Pick<CatalogSongsQuery, "q" | "book" | "linked" | "used"> &
-        Partial<Pick<CatalogSongsQuery, "mark">>,
+        Partial<Pick<CatalogSongsQuery, "mark" | "notSince">>,
     now: Date
 ): string {
     const parts = ["catalog"];
@@ -103,6 +104,11 @@ export function catalogCsvFilename(
     }
     if (filters.mark !== undefined && filters.mark !== "all") {
         parts.push(filters.mark);
+    }
+    // A date from `parseReportDate`: digits and dashes. Kept so all the same.
+    const notSince = filters.notSince?.replace(/[^0-9-]/g, "") ?? "";
+    if (notSince !== "") {
+        parts.push(`not-sung-since-${notSince}`);
     }
     if (filters.q !== "") {
         parts.push("search");

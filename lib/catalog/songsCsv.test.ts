@@ -202,6 +202,11 @@ describe("catalogCsvFilename", () => {
         expect(filename({ mark: "all" })).toBe("catalog-2026-10-04.csv");
     });
 
+    test("names the date the list is not sung since", () => {
+        expect(filename({ notSince: "2025-10-04" })).toBe("catalog-not-sung-since-2025-10-04-2026-10-04.csv");
+        expect(filename({ notSince: null })).toBe("catalog-2026-10-04.csv");
+    });
+
     test("says search for a search", () => {
         expect(filename({ q: "amazing" })).toBe("catalog-search-2026-10-04.csv");
     });
@@ -210,6 +215,20 @@ describe("catalogCsvFilename", () => {
         expect(filename({ q: "grace", book: "R", linked: "yes", used: "never", mark: "to-learn" })).toBe(
             "catalog-r-linked-unused-to-learn-search-2026-10-04.csv"
         );
+        expect(
+            filename({
+                q: "grace",
+                book: "R",
+                linked: "yes",
+                used: "never",
+                mark: "to-learn",
+                notSince: "2025-10-04",
+            })
+        ).toBe("catalog-r-linked-unused-to-learn-not-sung-since-2025-10-04-search-2026-10-04.csv");
+    });
+
+    test("keeps only digits and dashes of the date", () => {
+        expect(filename({ notSince: "../2025-10-04" })).toBe("catalog-not-sung-since-2025-10-04-2026-10-04.csv");
     });
 
     test("keeps only what a file name can hold of a book code", () => {

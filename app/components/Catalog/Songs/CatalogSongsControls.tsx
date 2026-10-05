@@ -1,5 +1,6 @@
 "use client";
 
+import DateField from "@/app/components/ui/DateField";
 import ExportCsvButton from "@/app/components/ui/ExportCsvButton";
 import Segmented, { type SegmentedOption } from "@/app/components/ui/Segmented";
 import { formatCount } from "@/lib/catalog/counts";
@@ -53,6 +54,13 @@ interface CatalogSongsControlsProps {
     toLearnCount: number;
     /** The chosen tag's id, or `ANY_TAG`. */
     tag: string;
+    /** The date of the not-sung-since filter, `YYYY-MM-DD`, or "" for none. */
+    notSince: string;
+    /**
+     * Whether the plan history has been read: before it has, no song is known
+     * to have been sung, and the filter says so.
+     */
+    historyRead: boolean;
     sort: CatalogSort;
     books: readonly CatalogBookOption[];
     /** The song tag groups that have tags, by name; with none, there is no tag filter. */
@@ -67,6 +75,8 @@ interface CatalogSongsControlsProps {
     onUsedChange: (used: CatalogUsed) => void;
     onMarkChange: (mark: CatalogMark) => void;
     onTagChange: (tag: string) => void;
+    /** Called with a date once one is whole, and with "" when the date is emptied or cleared. */
+    onNotSinceChange: (notSince: string) => void;
     onSortChange: (sort: CatalogSort) => void;
     /** Called to download the songs the filters leave as a CSV file. */
     onExport: () => void;
@@ -116,6 +126,11 @@ function TagFilter({ tag, tagGroups, onTagChange }: TagFilterProps) {
     );
 }
 
+/** What the not-sung-since filter says under its field, which depends on whether the history is there to filter by. */
+const NOT_SINCE_HINT = "Linked songs last sung before this date, and those never sung.";
+const NOT_SINCE_NO_HISTORY_HINT =
+    "The plan history has not been read, so every linked song counts as never sung. Sync it on the Reports page.";
+
 /** The mark filter's choices: every song, or the "to learn" shelf, with how many are on it. */
 function markOptions(toLearnCount: number): SegmentedOption<CatalogMark>[] {
     return [
@@ -129,10 +144,12 @@ function markOptions(toLearnCount: number): SegmentedOption<CatalogMark>[] {
 }
 
 /**
- * The songs list's search, book, Planning Center link, usage, mark and tag
- * filters and sort order, the count of what they leave, and the Export CSV
- * button. The mark filter says how many songs are marked to learn. The tag
- * filter shows only once the tags sync has brought some tags.
+ * The songs list's search, book, Planning Center link, usage, mark, tag and
+ * not-sung-since filters and sort order, the count of what they leave, and
+ * the Export CSV button. The mark filter says how many songs are marked to
+ * learn. The tag filter shows only once the tags sync has brought some tags.
+ * The date filter keeps the linked songs last sung before a date (and those
+ * never sung), from the plan history.
  */
 export default function CatalogSongsControls({
     query,
@@ -142,6 +159,8 @@ export default function CatalogSongsControls({
     mark,
     toLearnCount,
     tag,
+    notSince,
+    historyRead,
     sort,
     books,
     tagGroups,
@@ -153,6 +172,7 @@ export default function CatalogSongsControls({
     onUsedChange,
     onMarkChange,
     onTagChange,
+    onNotSinceChange,
     onSortChange,
     onExport,
 }: CatalogSongsControlsProps) {
@@ -219,6 +239,13 @@ export default function CatalogSongsControls({
                 {tagGroups.length > 0 && (
                     <TagFilter tag={tag} tagGroups={tagGroups} onTagChange={onTagChange} />
                 )}
+                <DateField
+                    label="Not sung since"
+                    hint={historyRead ? NOT_SINCE_HINT : NOT_SINCE_NO_HISTORY_HINT}
+                    value={notSince}
+                    onChange={onNotSinceChange}
+                    onClear={() => onNotSinceChange("")}
+                />
                 <div className="max-w-full space-y-1">
                     <span className={GROUP_LABEL}>Sort</span>
                     <Segmented
