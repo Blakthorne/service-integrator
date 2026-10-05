@@ -9,6 +9,7 @@ import {
     type ScheduleEntry,
     type ScheduleItem,
 } from "./serviceSchedule";
+import { DEFAULT_SETTINGS, planTextSettings } from "./settings";
 
 // Characterization tests: they pin what the code did when it was moved out of
 // ServiceSchedule.tsx, quirks included. A test marked QUIRK documents behavior
@@ -538,6 +539,89 @@ describe("buildScheduleCopyText: finding a song by its link", () => {
         ];
         expect(textFor(items, catalog2)).toBe(
             "Alpha (mine)\nBeta (G-34)\nGamma (free)"
+        );
+    });
+});
+
+describe("buildScheduleCopyText: the header and separator come from the settings", () => {
+    const items = [songItem("T", 1)];
+    const catalog = linked(BOTH);
+
+    test("a header label replaces the one the service type's name gives", () => {
+        const text = buildScheduleCopyText({
+            items,
+            catalog,
+            serviceTypeName: "Sunday Morning",
+            planDate: PLAN_DATE,
+            headerLabel: "Morning Worship",
+        });
+        expect(text).toBe("Morning Worship 6/15/25\n\nT (R-12 / G-34)");
+    });
+
+    test("a type whose name gets no header gets one from its label", () => {
+        const text = buildScheduleCopyText({
+            items,
+            catalog: {},
+            serviceTypeName: "Midweek",
+            planDate: PLAN_DATE,
+            headerLabel: "Wednesday PM",
+        });
+        expect(text).toBe("Wednesday PM 6/15/25\n\nT");
+    });
+
+    test("a label without a plan date has no date", () => {
+        const text = buildScheduleCopyText({
+            items,
+            catalog: {},
+            serviceTypeName: "Midweek",
+            planDate: null,
+            headerLabel: "Wednesday PM",
+        });
+        expect(text).toBe("Wednesday PM\n\nT");
+    });
+
+    test("a null or empty label means no header, even for a Sunday service", () => {
+        for (const headerLabel of [null, ""]) {
+            const text = buildScheduleCopyText({
+                items,
+                catalog: {},
+                serviceTypeName: "Sunday Morning",
+                planDate: PLAN_DATE,
+                headerLabel,
+            });
+            expect(text).toBe("T");
+        }
+    });
+
+    test("the separator goes between a song's numbers", () => {
+        const text = buildScheduleCopyText({
+            items,
+            catalog,
+            serviceTypeName: "Midweek",
+            planDate: PLAN_DATE,
+            numberSeparator: ", ",
+        });
+        expect(text).toBe("T (R-12, G-34)");
+        expect(formatScheduleNumbers(BOTH, ", ")).toBe("R-12, G-34");
+        expect(formatScheduleNumbers(RJ_ONLY, ", ")).toBe("R-12");
+    });
+
+    test("the default settings give the text as it was before settings", () => {
+        for (const serviceTypeName of ["Sunday Morning", "Sunday Evening", "Midweek", "sunday morning"]) {
+            for (const planDate of [PLAN_DATE, null]) {
+                const input = { items, catalog, serviceTypeName, planDate };
+                const settings = planTextSettings(DEFAULT_SETTINGS, { id: "1", name: serviceTypeName });
+                expect(
+                    buildScheduleCopyText({
+                        ...input,
+                        headerLabel: settings.headerLabel,
+                        numberSeparator: settings.numberSeparator,
+                    })
+                ).toBe(buildScheduleCopyText(input));
+            }
+        }
+        expect(formatScheduleNumbers(BOTH, DEFAULT_SETTINGS.numberSeparator)).toBe(
+            formatScheduleNumbers(BOTH)
         );
     });
 });

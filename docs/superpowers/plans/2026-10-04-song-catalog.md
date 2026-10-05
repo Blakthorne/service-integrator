@@ -317,6 +317,83 @@ Decisions the orchestrator made where the plan was silent or inconsistent. They 
 
 **Removed in phase 2.** `/unused-hymns` becomes a permanent redirect to `/catalog?used=never`; `lib/queries/unusedHymns.ts`, `computeUnusedHymns`, `app/components/UnusedHymns/*`, the refresh action, `lib/hymnMatch.ts`, `HymnData`/`HymnVersion`, and the Unused Hymns nav item go. `lib/hymnCatalog.ts` goes too: the seed reads `hymns.json` through a server-only module in `lib/import/` until phase 5.
 
+### Phase 3 design (persist, settings, hymnal notes, dashboard v1)
+
+**Schema (`0004_selections.ts`).**
+- `schedule_selections`: `plan_id`, `item_id` (PCO ids, text), `option`, `custom_text`, `updated_at`; primary key `(plan_id, item_id)`.
+- `write_log`: `id`, `at`, `kind`, `target` (e.g. `plan 123 item 456`), `ok` (0/1), `payload` (JSON), `result` (JSON).
+- Enumerations (`option`, `kind`) are checked in TypeScript, as `sync_runs.kind` is (the Database section's rule). The `settings` table exists since `0001`.
+
+**Settings (`lib/settings.ts`, pure, plus `lib/db/settings.ts` and `lib/queries/settings.ts`).**
+- A typed registry: each key has a parser that turns stored JSON into a valid value or rejects it, and a **default that reproduces today's output**, so the app behaves exactly as before until something is saved. A stored value that no longer parses falls back to its default and is reported on Settings.
+- Phase 3 keys:
+  - `ccliLicenseNumber` (default `"1564484"`);
+  - `scheduleHeaderLabels` (by service type id; with no entry, a type named "Sunday Morning" or "Sunday Evening" keeps today's "Sunday AM"/"Sunday PM" and other types get no header);
+  - `numberSeparator` (default `" / "`);
+  - `hymnNoteCategoryName` (default `"Hymnal"`);
+  - `hymnNoteIncludesTune` (default `false`; when true the note reads `R-396 / G-317 · ST. ANNE`).
+- Phase 4 adds the credit and email keys.
+- `getSettings()` never throws: on a database error it returns the defaults and the error.
+
+**Text reads settings.**
+- `formatCopyrightText`'s CCLI line comes from `ccliLicenseNumber`, and the schedule header and separator come from settings.
+- With the defaults the output is unchanged, so the existing assertions hold. The change is one commit that threads settings through and adds tests for non-default values.
+
+**Persisted selections.**
+- `getPlanDetail` gains `selections` (this plan's rows) and `scheduleSettings`.
+- `PlanProvider` seeds its reducer from `selections`. Every change is applied locally at once and saved through `saveScheduleSelection(serviceTypeId, planId, itemId, option, customText)`: custom text goes after the existing debounce, a radio choice at once.
+- A failed save shows an inline "Not saved, retry" and keeps the local choice.
+- A stored selection that no longer makes sense (`numbers` for a song that lost its link, an item no longer in the plan) falls back to the default and is never deleted silently.
+- `docs/architecture.md`'s State section records the exception: the provider is seeded from server data once and then owns the selections.
+
+**Hymnal notes.**
+- **Reads.**
+  - `getPlanItems` asks for `include=song,item_notes`. Each `PlanItem` gains its notes (`id`, `categoryId`, `categoryName`, `content`).
+  - `getItemNoteCategories(serviceTypeId)` is a new `cache()`d getter.
+  - The category is found by name, case-insensitively and trimmed, per service type. The ids differ per type (spike).
+- **`lib/hymnNotes.ts`** (pure):
+  - `formatHymnNote(match, settings)` builds a song item's note from its catalog link: the labels joined by the separator, plus the tune when that is on.
+  - `diffHymnNotes(items, categoryName, settings)` gives each song item one of:
+    - `create`;
+    - `update` (content differs);
+    - `unchanged`;
+    - `delete` (a Hymnal note with nothing to say: the song is unlinked or has no numbers);
+    - `dedupe` (extra Hymnal notes on one item, which PCO allows: keep the first, delete the rest).
+  - Notes in other categories are never touched. Schedule-tab choices do not affect notes: notes carry the hymnal numbers for musicians, while the selections are for the bulletin text.
+- **`lib/pco/writes.ts`** is the only module that mutates PCO (convention 18):
+  - `createItemNote`, `updateItemNote` (PATCH `content` only: a note's category can never change) and `deleteItemNote`;
+  - each takes validated ids, uses `pcoMutate` (unpaced: interactive) and returns what changed.
+- **`lib/queries/hymnNotes.ts`**:
+  - `previewHymnNotes(st, plan)` returns the category, or the reason it is missing, plus the per-item diff.
+  - `syncHymnNotes(st, plan)` **re-reads the plan's items first** (refresh-before-write) and recomputes the diff. It then applies the changes one by one, writes a `write_log` row for each (`kind: "item-note"`, with the outcome or the PCO error), and returns per-item results.
+  - A missing category refuses with "Create an item note category named "Hymnal" in Planning Center for <service type>" and writes nothing.
+- **UI.**
+  - `PlanHeader` gets a "Sync hymn notes" button that opens a `ui/Dialog`: the preview (create, update, delete and unchanged per item), Confirm, then the results.
+  - **Both the preview and the confirm call Planning Center, so they are server actions called from event handlers with their pending state in `useState`, never `useActionState` or `<form action>`.** A form action runs inside a transition, which would make every navigation wait for PCO (convention 15 as reconciled in phase 1).
+  - The dialog cannot be dismissed while the confirm runs, and the result is shown where it can be seen.
+  - After a sync the plan is revalidated.
+  - Song cards show a small note status: in sync, differs, or missing.
+
+**Dashboard (`/`).**
+- `/` stops redirecting and becomes the dashboard. For each service type, it shows the next upcoming plan (`filter=future`, the earliest by `sort_date`) with:
+  - its song items and their numbers;
+  - link status (with a Link to fix one);
+  - hymnal-note status;
+  - a "Sync hymn notes" shortcut.
+- To-dos: songs not in the catalog, notes out of date, a failed or stale `pco-songs` sync, an empty catalog (link to Import), and a missing Hymnal category.
+- `getDashboard()` loads in parallel: the service types, each type's next plan, and that plan's items. A service type that fails shows a quiet warning, as the plans list does.
+- The app name links to `/`. On phones, where the name is hidden, a home link must still exist.
+- The Plans nav item stops claiming `/`.
+
+**Settings page.**
+- One form per card (the "Add a server-action form" recipe), each saving through `lib/queries/settings.ts`:
+  - Copyright (CCLI number);
+  - Schedule text (a header label for each service type, and the separator);
+  - Hymnal notes (category name, whether the note includes the tune, and the category found in each service type, with a warning where it is missing).
+- A "Recent writes to Planning Center" card lists the last 20 `write_log` rows.
+
+**Docs.** Two new recipes, "Add a PCO write" and "Add a setting"; the State exception; the write log; and the dashboard in the route map.
+
 **Agent rules** (every implementer brief):
 - Work only inside your phase's worktree (named in your brief), with absolute paths. Never touch `/Users/davidpolar/dev/service-integrator` (the main checkout).
 - Stay inside your listed file set. Commit with explicit paths (`git commit -m "…" -- <paths>`), retrying if `index.lock` is held, so agents sharing the tree never commit each other's files.
@@ -349,6 +426,7 @@ Phase 0 spike, 2026-10-03, API version 2018-11-01. It made 55 read-only requests
   - Past schedules need `filter=after&after=<date>`, or `filter=most_recent&amount=N` (past only).
   - A SongSchedule's id is the plan item's id.
 - **Plans:** support `where[updated_at][gt|gte]`, `order=-updated_at`, and the filters `future`, `past`, `after`, `before` and `no_dates`.
+  - `filter=future` keeps all of today's plans for the whole day. Checked live on Sunday 2026-10-04 at 09:20 EDT, it still returned that day's Sunday Morning plan (`sort_date` 11:00Z) and Sunday Evening plan (`sort_date` 08:00Z).
 - **Rate limits:** every response carries lowercase `x-pco-api-request-rate-limit` (100), `-period` (20, a bare number) and `-count` headers. PCO may change the limits at any time and says never to hard-code them; the pacer adapts to them (see `docs/architecture.md`).
 
 **Writes (observed live)**

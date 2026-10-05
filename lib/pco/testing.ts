@@ -5,10 +5,13 @@
 import { vi } from "vitest";
 import { PACER_GLOBAL, createPacer, type Pacer } from "./pacer";
 import type {
+    PcoItemNoteCategoryResource,
+    PcoItemNoteResource,
     PcoItemResource,
     PcoPlanResource,
     PcoServiceTypeResource,
     PcoSongResource,
+    PcoToManyRelationship,
 } from "./resources";
 
 export const PCO_BASE = "https://api.planningcenteronline.com/services/v2";
@@ -227,4 +230,59 @@ export function songResource(
             self: `${PCO_BASE}/songs/${id}`,
         },
     };
+}
+
+/**
+ * An item note, by default "R-396 / G-317" in the Hymnal category, whose id
+ * is `categoryId` ("501"); a null `categoryId` leaves the relationship out.
+ */
+export function itemNoteResource(
+    id: string,
+    attributes: Partial<PcoItemNoteResource["attributes"]> = {},
+    categoryId: string | null = "501"
+): PcoItemNoteResource {
+    return {
+        type: "ItemNote",
+        id,
+        attributes: {
+            category_name: "Hymnal",
+            content: "R-396 / G-317",
+            created_at: "2026-09-30T12:00:00Z",
+            updated_at: "2026-09-30T12:00:00Z",
+            ...attributes,
+        },
+        ...(categoryId === null
+            ? {}
+            : {
+                  relationships: {
+                      item_note_category: {
+                          data: { type: "ItemNoteCategory" as const, id: categoryId },
+                      },
+                  },
+              }),
+    };
+}
+
+/** An item note category, by default "Hymnal". */
+export function itemNoteCategoryResource(
+    id: string,
+    attributes: Partial<PcoItemNoteCategoryResource["attributes"]> = {}
+): PcoItemNoteCategoryResource {
+    return {
+        type: "ItemNoteCategory",
+        id,
+        attributes: {
+            name: "Hymnal",
+            sequence: 1,
+            created_at: "2026-09-01T12:00:00Z",
+            updated_at: "2026-09-01T12:00:00Z",
+            deleted_at: null,
+            ...attributes,
+        },
+    };
+}
+
+/** An item's `item_notes` relationship naming these notes, for `itemResource`'s relationships. */
+export function noteLinks(...ids: string[]): { item_notes: PcoToManyRelationship<"ItemNote"> } {
+    return { item_notes: { data: ids.map((id) => ({ type: "ItemNote" as const, id })) } };
 }

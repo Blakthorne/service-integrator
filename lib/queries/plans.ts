@@ -10,8 +10,10 @@ import type {
     Plan,
     PlanItemWithSong,
     PlanSummary,
+    ScheduleSelection,
     ServiceType,
 } from "@/lib/domain";
+import { planHymnNoteStatus, type HymnNoteStatus } from "@/lib/hymnNotes";
 import {
     getAllPlans,
     getPlan,
@@ -22,7 +24,11 @@ import {
 import { planLabel } from "@/lib/planLabel";
 import { groupPlansByDate, sortPlanDates } from "@/lib/plansByDate";
 import { TOP_SUGGESTIONS, buildCatalogIndex, suggestLinks } from "@/lib/reconcile";
+import { planTextSettings, type PlanTextSettings } from "@/lib/settings";
 import { createTtlCache } from "@/lib/ttlCache";
+import { readAppWrittenNoteIds, readItemNoteCategories } from "./hymnNotes";
+import { getScheduleSelections } from "./selections";
+import { getSettings } from "./settings";
 
 /** What the plans list shows. */
 export interface PlansByDate {
@@ -77,6 +83,36 @@ export interface PlanDetail extends PlanData {
      * tab says that numbers cannot be shown.
      */
     catalogError: string | null;
+    /**
+     * The Schedule tab's saved choices for this plan's items, by item id,
+     * to seed its reducer. A choice whose option this build does not know,
+     * or for an item no longer in the plan, is left out (and stays stored).
+     * A choice that no longer makes sense (Numbers for a song that lost its
+     * link) is kept: `mergeScheduleSelections` shows the default instead.
+     */
+    selections: Record<string, ScheduleSelection>;
+    /**
+     * Why the saved choices could not be read, or null when they were.
+     * `selections` is then empty, and every song shows its default.
+     */
+    selectionsError: string | null;
+    /**
+     * The settings this plan's text follows, resolved for its service type:
+     * the schedule header label, the number separator and the CCLI number.
+     */
+    scheduleSettings: PlanTextSettings;
+    /**
+     * Why the settings could not be read, or null when they were;
+     * `scheduleSettings` then holds the defaults, today's text.
+     */
+    settingsError: string | null;
+    /**
+     * The plan's hymnal notes against its service type's category (see
+     * `planHymnNoteStatus`): each song item's diff when the category is
+     * found, or why it cannot be compared: no such category, or the
+     * categories or the catalog could not be read.
+     */
+    hymnNoteStatus: HymnNoteStatus;
 }
 
 /**
@@ -101,9 +137,10 @@ const getPlanData = cache(
  * database only when a song item has a Planning Center song, and then asks
  * at most seven queries, however many items: two for the links, one for the
  * mirror's ignored marks, and four for the catalog when a song needs
- * suggestions. Throws when the database cannot be read.
+ * suggestions. Throws when the database cannot be read. The dashboard asks
+ * it once for the items of every plan it shows.
  */
-function planCatalogLinks(
+export function planCatalogLinks(
     items: readonly PlanItemWithSong[]
 ): Pick<PlanDetail, "catalog" | "suggestions"> {
     /** Each Planning Center song the items schedule, with its title as Planning Center gives it, if it does. */
@@ -161,20 +198,72 @@ function readPlanCatalogLinks(
 }
 
 /**
- * Load a plan, its service type and its items in parallel, and find their
- * songs' catalog links and suggestions in the database. PCO errors pass
- * through (wrap the call in orNotFound to turn a missing plan into a 404).
- * A database that cannot be read does not: the plan comes without its
- * catalog links, with `catalogError` saying why.
+ * The saved choices for a plan's items (see `PlanDetail.selections`), or
+ * none and the reason when they cannot be read. Never throws: a failure is
+ * logged.
+ */
+function readPlanSelections(
+    serviceTypeId: string,
+    planId: string,
+    items: readonly PlanItemWithSong[]
+): Pick<PlanDetail, "selections" | "selectionsError"> {
+    try {
+        const inPlan = new Set(items.map((item) => item.id));
+        return {
+            selections: Object.fromEntries(
+                Object.entries(getScheduleSelections(planId)).filter(([itemId]) =>
+                    inPlan.has(itemId)
+                )
+            ),
+            selectionsError: null,
+        };
+    } catch (error) {
+        console.error(
+            `Failed to read the saved choices of plan ${serviceTypeId}/${planId}:`,
+            error
+        );
+        return { selections: {}, selectionsError: errorMessage(error) };
+    }
+}
+
+/**
+ * Load a plan, its service type and its items, and the service type's item
+ * note categories, in parallel (four requests); then find the songs'
+ * catalog links and suggestions, the plan's saved choices, the settings and
+ * which of its notes the app wrote in the database (at most ten queries),
+ * and compare the hymnal notes. PCO
+ * errors in the plan, its service type or its items pass through (wrap the
+ * call in orNotFound to turn a missing plan into a 404). Nothing else does:
+ * categories or a database that cannot be read leave the plan without what
+ * they would give, each with the reason (`catalogError`, `selectionsError`,
+ * `settingsError`, `hymnNoteStatus`).
  */
 export const getPlanDetail = cache(
     async (serviceTypeId: string, planId: string): Promise<PlanDetail> => {
-        const { plan, serviceType, items } = await getPlanData(serviceTypeId, planId);
+        const [{ plan, serviceType, items }, categories] = await Promise.all([
+            getPlanData(serviceTypeId, planId),
+            readItemNoteCategories(serviceTypeId),
+        ]);
+        const links = readPlanCatalogLinks(serviceTypeId, planId, items);
+        const { settings, error: settingsError } = getSettings();
         return {
             plan,
             serviceType,
             items,
-            ...readPlanCatalogLinks(serviceTypeId, planId, items),
+            ...links,
+            ...readPlanSelections(serviceTypeId, planId, items),
+            scheduleSettings: planTextSettings(settings, serviceType),
+            settingsError,
+            hymnNoteStatus: planHymnNoteStatus({
+                serviceTypeName: serviceType.name,
+                items,
+                catalog: links.catalog,
+                catalogError: links.catalogError,
+                categories,
+                settings,
+                settingsError,
+                ownedNoteIds: readAppWrittenNoteIds(items),
+            }),
         };
     }
 );

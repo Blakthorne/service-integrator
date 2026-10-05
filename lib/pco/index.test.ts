@@ -16,6 +16,13 @@ describe("the barrel", () => {
         expect(error).toMatchObject({ status: 422, details: ["category: must exist"] });
     });
 
+    test("exports the writes of lib/pco/writes.ts, through which app code writes", () => {
+        const exported = Object.keys(barrel);
+        for (const name of ["createItemNote", "updateItemNote", "deleteItemNote"]) {
+            expect(exported).toContain(name);
+        }
+    });
+
     test("leaves out the write plumbing: only modules inside lib/pco write to PCO", () => {
         const exported = Object.keys(barrel);
         expect(exported).toContain("PcoError");

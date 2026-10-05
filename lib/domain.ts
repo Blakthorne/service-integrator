@@ -74,8 +74,35 @@ export interface PlanItem {
     songId: string | null;
 }
 
-/** A plan item joined to its song (null when no song was found for it). */
-export type PlanItemWithSong = PlanItem & { song: Song | null };
+/**
+ * A note on a plan item, in one of its service type's item note categories
+ * ("Hymnal", "Band", "Vocals", ...). An item may hold several notes, even
+ * several in one category.
+ */
+export interface ItemNote {
+    id: string;
+    /** Its category's id; null when Planning Center did not say. */
+    categoryId: string | null;
+    /** Its category's name, as Planning Center gives it with the note. */
+    categoryName: string;
+    content: string;
+}
+
+/**
+ * One of a service type's item note categories. Each service type has its
+ * own, with its own ids; the API cannot create one.
+ */
+export interface ItemNoteCategory {
+    id: string;
+    name: string;
+}
+
+/**
+ * A plan item joined to what Planning Center sent with it: its song (null
+ * when no song was found for it) and its item notes (`notes`, in the order
+ * Planning Center lists them).
+ */
+export type PlanItemWithSong = PlanItem & { song: Song | null; notes: ItemNote[] };
 
 /**
  * The choice made for one song on the Schedule tab: print its numbers from

@@ -1,16 +1,22 @@
 import { describe, expect, test } from "vitest";
 import type { PlanItem } from "../domain";
 import {
+    itemNotesByItem,
     joinItemsToSongs,
+    toItemNote,
+    toItemNoteCategory,
     toPcoLibrarySong,
     toPlan,
     toPlanItem,
     toServiceType,
     toSong,
 } from "./mappers";
-import type { PcoSongResource } from "./resources";
+import type { PcoItemNoteResource, PcoSongResource } from "./resources";
 import {
+    itemNoteCategoryResource,
+    itemNoteResource,
     itemResource,
+    noteLinks,
     planResource,
     serviceTypeResource,
     songResource,
@@ -355,5 +361,84 @@ describe("joinItemsToSongs", () => {
         const snapshot = JSON.stringify(item);
         joinItemsToSongs([item], [grace]);
         expect(JSON.stringify(item)).toBe(snapshot);
+    });
+});
+
+describe("toItemNote", () => {
+    test("maps the note, taking its category's id from the relationship", () => {
+        expect(
+            toItemNote(itemNoteResource("9001", { category_name: "Hymnal", content: "R-396 / G-317" }, "501"))
+        ).toStrictEqual({
+            id: "9001",
+            categoryId: "501",
+            categoryName: "Hymnal",
+            content: "R-396 / G-317",
+        });
+    });
+
+    test("a note without a category relationship has a null category id", () => {
+        expect(toItemNote(itemNoteResource("9001", {}, null)).categoryId).toBeNull();
+        const resource: PcoItemNoteResource = {
+            ...itemNoteResource("9002"),
+            relationships: { item_note_category: { data: null } },
+        };
+        expect(toItemNote(resource).categoryId).toBeNull();
+    });
+
+    test("a null or missing category name or content becomes empty", () => {
+        expect(toItemNote(itemNoteResource("9001", { category_name: null, content: null }))).toMatchObject({
+            categoryName: "",
+            content: "",
+        });
+        const resource = itemNoteResource("9002");
+        const attributes: Partial<PcoItemNoteResource["attributes"]> = { ...resource.attributes };
+        delete attributes.content;
+        delete attributes.category_name;
+        expect(
+            toItemNote({ ...resource, attributes: attributes as PcoItemNoteResource["attributes"] })
+        ).toMatchObject({ categoryName: "", content: "" });
+    });
+
+    test("keeps the content exactly as Planning Center has it", () => {
+        expect(toItemNote(itemNoteResource("9001", { content: "  R-12\nG-34 " })).content).toBe("  R-12\nG-34 ");
+    });
+});
+
+describe("toItemNoteCategory", () => {
+    test("maps the id and name", () => {
+        expect(toItemNoteCategory(itemNoteCategoryResource("501", { name: "Band" }))).toStrictEqual({
+            id: "501",
+            name: "Band",
+        });
+    });
+});
+
+describe("itemNotesByItem", () => {
+    const hymnal = itemNoteResource("9001", { content: "R-396" });
+    const vocals = itemNoteResource("9002", { category_name: "Vocals", content: "Solo" }, "502");
+
+    test("gives each item the notes its relationship names, in that order", () => {
+        const notes = itemNotesByItem(
+            [itemResource("1", {}, noteLinks("9002", "9001")), itemResource("2", {}, noteLinks())],
+            [hymnal, vocals]
+        );
+        expect([...notes.entries()]).toEqual([
+            ["1", [toItemNote(vocals), toItemNote(hymnal)]],
+            ["2", []],
+        ]);
+    });
+
+    test("an item with no item_notes relationship has no notes", () => {
+        expect(itemNotesByItem([itemResource("1")], [hymnal]).get("1")).toEqual([]);
+    });
+
+    test("leaves out a note that was not included, and one no item names", () => {
+        const notes = itemNotesByItem([itemResource("1", {}, noteLinks("9001", "404"))], [hymnal, vocals]);
+        expect(notes.get("1")).toEqual([toItemNote(hymnal)]);
+    });
+
+    test("ignores included resources that are not item notes", () => {
+        const song = { ...songResource("9001"), type: "Song" as const };
+        expect(itemNotesByItem([itemResource("1", {}, noteLinks("9001"))], [song]).get("1")).toEqual([]);
     });
 });

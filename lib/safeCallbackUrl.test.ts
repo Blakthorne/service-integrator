@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { describe, expect, test } from "vitest";
-import { safeCallbackUrl } from "./safeCallbackUrl";
+import { safeCallbackUrl, signInTarget } from "./safeCallbackUrl";
 
 /** Whether Node will write `value` into a Location header, as `redirect()` does. */
 function canBeLocationHeader(value: string): boolean {
@@ -139,8 +139,9 @@ describe("safeCallbackUrl", () => {
             expect(callbackUrlAfterMiddleware("/a/..//evil.com")).toBeNull();
         });
 
-        test("a request whose path holds an encoded slash is refused, so sign-in goes to the plans", () => {
+        test("a request whose path holds an encoded slash is refused, so sign-in goes to the dashboard", () => {
             expect(callbackUrlAfterMiddleware("/plans/a%2Fb?q=%26")).toBeNull();
+            expect(signInTarget(callbackUrlAfterMiddleware("/plans/a%2Fb?q=%26"))).toBe("/");
         });
 
         test("the auth pages are refused: the middleware leaves them public, so they would loop", () => {
@@ -401,5 +402,31 @@ describe("safeCallbackUrl", () => {
         ])("rejects %s", (_name, value) => {
             expect(safeCallbackUrl(value)).toBeNull();
         });
+    });
+});
+
+describe("signInTarget", () => {
+    test("is the callbackUrl when it is safe", () => {
+        expect(signInTarget("/plans/1405391/98765/schedule?x=1")).toBe(
+            "/plans/1405391/98765/schedule?x=1"
+        );
+        expect(signInTarget("/")).toBe("/");
+        expect(signInTarget("/catalog?used=never")).toBe("/catalog?used=never");
+    });
+
+    test("takes the first of a parameter given several times", () => {
+        expect(signInTarget(["/catalog", "/settings"])).toBe("/catalog");
+        expect(signInTarget(["//evil.com", "/catalog"])).toBe("/");
+    });
+
+    test.each<[string, unknown]>([
+        ["no callbackUrl", undefined],
+        ["an empty one", ""],
+        ["an empty list", []],
+        ["another host", "//evil.com"],
+        ["an auth page", "/auth/signin"],
+        ["an absolute URL", "https://evil.com/plans"],
+    ])("falls back to the dashboard for %s", (_, value) => {
+        expect(signInTarget(value)).toBe("/");
     });
 });

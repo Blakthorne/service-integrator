@@ -96,8 +96,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
     {
         href: routes.plans(),
         label: "Plans",
-        isActive: (pathname) =>
-            pathname === routes.home() || isAtOrBelow(pathname, routes.plans()),
+        isActive: (pathname) => isAtOrBelow(pathname, routes.plans()),
     },
     {
         href: routes.catalog(),
@@ -106,13 +105,26 @@ export const NAV_ITEMS: readonly NavItem[] = [
     },
 ];
 
-/** The icons a utility link can show; `Navigation/NavUtilityLinks.tsx` draws each. */
-export type NavIcon = "gear";
+/** The icons a nav link can show; `Navigation/NavIcon.tsx` draws each. */
+export type NavIcon = "gear" | "home";
 
 /** An icon link at the right of the top bar. Its `label` is its accessible name and tooltip. */
 export interface NavUtilityItem extends NavItem {
     icon: NavIcon;
 }
+
+/**
+ * The link to the dashboard, at the left of the top bar: the app's name from
+ * `md`, and a house icon named by `label` below it, where the name would
+ * crowd the section links into the gear and Sign Out. It is the current page
+ * on "/" alone.
+ */
+export const NAV_HOME_ITEM: NavItem & { icon: NavIcon } = {
+    href: routes.home(),
+    label: "Dashboard",
+    icon: "home",
+    isActive: (pathname) => pathname === routes.home(),
+};
 
 /** The icon links beside Sign Out, in display order. */
 export const NAV_UTILITY_ITEMS: readonly NavUtilityItem[] = [

@@ -15,6 +15,11 @@ export interface PcoToOneRelationship<TType extends string> {
     data: PcoResourceIdentifier<TType> | null;
 }
 
+/** A to-many relationship. `data` is empty when nothing is linked. */
+export interface PcoToManyRelationship<TType extends string> {
+    data: PcoResourceIdentifier<TType>[];
+}
+
 /** Pagination links of a list response. `next` is absent on the last page. */
 export interface PcoLinks {
     self?: string;
@@ -139,7 +144,47 @@ export interface PcoItemResource {
     attributes: PcoItemAttributes;
     relationships?: {
         song?: PcoToOneRelationship<"Song">;
+        /** The item's notes; their resources come with `include=item_notes`. */
+        item_notes?: PcoToManyRelationship<"ItemNote">;
     };
+}
+
+export interface PcoItemNoteAttributes {
+    /** The name of the note's category, e.g. "Hymnal". */
+    category_name: string | null;
+    content: string | null;
+    created_at?: string;
+    updated_at?: string;
+}
+
+/**
+ * `…/plans/{plan}/items/{item}/item_notes[/{id}]`, or included with plan
+ * items (`include=item_notes`). The spike saw `category_name`, `content`
+ * and the `item_note_category` relationship.
+ */
+export interface PcoItemNoteResource {
+    type: "ItemNote";
+    id: string;
+    attributes: PcoItemNoteAttributes;
+    relationships?: {
+        item_note_category?: PcoToOneRelationship<"ItemNoteCategory">;
+    };
+}
+
+export interface PcoItemNoteCategoryAttributes {
+    name: string;
+    sequence?: number | null;
+    created_at?: string;
+    updated_at?: string;
+    /** Set when the category has been deleted; it then takes no notes. */
+    deleted_at?: string | null;
+}
+
+/** `GET /services/v2/service_types/{st}/item_note_categories` */
+export interface PcoItemNoteCategoryResource {
+    type: "ItemNoteCategory";
+    id: string;
+    attributes: PcoItemNoteCategoryAttributes;
 }
 
 export interface PcoSongAttributes {

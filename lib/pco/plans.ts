@@ -4,7 +4,11 @@ import type { Plan, PlanSummary } from "../domain";
 import { pcoFetch, pcoFetchAll } from "./client";
 import { assertPcoId } from "./ids";
 import { toPlan } from "./mappers";
-import type { PcoPlanResource, PcoSingleResponse } from "./resources";
+import type {
+    PcoListResponse,
+    PcoPlanResource,
+    PcoSingleResponse,
+} from "./resources";
 import { getServiceTypes } from "./serviceTypes";
 
 /** Up to 2,000 plans per service type; beyond that the fetch fails loudly. */
@@ -77,3 +81,29 @@ export const getPlan = cache(
         return toPlan(data, st);
     }
 );
+
+/**
+ * A service type's next plan: of the plans Planning Center counts as future
+ * (`filter=future`, which keeps all of today's plans for the whole day, as
+ * the spike found), the earliest by `sort_date`, or null when there is
+ * none. One request: it asks for them earliest first (`order=sort_date`),
+ * and only a few plans lie ahead (the spike found just next Sunday's), so
+ * the first page holds the earliest; the earliest is picked here too, so
+ * the answer stands whatever order the page comes in. Throws
+ * InvalidPcoIdError or PcoError.
+ */
+export const getNextPlan = cache(async (serviceTypeId: string): Promise<Plan | null> => {
+    const id = assertPcoId(serviceTypeId);
+    const { data } = await pcoFetch<PcoListResponse<PcoPlanResource>>(
+        `/service_types/${id}/plans?filter=future&order=sort_date&per_page=25`,
+        "plans"
+    );
+    let next: Plan | null = null;
+    for (const resource of data) {
+        const plan = toPlan(resource, id);
+        if (next === null || plan.sortDate < next.sortDate) {
+            next = plan;
+        }
+    }
+    return next;
+});

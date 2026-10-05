@@ -6,8 +6,11 @@ import {
     seedEntry,
     seedHymn,
     seedPcoSong,
+    seedScheduleSelection,
+    seedSetting,
     seedSong,
     seedTune,
+    seedWriteLog,
 } from "./testing";
 
 let db: DatabaseSync;
@@ -249,5 +252,94 @@ describe("seedPcoSong", () => {
             ignored_at: "2026-10-04T15:00:00.000Z",
             auto_link_blocked_at: "2026-10-04T16:00:00.000Z",
         });
+    });
+});
+
+describe("seedScheduleSelection", () => {
+    const selection = (planId: string, itemId: string) =>
+        db
+            .prepare("SELECT * FROM schedule_selections WHERE plan_id = ? AND item_id = ?")
+            .get(planId, itemId);
+
+    test("saves Numbers for items 1, 2, … of plan 81234567 by default", () => {
+        expect(seedScheduleSelection(db)).toEqual({ planId: "81234567", itemId: "1" });
+        expect(seedScheduleSelection(db)).toEqual({ planId: "81234567", itemId: "2" });
+        expect(selection("81234567", "1")).toEqual({
+            plan_id: "81234567",
+            item_id: "1",
+            option: "numbers",
+            custom_text: null,
+            updated_at: "2026-10-04T12:00:00.000Z",
+        });
+    });
+
+    test("numbers the default items per plan, skipping one that is taken", () => {
+        seedScheduleSelection(db, { itemId: "2" });
+        expect(seedScheduleSelection(db).itemId).toBe("1");
+        expect(seedScheduleSelection(db).itemId).toBe("3");
+        expect(seedScheduleSelection(db, { planId: "5" }).itemId).toBe("1");
+    });
+
+    test("takes every field, an option a newer build wrote included", () => {
+        seedScheduleSelection(db, {
+            planId: "10",
+            itemId: "7",
+            option: "newer-option",
+            customText: "x",
+            updatedAt: "2026-10-04T13:00:00.000Z",
+        });
+        expect(selection("10", "7")).toEqual({
+            plan_id: "10",
+            item_id: "7",
+            option: "newer-option",
+            custom_text: "x",
+            updated_at: "2026-10-04T13:00:00.000Z",
+        });
+    });
+});
+
+describe("seedWriteLog", () => {
+    test("logs a hymnal note written to item 1 of plan 81234567 by default", () => {
+        const id = seedWriteLog(db);
+        expect(row("write_log", id)).toEqual({
+            id,
+            at: "2026-10-04T12:00:00.000Z",
+            kind: "item-note",
+            target: "plan 81234567 item 1",
+            ok: 1,
+            payload: "{}",
+            result: "{}",
+        });
+    });
+
+    test("takes every field, a kind a newer build wrote included", () => {
+        const id = seedWriteLog(db, {
+            at: "2026-10-04T13:00:00.000Z",
+            kind: "newer-kind",
+            target: "song 9",
+            ok: false,
+            payload: { a: 1 },
+            result: { error: "no" },
+        });
+        expect(row("write_log", id)).toEqual({
+            id,
+            at: "2026-10-04T13:00:00.000Z",
+            kind: "newer-kind",
+            target: "song 9",
+            ok: 0,
+            payload: '{"a":1}',
+            result: '{"error":"no"}',
+        });
+    });
+});
+
+describe("seedSetting", () => {
+    test("stores any value as JSON under any key, at 2026-10-04 12:00 UTC by default", () => {
+        seedSetting(db, "numberSeparator", ", ");
+        seedSetting(db, "newer-key", { a: [1] }, "2026-10-04T13:00:00.000Z");
+        expect(db.prepare("SELECT * FROM settings ORDER BY key").all()).toEqual([
+            { key: "newer-key", value: '{"a":[1]}', updated_at: "2026-10-04T13:00:00.000Z" },
+            { key: "numberSeparator", value: '", "', updated_at: "2026-10-04T12:00:00.000Z" },
+        ]);
     });
 });

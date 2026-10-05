@@ -3,16 +3,21 @@
 import Link from "next/link";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogMatch, PlanItemWithSong, ScheduleSelection } from "@/lib/domain";
+import type { CardNoteBadge, HymnNoteShownState } from "@/lib/hymnNoteText";
 import { routes } from "@/lib/routes";
 import {
+    SAVED_AFTER_FAILURE_NOTICE,
     differentSongTitle,
     linkedNotice,
+    saveFailureText,
     scheduleChoices,
     type ScheduleSongView,
 } from "@/lib/scheduleCards";
 import type { ChooseOption, SetCustomText } from "@/lib/scheduleSelections";
+import type { SelectionSaveState } from "@/lib/scheduleSelectionsStore";
 import EntryNumbers from "./EntryNumbers";
 import LinkToCatalogInline, { type LinkSong } from "./LinkToCatalogInline";
+import type { RetrySave } from "./PlanProvider";
 import ScheduleChoices from "./ScheduleChoices";
 
 /** A song item with its Schedule-tab selection. */
@@ -20,6 +25,39 @@ type ItemWithSelection = PlanItemWithSong & ScheduleSelection;
 
 /** Muted text under a card's title. */
 const NOTE_CLASS = "text-sm text-gray-600 dark:text-gray-400";
+
+/**
+ * Each hymnal note status's badge colours, as the dashboard's: green in
+ * sync, amber to be synced, grey for a note left alone, as the sync dialog
+ * tags it. The words say the same, so colour is never the only sign.
+ */
+const NOTE_BADGE_CLASSES: Readonly<Record<HymnNoteShownState, string>> = {
+    "in-sync":
+        "bg-green-50 text-green-800 ring-green-200 dark:bg-green-950 dark:text-green-200 dark:ring-green-900",
+    differs:
+        "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900",
+    missing:
+        "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900",
+    kept: "bg-gray-50 text-gray-700 ring-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:ring-gray-700",
+};
+
+/** A card's hymnal note status, under its title: "Note in sync"; and, for a note left alone, why. */
+function NoteBadge({ badge }: { badge: CardNoteBadge }) {
+    return (
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                    NOTE_BADGE_CLASSES[badge.state]
+                }`}
+            >
+                {badge.label}
+            </span>
+            {badge.detail !== null && (
+                <span className="text-xs text-gray-600 dark:text-gray-400">{badge.detail}</span>
+            )}
+        </p>
+    );
+}
 
 /**
  * The catalog song a linked song is: its hymn's title (a link to the song's
@@ -46,20 +84,67 @@ function LinkedSong({ match }: { match: CatalogMatch }) {
     );
 }
 
+/**
+ * The line under a card's choices when its choice could not be saved: why,
+ * as an alert that is new for each failure (so a repeated one is announced
+ * again), and Retry. Retry stays put while it runs, `aria-disabled` rather
+ * than disabled, so it keeps focus.
+ */
+function SaveFailure({
+    state,
+    onRetry,
+}: {
+    state: Extract<SelectionSaveState, { status: "failed" }>;
+    onRetry: () => void;
+}) {
+    return (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+            <p key={state.attempt} role="alert" className="text-red-600 dark:text-red-400">
+                {saveFailureText(state.message)}
+            </p>
+            <button
+                type="button"
+                onClick={() => {
+                    if (!state.retrying) {
+                        onRetry();
+                    }
+                }}
+                aria-disabled={state.retrying}
+                className={`rounded-sm font-medium text-blue-600 dark:text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    state.retrying
+                        ? "opacity-60 cursor-not-allowed"
+                        : "cursor-pointer hover:text-blue-800 hover:underline dark:hover:text-blue-300"
+                }`}
+            >
+                {state.retrying ? "Retrying…" : "Retry"}
+            </button>
+        </div>
+    );
+}
+
 interface ScheduleSongCardProps {
     item: ItemWithSelection;
     /** Which card it is (see `scheduleSongView`). */
     view: ScheduleSongView;
+    /** Its hymnal note's status (see `cardNoteBadge`); null when there is nothing to say. */
+    noteBadge: CardNoteBadge | null;
+    /** How the save of its choice stands; null when it is saved, or was never changed. */
+    saveState: SelectionSaveState | null;
+    /** What goes between a song's numbers, from the settings, for what a Link says. */
+    numberSeparator: string;
     /** This Schedule tab's address, where the new-song form comes back to. */
     scheduleHref: string;
     onChooseOption: ChooseOption;
     onCustomTextChange: SetCustomText;
+    onRetrySave: RetrySave;
     onLink: LinkSong;
 }
 
 /**
- * A song item on the Schedule tab: its title, then what the catalog knows of
- * it, then the choices for its line in the schedule text.
+ * A song item on the Schedule tab: its title and its hymnal note's status
+ * (in sync, needs sync, missing, or left alone: a note the app did not write),
+ * then what the catalog knows of it, then the choices for its line in the
+ * schedule text.
  *
  * - Linked: the catalog song's title and tune and its numbers
  *   (`EntryNumbers`); Numbers, Leave blank or Custom.
@@ -79,19 +164,34 @@ interface ScheduleSongCardProps {
  * empty until then, so screen readers announce it, and moves focus to its
  * heading rather than leave it on the page's body. Both wait for the
  * revalidated plan to show the link.
+ *
+ * Each choice is saved as it is made. One that could not be saved stays
+ * chosen, and the card says so under its choices, with Retry
+ * (`SaveFailure`). Once a later save goes through, that line goes and the
+ * status region says "Saved."; when focus was on Retry, which goes with the
+ * line, the heading takes it.
  */
 export default function ScheduleSongCard({
     item,
     view,
+    noteBadge,
+    saveState,
+    numberSeparator,
     scheduleHref,
     onChooseOption,
     onCustomTextChange,
+    onRetrySave,
     onLink,
 }: ScheduleSongCardProps) {
     const headingRef = useRef<HTMLHeadingElement>(null);
     /** True once a Link made on this card has gone through. */
     const [linkedHere, setLinkedHere] = useState(false);
-    const notice = linkedHere ? linkedNotice(view) : null;
+    const linkNotice = linkedHere ? linkedNotice(view, numberSeparator) : null;
+    const failure = saveState?.status === "failed" ? saveState : null;
+    /** True once a save has gone through after a failure, until the next save starts. */
+    const [savedAgain, setSavedAgain] = useState(false);
+    const failedBefore = useRef(false);
+    const notice = linkNotice ?? (savedAgain ? SAVED_AFTER_FAILURE_NOTICE : null);
 
     // In a transition, like the revalidated plan the action brings, so the
     // notice can land with it.
@@ -100,10 +200,27 @@ export default function ScheduleSongCard({
     }, []);
 
     useEffect(() => {
-        if (notice !== null) {
+        if (linkNotice !== null) {
             headingRef.current?.focus();
         }
-    }, [notice]);
+    }, [linkNotice]);
+
+    useEffect(() => {
+        if (saveState !== null) {
+            failedBefore.current ||= saveState.status === "failed";
+            setSavedAgain(false);
+            return;
+        }
+        if (!failedBefore.current) {
+            return;
+        }
+        failedBefore.current = false;
+        setSavedAgain(true);
+        // Retry went with the failure's line: focus would be on the body.
+        if (document.activeElement === null || document.activeElement === document.body) {
+            headingRef.current?.focus();
+        }
+    }, [saveState]);
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 space-y-3">
@@ -114,6 +231,7 @@ export default function ScheduleSongCard({
             >
                 {item.title}
             </h3>
+            {noteBadge !== null && <NoteBadge badge={noteBadge} />}
             {view.kind === "linked" ? (
                 <LinkedSong match={view.match} />
             ) : view.kind === "unlinked" ? (
@@ -128,10 +246,11 @@ export default function ScheduleSongCard({
             ) : view.kind === "ignored" ? (
                 <p className={NOTE_CLASS}>
                     Set aside on{" "}
+                    {/* Underlined: in running text, its colour alone is under 3:1 against the text's. */}
                     <Link
                         href={routes.catalogReconcile()}
                         prefetch={false}
-                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
+                        className="text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                     >
                         Reconcile
                     </Link>{" "}
@@ -152,6 +271,9 @@ export default function ScheduleSongCard({
                 onChooseOption={onChooseOption}
                 onCustomTextChange={onCustomTextChange}
             />
+            {failure !== null && (
+                <SaveFailure state={failure} onRetry={() => onRetrySave(item.id)} />
+            )}
         </div>
     );
 }

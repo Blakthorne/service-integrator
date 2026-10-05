@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS, navAriaCurrent } from "@/lib/routes";
+import { NAV_FOCUS_CLASS } from "./classes";
 
 export default function NavLinks() {
     const pathname = usePathname();
@@ -16,7 +17,7 @@ export default function NavLinks() {
                         key={item.href}
                         href={item.href}
                         aria-current={ariaCurrent}
-                        className={`px-2.5 sm:px-3 py-2.5 sm:py-2 text-sm font-medium whitespace-nowrap rounded-md transition-colors ${
+                        className={`px-2.5 sm:px-3 py-2.5 sm:py-2 text-sm font-medium whitespace-nowrap rounded-md transition-colors ${NAV_FOCUS_CLASS} ${
                             isActive
                                 ? "bg-blue-600 text-white"
                                 : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"

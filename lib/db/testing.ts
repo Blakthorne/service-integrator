@@ -305,3 +305,101 @@ export function seedPcoSong(db: DatabaseSync, fields: SeedPcoSongFields = {}): s
     );
     return id;
 }
+
+/**
+ * The fields of a saved Schedule-tab choice; `seedScheduleSelection` fills in
+ * the rest. The option is plain text, so a test can store what a newer build
+ * might.
+ */
+export interface SeedScheduleSelectionFields {
+    planId?: string;
+    itemId?: string;
+    option?: string;
+    customText?: string | null;
+    updatedAt?: string;
+}
+
+/**
+ * Insert a saved Schedule-tab choice and return its key. By default it is
+ * Numbers, with no custom text, for plan 81234567 (the plan `planResource`
+ * builds) and the first free item id of 1, 2, …, saved at 2026-10-04 12:00
+ * UTC.
+ */
+export function seedScheduleSelection(
+    db: DatabaseSync,
+    fields: SeedScheduleSelectionFields = {}
+): { planId: string; itemId: string } {
+    const planId = fields.planId ?? "81234567";
+    let itemId = fields.itemId;
+    if (itemId === undefined) {
+        const taken = db.prepare(
+            "SELECT 1 FROM schedule_selections WHERE plan_id = ? AND item_id = ?"
+        );
+        let ordinal = 1;
+        while (taken.get(planId, String(ordinal))) {
+            ordinal += 1;
+        }
+        itemId = String(ordinal);
+    }
+    db.prepare(
+        "INSERT INTO schedule_selections (plan_id, item_id, option, custom_text, updated_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(
+        planId,
+        itemId,
+        fields.option ?? "numbers",
+        fields.customText ?? null,
+        fields.updatedAt ?? "2026-10-04T12:00:00.000Z"
+    );
+    return { planId, itemId };
+}
+
+/**
+ * The fields of a write to Planning Center; `seedWriteLog` fills in the rest.
+ * The kind is plain text, so a test can store what a newer build might.
+ */
+export interface SeedWriteLogFields {
+    at?: string;
+    kind?: string;
+    target?: string;
+    ok?: boolean;
+    /** Stored as JSON. */
+    payload?: unknown;
+    /** Stored as JSON. */
+    result?: unknown;
+}
+
+/**
+ * Insert a row of the write log and return its id. By default it is a
+ * hymnal note written to item 1 of plan 81234567 at 2026-10-04 12:00 UTC,
+ * with an empty payload and result.
+ */
+export function seedWriteLog(db: DatabaseSync, fields: SeedWriteLogFields = {}): number {
+    return insert(
+        db,
+        "INSERT INTO write_log (at, kind, target, ok, payload, result) VALUES (?, ?, ?, ?, ?, ?)",
+        fields.at ?? "2026-10-04T12:00:00.000Z",
+        fields.kind ?? "item-note",
+        fields.target ?? "plan 81234567 item 1",
+        (fields.ok ?? true) ? 1 : 0,
+        JSON.stringify(fields.payload ?? {}),
+        JSON.stringify(fields.result ?? {})
+    );
+}
+
+/**
+ * Store a setting's value as JSON, as saving it does, at `updatedAt`
+ * (2026-10-04 12:00 UTC by default). Any key and any JSON value, so a test
+ * can store what a newer build might, or a value that no longer parses.
+ */
+export function seedSetting(
+    db: DatabaseSync,
+    key: string,
+    value: unknown,
+    updatedAt = "2026-10-04T12:00:00.000Z"
+): void {
+    db.prepare("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)").run(
+        key,
+        JSON.stringify(value),
+        updatedAt
+    );
+}

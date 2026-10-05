@@ -74,18 +74,19 @@ export function scheduleChoices(view: ScheduleSongView): ScheduleOption[] {
 /**
  * What a card says, through its status region, once a Link made on it has
  * gone through: "Linked: R-396 / G-317", the numbers the schedule text will
- * print, or that the song is in no book. Null while the card still shows
- * the song as not linked, before the action's revalidation has brought the
- * link. Should the catalog be unreadable by then, just "Linked."
+ * print (joined with `separator`, the `numberSeparator` setting), or that
+ * the song is in no book. Null while the card still shows the song as not
+ * linked, before the action's revalidation has brought the link. Should the
+ * catalog be unreadable by then, just "Linked."
  */
-export function linkedNotice(view: ScheduleSongView): string | null {
+export function linkedNotice(view: ScheduleSongView, separator?: string): string | null {
     if (view.kind === "unlinked") {
         return null;
     }
     if (view.kind !== "linked") {
         return "Linked.";
     }
-    const numbers = formatScheduleNumbers(view.match.entries);
+    const numbers = formatScheduleNumbers(view.match.entries, separator);
     return numbers === ""
         ? "Linked. The song is in no book, so there are no numbers to print."
         : `Linked: ${numbers}`;
@@ -112,16 +113,59 @@ export function differentSongTitle(
 }
 
 /**
+ * `lead`, then `reason` after a colon, as one sentence: "<lead>: <reason>."
+ * A reason that already ends a sentence gets no second full stop, and an
+ * empty one is left out ("<lead>.").
+ */
+function withReason(lead: string, reason: string): string {
+    const text = reason.trim();
+    if (text === "") {
+        return `${lead}.`;
+    }
+    return `${lead}: ${/[.!?]$/.test(text) ? text : `${text}.`}`;
+}
+
+/**
  * What the Schedule tab says when the catalog cannot be read (see
  * `PlanDetail.catalogError`): "The catalog is unavailable: <why>. Numbers
  * can't be shown." A reason that already ends a sentence gets no second
  * full stop, and an empty one is left out.
  */
 export function catalogUnavailableMessage(error: string): string {
-    const reason = error.trim();
+    return `${withReason("The catalog is unavailable", error)} Numbers can't be shown.`;
+}
+
+/**
+ * What the Schedule tab says when the plan's saved choices cannot be read
+ * (see `PlanDetail.selectionsError`): every song shows its default. A choice
+ * made on the tab is still saved, since the database may answer by then,
+ * and its card says so when it is not.
+ */
+export function selectionsUnavailableMessage(error: string): string {
+    return `${withReason("The saved choices couldn't be read", error)} Each song shows its default, and a choice made here says so if it can't be saved.`;
+}
+
+/**
+ * What a card says when its choice could not be saved: "Not saved. <why>"
+ * (`message`, from the save, as a sentence), beside its Retry. The choice
+ * stays on screen.
+ */
+export function saveFailureText(message: string): string {
+    const reason = message.trim();
     if (reason === "") {
-        return "The catalog is unavailable. Numbers can't be shown.";
+        return "Not saved.";
     }
-    const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`;
-    return `The catalog is unavailable: ${sentence} Numbers can't be shown.`;
+    return `Not saved. ${/[.!?]$/.test(reason) ? reason : `${reason}.`}`;
+}
+
+/** What a card's status region says once a save that had failed has gone through. */
+export const SAVED_AFTER_FAILURE_NOTICE = "Saved.";
+
+/**
+ * What a plan's tabs say when the settings cannot be read (see
+ * `PlanDetail.settingsError`): their text then follows the defaults, which
+ * give the text the app printed before it had settings.
+ */
+export function settingsUnavailableMessage(error: string): string {
+    return `${withReason("The settings couldn't be read", error)} The text here uses the default settings.`;
 }

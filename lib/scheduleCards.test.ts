@@ -5,8 +5,11 @@ import {
     catalogUnavailableMessage,
     differentSongTitle,
     linkedNotice,
+    saveFailureText,
     scheduleChoices,
     scheduleSongView,
+    selectionsUnavailableMessage,
+    settingsUnavailableMessage,
     type ScheduleCatalogState,
 } from "./scheduleCards";
 
@@ -143,6 +146,11 @@ describe("linkedNotice", () => {
         expect(linkedNotice({ kind: "linked", match: ABIDE })).toBe("Linked: R-517 / G-64");
     });
 
+    test("joins the numbers with the separator from the settings", () => {
+        expect(linkedNotice({ kind: "linked", match: ABIDE }, ", ")).toBe("Linked: R-517, G-64");
+        expect(linkedNotice({ kind: "linked", match: ABIDE }, " / ")).toBe("Linked: R-517 / G-64");
+    });
+
     test("says when the linked song is in no book", () => {
         expect(linkedNotice({ kind: "linked", match: NOT_IN_A_BOOK })).toBe(
             "Linked. The song is in no book, so there are no numbers to print."
@@ -217,6 +225,52 @@ describe("catalogUnavailableMessage", () => {
         );
         expect(catalogUnavailableMessage(" ")).toBe(
             "The catalog is unavailable. Numbers can't be shown."
+        );
+    });
+});
+
+describe("selectionsUnavailableMessage", () => {
+    test("says why the saved choices are missing, and that a choice says if it can't be saved", () => {
+        expect(selectionsUnavailableMessage("no such table: schedule_selections")).toBe(
+            "The saved choices couldn't be read: no such table: schedule_selections. Each song shows its default, and a choice made here says so if it can't be saved."
+        );
+    });
+
+    test("words the reason as catalogUnavailableMessage does", () => {
+        expect(selectionsUnavailableMessage("The disk is full.")).toBe(
+            "The saved choices couldn't be read: The disk is full. Each song shows its default, and a choice made here says so if it can't be saved."
+        );
+        expect(selectionsUnavailableMessage("  ")).toBe(
+            "The saved choices couldn't be read. Each song shows its default, and a choice made here says so if it can't be saved."
+        );
+    });
+});
+
+describe("saveFailureText", () => {
+    test("says the choice is not saved, and why", () => {
+        expect(saveFailureText("The database could not be written.")).toBe(
+            "Not saved. The database could not be written."
+        );
+        expect(saveFailureText("Custom text is at most 500 characters")).toBe(
+            "Not saved. Custom text is at most 500 characters."
+        );
+    });
+
+    test("trims the reason, and leaves out an empty one", () => {
+        expect(saveFailureText("  The server did not answer.  ")).toBe(
+            "Not saved. The server did not answer."
+        );
+        expect(saveFailureText("")).toBe("Not saved.");
+    });
+});
+
+describe("settingsUnavailableMessage", () => {
+    test("says why the settings are missing, and that the text uses the defaults", () => {
+        expect(settingsUnavailableMessage("database is locked")).toBe(
+            "The settings couldn't be read: database is locked. The text here uses the default settings."
+        );
+        expect(settingsUnavailableMessage("")).toBe(
+            "The settings couldn't be read. The text here uses the default settings."
         );
     });
 });

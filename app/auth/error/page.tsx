@@ -23,10 +23,10 @@ export default async function AuthError({
                 </div>
                 <div className="mt-8 text-center">
                     <Link
-                        href={routes.plans()}
+                        href={routes.home()}
                         className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
                     >
-                        Return to Home
+                        Go to the dashboard
                     </Link>
                 </div>
             </div>
