@@ -3,11 +3,29 @@
 A web app that integrates with Planning Center's Services API to aggregate data and generate song copyright and service-schedule text in the format I want, to keep each song's hymnal numbers, credits and tags in Planning Center, and to email a plan's songs to the staff.
 
 - **Dashboard** (`/`): each service type's next plan, with its songs' hymnal numbers and the state of their hymnal notes in Planning Center, and what needs doing.
-- **Plans** (`/plans`): every plan, grouped by date. A plan shows its items, a Copyright Information tab and a Service Schedule tab (each with a "Copy All" button), and each item has its own page with the song's details. The Service Schedule tab takes each song's hymnal numbers from its catalog song, links a song that has none in one click, and saves its choices per plan. **Sync hymn notes** writes each song's numbers to an item note in Planning Center for the musicians, after a preview, and **Email this plan** previews and sends the plan's schedule and its songs' copyright text to the staff.
-- **Catalog** (`/catalog`): the hymnals' songs (Rejoice Hymns and Great Hymns of the Faith), searchable, filterable by book, by Planning Center link, by Planning Center tag and to the songs never scheduled, and exportable as CSV; pages for each song, tune and book; Reconcile (`/catalog/reconcile`), which links each Planning Center song to its catalog song; and a form to add a song. A song's page edits the credits (who wrote its words and music, kept in a labelled form in Planning Center's author field) and the tags of the Planning Center song it is linked to, and adds that song to an upcoming plan; a song with no Planning Center song can be created there, with its credits and an optional CCLI number.
-- **Settings** (`/settings`): the CCLI license number, the credit roles and the phrases the copyright text prints for them, the schedule text's header labels and number separator, the hymnal notes' category, and the plan email's recipients and subject; what the app has written to Planning Center and the emails it has sent; the hourly Planning Center song sync, with Sync now; and the database and its backups.
+- **Plans** (`/plans`): every plan, grouped by date: the upcoming plans first, then the past ones, with Jump to month. A plan shows its items, a Copyright Information tab and a Service Schedule tab (each with a "Copy All" button), and each item has its own page with the song's details. The Service Schedule tab takes each song's hymnal numbers from its catalog song, links a song that has none in one click, and saves its choices per plan. **Sync hymn notes** writes each song's numbers to an item note in Planning Center for the musicians, after a preview, and **Email this plan** previews and sends the plan's schedule and its songs' copyright text to the staff.
+- **Catalog** (`/catalog`): the hymnals' songs (Rejoice Hymns and Great Hymns of the Faith), searchable, filterable by book, by Planning Center link, by Planning Center tag and to the songs never scheduled, and exportable as CSV; pages for each song, tune and book, where anything can be edited; Books (`/catalog/books`), where a book is added, put in order or taken out of use; Import (`/catalog/import`), which adds a book's songs from a CSV file; Reconcile (`/catalog/reconcile`), which links each Planning Center song to its catalog song; and a form to add a song. A song's page edits the credits (who wrote its words and music, kept in a labelled form in Planning Center's author field) and the tags of the Planning Center song it is linked to, and adds that song to an upcoming plan; a song with no Planning Center song can be created there, with its credits and an optional CCLI number.
+- **Settings** (`/settings`): the CCLI license number, the credit roles and the phrases the copyright text prints for them, the schedule text's header labels and number separator, the hymnal notes' category, and the plan email's recipients and subject; what the app has written to Planning Center and the emails it has sent; the hourly Planning Center song sync, with Sync now; the database and its backups; and Export catalog (JSON), the catalog as a file to keep in git.
 
 Sign-in is with Google and limited to a short list of allowed email addresses.
+
+## Books and imports
+
+### Add a book
+
+Catalog › Books › Add a book. Give the book a **code** (a letter, then up to 7 letters, digits, `-` or `_`, such as `CB`; it is the book's address and never changes), a **name** and, if you like, a **short name**, and say whether the book numbers its songs (that never changes either). The **label** is how an entry is named in the schedule text: for a numbered book it has `{n}` where the number goes (`CB-{n}`; left blank, the code and `-{n}`), and a book without numbers, such as a chorus book, labels every entry alike (left blank, with its short name). The form shows a preview of the label. The order on the Books page is the order a song's labels are listed in: use Move up and Move down. A book that is not in use stays browsable, but is left out of the schedule text, the hymnal notes and the songs list's book filter.
+
+### Import a book from CSV
+
+Catalog › Import › Import a book from CSV. Choose the book (add it first if it is not listed) and a CSV file of at most 1 MB, saved as CSV UTF-8, with a header row:
+
+```csv
+number,title,tune,variant
+12,Amazing Grace,NEW BRITAIN,
+13,"Holy, Holy, Holy",NICAEA,
+```
+
+A book without numbers has `position` in place of `number`. `tune` and `variant` are optional. A hymn or a tune the catalog has is used as it is, and a new one is added. The preview adds nothing: it lists what the file would add, the problems that block it (a number on two rows, a number the book already has, a row with no title, and so on) and the warnings, row by row. Fix the file and preview it again; Apply is refused while a problem blocks the file, and it adds the rows in one go, with no undo.
 
 ## Getting started
 
@@ -45,4 +63,4 @@ The app is at http://localhost:3000.
 
 ## Documentation
 
-[docs/architecture.md](docs/architecture.md) explains how the app is organized (routes, data layer, database, state), the conventions to follow, and step-by-step recipes for adding a page, a catalog page, a server-action form, a plan tab, a Planning Center resource, a Planning Center write or a setting.
+[docs/architecture.md](docs/architecture.md) explains how the app is organized (routes, data layer, database, state), the conventions to follow, and step-by-step recipes for adding a page, a catalog page, a server-action form, a plan tab, a Planning Center resource, a Planning Center write, a setting, a book or a book's CSV import.
