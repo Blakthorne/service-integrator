@@ -21,6 +21,7 @@ import type {
 import type { HymnNoteStatus } from "@/lib/hymnNotes";
 // Type-only, so nothing server-only reaches the client bundle.
 import type { PlanDetail } from "@/lib/queries/plans";
+import type { RepeatWarning } from "@/lib/repeatWarnings";
 import {
     mergeScheduleSelections,
     type ChooseOption,
@@ -78,6 +79,13 @@ export interface PlanContextValue {
      * why there is none. A sync revalidates the plan, which refreshes it.
      */
     hymnNoteStatus: HymnNoteStatus;
+    /**
+     * The song items that repeat a song sung lately, by item ID, as the page
+     * was rendered (see `PlanDetail.repeatWarnings`). They are worked out as
+     * of the day the page was rendered, so they mean something only on a plan
+     * dated that day or later: show them through `warningsToShow`.
+     */
+    repeatWarnings: Record<string, RepeatWarning>;
     /**
      * `items` with the Schedule tab's selections merged in: a song with
      * numbers starts on Numbers, every other item on Leave blank, unless a
@@ -173,6 +181,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
         scheduleSettings,
         settingsError,
         hymnNoteStatus,
+        repeatWarnings,
     } = detail;
     const [store] = useState(() => storeFor(detail));
     const { selections, saves } = useSyncExternalStore(
@@ -217,6 +226,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             scheduleSettings,
             settingsError,
             hymnNoteStatus,
+            repeatWarnings,
             scheduleItems,
             saves,
             chooseOption,
@@ -234,6 +244,7 @@ export default function PlanProvider({ detail, children }: PlanProviderProps) {
             scheduleSettings,
             settingsError,
             hymnNoteStatus,
+            repeatWarnings,
             scheduleItems,
             saves,
             chooseOption,

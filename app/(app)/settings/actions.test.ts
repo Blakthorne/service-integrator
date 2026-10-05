@@ -39,6 +39,7 @@ import {
     saveCreditsAction,
     saveEmailAction,
     saveHymnalNotesAction,
+    saveRepeatWarningsAction,
     saveScheduleTextAction,
     syncPcoSongsAction,
     syncPlanHistoryAction,
@@ -282,6 +283,9 @@ const SETTINGS_PAGES = [["/settings"], ["/plans", "layout"], ["/"]];
 /** What saving the credits revalidates: Settings, the plan pages and the catalog's, not the dashboard. */
 const CREDIT_PAGES = [["/settings"], ["/plans", "layout"], ["/catalog", "layout"]];
 
+/** What saving the repeat warning window revalidates: Settings and the plan pages, whose Schedule tabs warn. */
+const REPEAT_WARNING_PAGES = [["/settings"], ["/plans", "layout"]];
+
 /** What saving the email settings revalidates: Settings alone. */
 const EMAIL_PAGES = [["/settings"]];
 
@@ -330,6 +334,7 @@ const FORM_ACTIONS = [
         { emailRecipients: "pastor@example.org", emailSubjectTemplate: "Songs for {date}" },
         EMAIL_PAGES,
     ],
+    ["saveRepeatWarningsAction", saveRepeatWarningsAction, { repeatWarningWeeks: "6" }, REPEAT_WARNING_PAGES],
 ] as const;
 
 describe.each(FORM_ACTIONS)("%s", (_name, action, fields, pages) => {
@@ -434,6 +439,46 @@ describe("saveCopyrightAction", () => {
         expect(saveSettings).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
+});
+
+describe("saveRepeatWarningsAction", () => {
+    test("saves the weeks as a number, and gives the form what is saved", async () => {
+        const state = await saveRepeatWarningsAction(formWith({ repeatWarningWeeks: " 8 " }));
+
+        expect(saveSettings).toHaveBeenCalledWith({ repeatWarningWeeks: 8 });
+        expect(state).toEqual({
+            status: "success",
+            message: "Saved.",
+            values: { repeatWarningWeeks: "8" },
+        });
+    });
+
+    test("saves 0, which turns the warnings off", async () => {
+        const state = await saveRepeatWarningsAction(formWith({ repeatWarningWeeks: "0" }));
+
+        expect(saveSettings).toHaveBeenCalledWith({ repeatWarningWeeks: 0 });
+        expect(state).toMatchObject({ status: "success", values: { repeatWarningWeeks: "0" } });
+    });
+
+    test.each(["", "  ", "abc", "-1", "1.5", "53", "6 weeks"])(
+        "refuses %j, on its field, and saves nothing",
+        async (posted) => {
+            const state = await saveRepeatWarningsAction(formWith({ repeatWarningWeeks: posted }));
+
+            expect(state).toEqual({
+                status: "error",
+                message: FIX_FIELDS,
+                fieldErrors: {
+                    repeatWarningWeeks: {
+                        message: "Enter a whole number of weeks from 0 to 52; 0 turns the warnings off.",
+                    },
+                },
+                values: { repeatWarningWeeks: posted },
+            });
+            expect(saveSettings).not.toHaveBeenCalled();
+            expect(revalidatePath).not.toHaveBeenCalled();
+        }
+    );
 });
 
 describe("saveScheduleTextAction", () => {

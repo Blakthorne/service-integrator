@@ -9,6 +9,7 @@ import type {
 } from "@/lib/domain";
 import { cardNoteBadge } from "@/lib/hymnNoteText";
 import { hymnNoteDiffFor, type HymnNoteStatus } from "@/lib/hymnNotes";
+import type { RepeatWarning } from "@/lib/repeatWarnings";
 import {
     catalogUnavailableMessage,
     scheduleSongView,
@@ -44,6 +45,12 @@ export interface ServiceScheduleProps {
     hymnNoteStatus: HymnNoteStatus;
     /** How the saves of the changed songs stand, by item ID (see `SelectionSaveState`). */
     saves: Readonly<Record<string, SelectionSaveState>>;
+    /**
+     * The song items that repeat a song sung lately, by item ID, for a plan
+     * dated today or later (see `warningsToShow`); a card with no entry has
+     * no warning.
+     */
+    repeatWarnings: Readonly<Record<string, RepeatWarning>>;
     serviceTypeName: string;
     /** The plan's calendar date as `YYYY-MM-DD`, or null when it is unknown. */
     planDate: string | null;
@@ -66,7 +73,8 @@ export interface ServiceScheduleProps {
 /**
  * The Service Schedule tab: a card per song item, in sequence order, with
  * its numbers from its catalog link or a way to link it, its hymnal note's
- * status, and the choices for its line (see `ScheduleSongCard`); a "Copy All" button for the schedule
+ * status, a warning when its song was sung lately, and the choices for its
+ * line (see `ScheduleSongCard`); a "Copy All" button for the schedule
  * text, with the header and separator from the settings; and quiet banners
  * when the catalog, the saved choices or the settings cannot be read. It
  * holds no selections itself; they come in with `items`, with how
@@ -81,6 +89,7 @@ export default function ServiceSchedule({
     settingsError,
     hymnNoteStatus,
     saves,
+    repeatWarnings,
     serviceTypeName,
     planDate,
     headerLabel,
@@ -133,6 +142,9 @@ export default function ServiceSchedule({
                             view={scheduleSongView(item, catalogState)}
                             noteBadge={cardNoteBadge(hymnNoteDiffFor(hymnNoteStatus, item.id))}
                             saveState={saves[item.id] ?? null}
+                            repeatWarning={
+                                Object.hasOwn(repeatWarnings, item.id) ? repeatWarnings[item.id] : null
+                            }
                             numberSeparator={numberSeparator}
                             scheduleHref={scheduleHref}
                             onChooseOption={onChooseOption}

@@ -69,3 +69,43 @@ export function describeRepeatWarning({
 }: Pick<RepeatWarning, "planDate" | "daysAgo">): string {
     return `Sung ${formatMonthDay(planDate)} (${describeDaysAgo(daysAgo)})`;
 }
+
+/**
+ * The day a warning was worked out for ("today" when `getPlanDetail` ran):
+ * its plan's date and the days from it to that day. Null when the plan's
+ * date is not a real calendar date, which `repeatWarningFor` never makes.
+ */
+function warningDay({ planDate, daysAgo }: Pick<RepeatWarning, "planDate" | "daysAgo">): string | null {
+    try {
+        return addDaysToYmd(planDate, daysAgo);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The warnings a plan's page may show, given the plan's own date
+ * (`YYYY-MM-DD`; null when it is not known). `getPlanDetail` works every
+ * warning out as of the day it ran, so "Sung Sep 20 (2 weeks ago)" means
+ * something on a plan being prepared, dated today or later, and nothing on
+ * a plan that is over: viewed a month later, its warnings would still say
+ * how long ago a song was sung from *today*, not from that plan, and
+ * the window would not be the one it was planned in. So a plan dated before
+ * the day its warnings were made for shows none, and neither does a plan
+ * whose date is not known. The day is read off each warning, which keeps
+ * the server's calendar date (the church's) and never the browser's.
+ */
+export function warningsToShow(
+    warnings: Readonly<Record<string, RepeatWarning>>,
+    planDate: string | null
+): Record<string, RepeatWarning> {
+    if (planDate === null) {
+        return {};
+    }
+    return Object.fromEntries(
+        Object.entries(warnings).filter(([, warning]) => {
+            const day = warningDay(warning);
+            return day !== null && planDate >= day;
+        })
+    );
+}

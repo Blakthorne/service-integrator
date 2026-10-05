@@ -31,6 +31,7 @@ import {
     readCreditsForm,
     readEmailForm,
     readHymnalNotesForm,
+    readRepeatWarningsForm,
     readScheduleTextForm,
     type SettingsFormRead,
 } from "@/lib/settingsForms";
@@ -231,6 +232,16 @@ function revalidateEmailPages(): void {
     revalidatePath(routes.settings());
 }
 
+/**
+ * The pages that show the repeat warning window: Settings itself and the
+ * plan pages, whose Schedule tabs carry the warnings (they are worked out
+ * when a plan page is rendered). Not the dashboard, which shows none.
+ */
+function revalidateRepeatWarningPages(): void {
+    revalidatePath(routes.settings());
+    revalidatePath(routes.plans(), "layout");
+}
+
 /** What follows a save that went through: more to say beside "Saved.", or a problem the save itself did not have. */
 type AfterSave = { ok: true; message: string } | { ok: false; message: string };
 
@@ -324,6 +335,16 @@ export async function saveScheduleTextAction(formData: FormData): Promise<Settin
         return formError(FORM_FAILURE_MESSAGE);
     }
     return saveRead(readScheduleTextForm(formData, settings.scheduleHeaderLabels, parsePcoId));
+}
+
+/**
+ * The Repeat warnings card's action: save how many weeks back a song counts
+ * as sung lately, from 0 (no warnings) to 52. It reads nothing from Planning
+ * Center: the warnings come from the plan history in the local database.
+ */
+export async function saveRepeatWarningsAction(formData: FormData): Promise<SettingsFormState> {
+    await requireSession();
+    return saveRead(readRepeatWarningsForm(formData), { revalidate: revalidateRepeatWarningPages });
 }
 
 /** The Hymnal notes card's action: save the item note category's name and whether a note names the tune. */

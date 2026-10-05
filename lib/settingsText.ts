@@ -4,6 +4,7 @@ import type { ServiceType } from "./domain";
 import { formatHymnNote } from "./hymnNotes";
 import { formatPlanEmailSubject } from "./planEmail";
 import { recipientCount } from "./planEmailText";
+import { describeRepeatWarning } from "./repeatWarnings";
 import { formatScheduleNumbers, type ScheduleEntry } from "./serviceSchedule";
 import {
     DEFAULT_SETTINGS,
@@ -156,6 +157,28 @@ export function previewCopyrightFooter(ccliLicenseNumber: string): string | null
         { ccliLicenseNumber: parsed.value }
     );
     return text.split("\n").at(-1) ?? null;
+}
+
+/** The warning a preview shows, as a card would say it for a song sung 14 days before. */
+const SAMPLE_REPEAT_WARNING = describeRepeatWarning({ planDate: "2026-09-20", daysAgo: 14 });
+
+/**
+ * What the Repeat warnings card's window does, in a sentence, as the form's
+ * preview: how far back a song counts as sung lately, and the words a song's
+ * card then says. Null when `weeks` is not one the setting accepts. 0 turns
+ * the warnings off. The words come from the same function the card uses
+ * (`describeRepeatWarning`), so the preview cannot drift from it.
+ */
+export function previewRepeatWarnings(weeks: string): string | null {
+    const parsed = parseSetting("repeatWarningWeeks", weeks);
+    if (!parsed.ok) {
+        return null;
+    }
+    if (parsed.value === 0) {
+        return "The warnings are off: no song's card is flagged.";
+    }
+    const window = parsed.value === 1 ? "week" : `${parsed.value} weeks`;
+    return `A song sung in the last ${window} is flagged on its card, for example "${SAMPLE_REPEAT_WARNING}".`;
 }
 
 /** A service type in the Schedule text card: the header label it has of its own, and the one it gets without. */

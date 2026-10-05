@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { HYMN_NOTE_TUNE_SEPARATOR } from "./hymnNotes";
+import { describeRepeatWarning } from "./repeatWarnings";
 import {
     DEFAULT_SETTINGS,
     SETTING_KEYS,
@@ -20,6 +21,7 @@ import {
     previewCopyrightFooter,
     previewHymnNote,
     previewNumbers,
+    previewRepeatWarnings,
     CREDITS_NOT_REREAD_MESSAGE,
     EMAIL_RECIPIENTS_HINT,
     EMAIL_SUBJECT_HINT,
@@ -66,6 +68,40 @@ describe("the repeat warning setting", () => {
             message: "Too many.",
             usingDefault: "The default is in use: 6 weeks.",
         });
+    });
+});
+
+describe("previewRepeatWarnings", () => {
+    test("says how far back a song counts as sung lately, and the words its card then says", () => {
+        expect(previewRepeatWarnings("6")).toBe(
+            'A song sung in the last 6 weeks is flagged on its card, for example "Sung Sep 20 (2 weeks ago)".'
+        );
+        expect(previewRepeatWarnings("52")).toContain("in the last 52 weeks");
+    });
+
+    test("says a week in the singular", () => {
+        expect(previewRepeatWarnings("1")).toContain("in the last week is");
+    });
+
+    test("says the warnings are off for 0", () => {
+        expect(previewRepeatWarnings("0")).toBe("The warnings are off: no song's card is flagged.");
+        expect(previewRepeatWarnings(" 0 ")).toBe("The warnings are off: no song's card is flagged.");
+    });
+
+    test("takes the digits as the form posts them, with spaces around", () => {
+        expect(previewRepeatWarnings("  8 ")).toContain("in the last 8 weeks");
+    });
+
+    test.each(["", "  ", "abc", "-1", "1.5", "53", "6 weeks", "1e2"])(
+        "has nothing to say of %j, which the setting refuses",
+        (value) => {
+            expect(previewRepeatWarnings(value)).toBeNull();
+        }
+    );
+
+    test("uses the words a card uses", () => {
+        // The same function, so the preview cannot drift from the card.
+        expect(previewRepeatWarnings("6")).toContain(describeRepeatWarning({ planDate: "2026-09-20", daysAgo: 14 }));
     });
 });
 
