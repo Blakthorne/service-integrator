@@ -1,12 +1,13 @@
 import type { CatalogSongSummary, LabelledEntry } from "@/lib/domain";
 import { parseEnum, parsePage } from "@/lib/urlState";
+import { SONG_MARKS } from "./marks";
 
 /**
  * Searching, filtering, sorting and paging the songs list (`/catalog`). The
  * page loads every song once; the view narrows them in the browser, with the
  * search (`?q=`), book (`?book=`), Planning Center link (`?linked=`), usage
- * (`?used=`), Planning Center tag (`?tag=`), sort (`?sort=`) and page
- * (`?page=`) in the URL. Pure and safe on both sides.
+ * (`?used=`), mark (`?mark=`), Planning Center tag (`?tag=`), sort (`?sort=`)
+ * and page (`?page=`) in the URL. Pure and safe on both sides.
  */
 
 /** How the songs list can be sorted: by title, or by number (within the chosen book). */
@@ -27,6 +28,14 @@ export const CATALOG_USED = ["all", "never"] as const;
 
 export type CatalogUsed = (typeof CATALOG_USED)[number];
 
+/**
+ * What the mark filter keeps: every song, or only the songs with a mark
+ * ("to-learn": the "to learn" shelf). See lib/catalog/marks.ts.
+ */
+export const CATALOG_MARKS = ["all", ...SONG_MARKS] as const;
+
+export type CatalogMark = (typeof CATALOG_MARKS)[number];
+
 /** Songs per page of the songs list. */
 export const CATALOG_PAGE_SIZE = 50;
 
@@ -39,6 +48,8 @@ export interface CatalogSongsQuery {
     linked: CatalogLinked;
     /** "never" keeps the songs for which `isUsed` is false: not linked, or linked to a song never scheduled. */
     used: CatalogUsed;
+    /** A mark ("to-learn") keeps the songs that have it; "all" keeps every song. */
+    mark: CatalogMark;
     sort: CatalogSort;
     /** The page asked for, at least 1; `pageCatalogSongs` clamps it to the last page. */
     page: number;
@@ -51,10 +62,11 @@ interface QueryParams {
 
 /**
  * Read the songs list's view from the query string. A missing or unknown
- * value falls back: no search, every book, linked or not, used or not, by
- * title, page 1. `?book=` is matched without regard to case against
- * `bookCodes` (the catalog's codes) and comes back as the catalog spells it;
- * `?linked=` and `?used=` must be spelled exactly ("yes", "no", "never").
+ * value falls back: no search, every book, linked or not, used or not,
+ * marked or not, by title, page 1. `?book=` is matched without regard to
+ * case against `bookCodes` (the codes the book filter offers: the active
+ * books') and comes back as the catalog spells it; `?linked=`, `?used=` and
+ * `?mark=` must be spelled exactly ("yes", "no", "never", "to-learn").
  */
 export function parseCatalogSongsQuery(
     params: QueryParams,
@@ -66,6 +78,7 @@ export function parseCatalogSongsQuery(
         book: bookCodes.find((code) => code.toLowerCase() === book) ?? null,
         linked: parseEnum(params.get("linked"), CATALOG_LINKED, "all"),
         used: parseEnum(params.get("used"), CATALOG_USED, "all"),
+        mark: parseEnum(params.get("mark"), CATALOG_MARKS, "all"),
         sort: parseEnum(params.get("sort"), CATALOG_SORTS, "title"),
         page: parsePage(params.get("page")),
     };
@@ -253,6 +266,8 @@ function matchesTag(row: CatalogSongSummary, { tagId, tagIdsBySong }: CatalogTag
 
 /** What `filterCatalogSongs` narrows by: the query's filters, and the tag filter, if any. */
 export type CatalogSongsFilters = Pick<CatalogSongsQuery, "q" | "book" | "linked" | "used"> & {
+    /** The mark filter; every song when it is "all" or left out. */
+    mark?: CatalogMark;
     /** The tag filter; none (every song) when it is null or left out. */
     tag?: CatalogTagFilter | null;
 };
@@ -261,13 +276,13 @@ export type CatalogSongsFilters = Pick<CatalogSongsQuery, "q" | "book" | "linked
  * The rows that match `q` (see `matchesSearch`; a search with no letters or
  * digits matches every row) and, when `book` is a code, have an entry in
  * that book; with `linked` "yes" or "no", are or are not linked to a Planning
- * Center song; with `used` "never", are not used (see `isUsed`); and with a
- * `tag` filter, are linked to a Planning Center song that has the tag. Keeps
- * the rows' order.
+ * Center song; with `used` "never", are not used (see `isUsed`); with a
+ * `mark`, have that mark; and with a `tag` filter, are linked to a Planning
+ * Center song that has the tag. Keeps the rows' order.
  */
 export function filterCatalogSongs(
     rows: readonly CatalogSongSummary[],
-    { q, book, linked, used, tag = null }: CatalogSongsFilters
+    { q, book, linked, used, mark = "all", tag = null }: CatalogSongsFilters
 ): CatalogSongSummary[] {
     const search = prepareSearch(q);
     return rows.filter(
@@ -275,9 +290,18 @@ export function filterCatalogSongs(
             (book === null || row.entries.some(({ bookCode }) => bookCode === book)) &&
             matchesLinked(row, linked) &&
             (used === "all" || !isUsed(row)) &&
+            (mark === "all" || row.marks.includes(mark)) &&
             (tag === null || matchesTag(row, tag)) &&
             (search === null || matchesSearch(row, search))
     );
+}
+
+/** How many of `rows` have `mark`: the count beside the mark filter. */
+export function countMarked(
+    rows: readonly Pick<CatalogSongSummary, "marks">[],
+    mark: Exclude<CatalogMark, "all">
+): number {
+    return rows.filter((row) => row.marks.includes(mark)).length;
 }
 
 /** Compare by a key; equal keys give 0. */
@@ -399,13 +423,13 @@ export function pageCatalogSongs(
 }
 
 /**
- * Every row the view's filters leave (the tag filter too, when the query
- * has one), in the chosen sort order and not paged: what "Export CSV"
- * writes. `bookCodes` are the catalog's book codes in book order.
+ * Every row the view's filters leave (the mark and tag filters too, when the
+ * query has them), in the chosen sort order and not paged: what "Export
+ * CSV" writes. `bookCodes` are the catalog's book codes in book order.
  */
 export function arrangeCatalogSongs(
     rows: readonly CatalogSongSummary[],
-    query: Omit<CatalogSongsQuery, "page"> & Pick<CatalogSongsFilters, "tag">,
+    query: Omit<CatalogSongsQuery, "page" | "mark"> & Pick<CatalogSongsFilters, "mark" | "tag">,
     bookCodes: readonly string[]
 ): CatalogSongSummary[] {
     const matching = filterCatalogSongs(rows, query);
@@ -418,7 +442,7 @@ export function arrangeCatalogSongs(
  */
 export function selectCatalogSongs(
     rows: readonly CatalogSongSummary[],
-    query: CatalogSongsQuery & Pick<CatalogSongsFilters, "tag">,
+    query: Omit<CatalogSongsQuery, "mark"> & Pick<CatalogSongsFilters, "mark" | "tag">,
     bookCodes: readonly string[],
     pageSize: number = CATALOG_PAGE_SIZE
 ): CatalogSongsPage {

@@ -3,10 +3,53 @@ import type { HymnOption, TuneOption } from "@/lib/catalog/pickers";
 import {
     EMPTY_NEW_SONG,
     draftFromPcoTitle,
+    type BookEditInput,
+    type EntryEditInput,
+    type HymnAliasInput,
+    type HymnEditInput,
+    type MoveDirection,
+    type NewBookInput,
+    type NewEntryInput,
     type NewSongDraft,
+    type TuneAliasInput,
+    type TuneEditInput,
 } from "@/lib/catalog/validation";
 import { getDb } from "@/lib/db";
+import {
+    addBook,
+    editBook,
+    moveBook,
+    type BookEditResult,
+    type BookMoveResult,
+} from "@/lib/db/books";
 import { listBooks, listCatalogSongs, listTunes } from "@/lib/db/catalog";
+import {
+    addEntry,
+    addHymnAlias,
+    addTuneAlias,
+    deleteEntry,
+    editEntry,
+    editHymn,
+    editTune,
+    moveEntry,
+    removeHymnAlias,
+    removeTuneAlias,
+    type EntryDeleteResult,
+    type EntryEditResult,
+    type EntryMoveResult,
+    type HymnAliasResult,
+    type HymnEditResult,
+    type TuneAliasResult,
+    type TuneEditResult,
+} from "@/lib/db/catalogEdit";
+import {
+    applyHymnMerge,
+    applyTuneMerge,
+    previewHymnMerge,
+    previewTuneMerge,
+    type MergeApplyResult,
+    type MergePlanResult,
+} from "@/lib/db/catalogMerge";
 import {
     createCatalogSong,
     type CreateSongResult,
@@ -24,15 +67,49 @@ export type {
     ExistingRow,
     NewCatalogSong,
 } from "@/lib/db/catalogWrites";
+export type {
+    CatalogRowRef,
+    EditProblem,
+    EditResult,
+    EntryDeleteResult,
+    EntryEditResult,
+    EntryMoveResult,
+    EntryProblem,
+    EntryProblemReason,
+    HymnAliasResult,
+    HymnEditResult,
+    NameProblemReason,
+    RenameOutcome,
+    TuneAliasResult,
+    TuneEditResult,
+} from "@/lib/db/catalogEdit";
+export type { MergeApplyResult, MergePlanResult } from "@/lib/db/catalogMerge";
+export type {
+    BookEditResult,
+    BookMoveResult,
+    BookProblem,
+    BookProblemReason,
+} from "@/lib/db/books";
+export type {
+    MergePreview,
+    MergeRefusal,
+    MergeRefusalReason,
+    SongMergeStep,
+    SongMove,
+} from "@/lib/catalog/merge";
 
 /**
  * Editing the catalog from its forms: what the new-song form shows and the
- * song it creates, and the song page's Unlink. Reads are synchronous, like
- * the database, except where Planning Center may have to be asked (a song
- * the mirror lacks). A change the catalog's rules refuse comes back as a
- * value with a message fit to show; anything unexpected (a database that
- * cannot be opened, Planning Center failing) throws. Each function takes
- * IDs its caller has already parsed (convention 19).
+ * song it creates, the song page's Unlink, and the edits of a song's
+ * entries, its hymn and tune and their other names, merges of hymns and of
+ * tunes, and books. Reads and the local edits are synchronous, like the
+ * database; only what may ask Planning Center (a song the mirror lacks) is
+ * async. A change the catalog's rules refuse comes back as a value with a
+ * message fit to show, naming the part of the form it is about and the row
+ * it clashes with; anything unexpected (a database that cannot be opened,
+ * Planning Center failing) throws. Each function takes IDs its caller has
+ * already parsed (convention 19), and input its form's reader in
+ * lib/catalog/validation.ts has checked.
  */
 
 /** A book as the new-song form offers it. */
@@ -172,4 +249,147 @@ export function getMirroredPcoSong(pcoSongId: string): MirroredPcoSong | null {
  */
 export function unlinkCatalogSong(songId: number, pcoSongId: string): UnlinkResult {
     return unlinkSong(getDb(), songId, { pcoSongId, blockAutoLink: true });
+}
+
+// ---------------------------------------------------------------------------
+// Entries (the song page's Entries card, and a book's page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Add an entry of a song to a book: at a number or location in a numbered
+ * book, or in the order of one without (at its end, or at a position). See
+ * `addEntry` for what it refuses.
+ */
+export function addCatalogEntry(input: NewEntryInput): EntryEditResult {
+    return addEntry(getDb(), input);
+}
+
+/** Change an entry's number, location or place in the order, and its variant note (`editEntry`). */
+export function editCatalogEntry(input: EntryEditInput): EntryEditResult {
+    return editEntry(getDb(), input);
+}
+
+/** Delete an entry; in a book without numbers, the entries after it move up (`deleteEntry`). */
+export function deleteCatalogEntry(entryId: number): EntryDeleteResult {
+    return deleteEntry(getDb(), entryId);
+}
+
+/** Move an entry of a book without numbers one place up or down (`moveEntry`). */
+export function moveCatalogEntry(entryId: number, direction: MoveDirection): EntryMoveResult {
+    return moveEntry(getDb(), entryId, direction);
+}
+
+// ---------------------------------------------------------------------------
+// Hymns and tunes (the song page's Hymn card, and a tune's page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Change a hymn's title, first line and notes (`editHymn`). A renamed hymn
+ * keeps its old title as another title when a Planning Center song still
+ * matches it, and says so (`aliasKept`).
+ */
+export function editCatalogHymn(input: HymnEditInput): HymnEditResult {
+    return editHymn(getDb(), input);
+}
+
+/** Give a hymn another title (`addHymnAlias`). */
+export function addCatalogHymnAlias(input: HymnAliasInput): HymnAliasResult {
+    return addHymnAlias(getDb(), input);
+}
+
+/** Take another title off a hymn (`removeHymnAlias`). */
+export function removeCatalogHymnAlias(input: HymnAliasInput): HymnAliasResult {
+    return removeHymnAlias(getDb(), input);
+}
+
+/**
+ * Change a tune's name, meter and notes (`editTune`). A renamed tune keeps
+ * its old name as another name when a Planning Center song's title still
+ * names it, and says so (`aliasKept`).
+ */
+export function editCatalogTune(input: TuneEditInput): TuneEditResult {
+    return editTune(getDb(), input);
+}
+
+/** Give a tune another name (`addTuneAlias`). */
+export function addCatalogTuneAlias(input: TuneAliasInput): TuneAliasResult {
+    return addTuneAlias(getDb(), input);
+}
+
+/** Take another name off a tune (`removeTuneAlias`). */
+export function removeCatalogTuneAlias(input: TuneAliasInput): TuneAliasResult {
+    return removeTuneAlias(getDb(), input);
+}
+
+/**
+ * Every hymn, by title, with its other titles and the names of its tunes:
+ * the options of a hymn picker, such as "Merge this hymn into…".
+ */
+export function getHymnOptions(): HymnOption[] {
+    return hymnOptions(listCatalogSongs(getDb()));
+}
+
+/** Every tune, by name, with its other names and meter: the options of a tune picker. */
+export function getTuneOptions(): TuneOption[] {
+    return listTunes(getDb()).map(({ id, name, aliases, meter }) => ({ id, name, aliases, meter }));
+}
+
+// ---------------------------------------------------------------------------
+// Merges (the song page's Hymn card, and a tune's page)
+// ---------------------------------------------------------------------------
+
+/**
+ * What merging hymn `sourceId` into hymn `targetId` would do: the songs that
+ * move and merge, the other titles and fields the target takes, and why the
+ * merge would be refused, if it would (see lib/catalog/merge.ts). Nothing
+ * is written.
+ */
+export function previewCatalogHymnMerge(sourceId: number, targetId: number): MergePlanResult {
+    return previewHymnMerge(getDb(), sourceId, targetId);
+}
+
+/**
+ * Merge hymn `sourceId` into hymn `targetId`, planned afresh and written in
+ * one transaction; the result names everything that changed. A refused
+ * merge writes nothing and comes back with the plan that says why.
+ */
+export function mergeCatalogHymns(sourceId: number, targetId: number): MergeApplyResult {
+    return applyHymnMerge(getDb(), sourceId, targetId);
+}
+
+/** What merging tune `sourceId` into tune `targetId` would do; nothing is written. */
+export function previewCatalogTuneMerge(sourceId: number, targetId: number): MergePlanResult {
+    return previewTuneMerge(getDb(), sourceId, targetId);
+}
+
+/** Merge tune `sourceId` into tune `targetId`, as `mergeCatalogHymns` merges hymns. */
+export function mergeCatalogTunes(sourceId: number, targetId: number): MergeApplyResult {
+    return applyTuneMerge(getDb(), sourceId, targetId);
+}
+
+// ---------------------------------------------------------------------------
+// Books (the books page)
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a book, numbered or not, last in the order and in use (`addBook`).
+ * Refused for a code another book has in any case, or a label format that
+ * does not suit the book.
+ */
+export function addCatalogBook(input: NewBookInput): BookEditResult {
+    return addBook(getDb(), input);
+}
+
+/**
+ * Change a book's name, short name, label format and whether it is in use
+ * (`editBook`). A book not in use stays browsable, but its entries are left
+ * out of the schedule text, the hymnal notes and the book filter.
+ */
+export function editCatalogBook(input: BookEditInput): BookEditResult {
+    return editBook(getDb(), input);
+}
+
+/** Move a book one place up or down the order books are listed in (`moveBook`). */
+export function moveCatalogBook(bookId: number, direction: MoveDirection): BookMoveResult {
+    return moveBook(getDb(), bookId, direction);
 }

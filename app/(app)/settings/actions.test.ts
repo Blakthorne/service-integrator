@@ -9,6 +9,7 @@ const {
     saveSettings,
     rederiveAllCredits,
     getCreditLabelSets,
+    exportCatalogJson,
 } = vi.hoisted(() => ({
     auth: vi.fn(),
     revalidatePath: vi.fn(),
@@ -17,17 +18,20 @@ const {
     saveSettings: vi.fn(),
     rederiveAllCredits: vi.fn(),
     getCreditLabelSets: vi.fn(),
+    exportCatalogJson: vi.fn(),
 }));
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ syncPcoSongsNow }));
 vi.mock("@/lib/queries/settings", () => ({ getSettings, saveSettings }));
 vi.mock("@/lib/queries/credits", () => ({ rederiveAllCredits, getCreditLabelSets }));
+vi.mock("@/lib/queries/export", () => ({ exportCatalogJson }));
 
 import { ROLES_IMPACT_UNCHECKED_MESSAGE } from "@/lib/creditRoleImpact";
 import { FORM_FAILURE_MESSAGE } from "@/lib/forms";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 import {
+    exportCatalogAction,
     saveCopyrightAction,
     saveCreditsAction,
     saveEmailAction,
@@ -68,6 +72,7 @@ beforeEach(() => {
         saveSettings,
         rederiveAllCredits,
         getCreditLabelSets,
+        exportCatalogJson,
     ]) {
         mock.mockReset();
     }
@@ -82,6 +87,39 @@ beforeEach(() => {
 
 afterEach(() => {
     vi.restoreAllMocks();
+});
+
+describe("exportCatalogAction", () => {
+    test("throws without a session, before it reads the catalog", async () => {
+        auth.mockResolvedValue(null);
+
+        await expect(exportCatalogAction()).rejects.toThrow("Not signed in");
+        expect(exportCatalogJson).not.toHaveBeenCalled();
+    });
+
+    test("hands the catalog's JSON to the button, and revalidates nothing, since it only reads", async () => {
+        exportCatalogJson.mockReturnValue('{\n  "format": "service-integrator-catalog"\n}\n');
+
+        await expect(exportCatalogAction()).resolves.toEqual({
+            ok: true,
+            json: '{\n  "format": "service-integrator-catalog"\n}\n',
+        });
+        expect(exportCatalogJson).toHaveBeenCalledTimes(1);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("returns a message, and logs the cause, when the catalog cannot be read", async () => {
+        const cause = new Error("Could not open the database");
+        exportCatalogJson.mockImplementation(() => {
+            throw cause;
+        });
+
+        await expect(exportCatalogAction()).resolves.toEqual({
+            ok: false,
+            message: expect.stringContaining("nothing was downloaded"),
+        });
+        expect(console.error).toHaveBeenCalledWith("Failed to export the catalog:", cause);
+    });
 });
 
 describe("syncPcoSongsAction", () => {

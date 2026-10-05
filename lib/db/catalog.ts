@@ -1,6 +1,7 @@
 import "server-only";
 import type { DatabaseSync, SQLInputValue, SQLOutputValue } from "node:sqlite";
 import { formatEntryLabel } from "@/lib/catalog/labels";
+import { sortSongMarks } from "@/lib/catalog/marks";
 import type {
     Book,
     BookDetail,
@@ -13,9 +14,11 @@ import type {
     Entry,
     LabelledEntry,
     SongLinkSource,
+    SongMarkKind,
     TuneDetail,
     TuneSummary,
 } from "@/lib/domain";
+import { SONG_MARKS_JSON, songMarksFromJson } from "./marks";
 
 /**
  * Reads of the song catalog for its pages. Each function runs a handful of
@@ -133,6 +136,12 @@ interface SongFilter {
     params: SQLInputValue[];
 }
 
+/** The marks of a JSON array of mark names, in the order of `SONG_MARKS`, without those this build does not know. */
+function markKinds(json: SQLOutputValue): SongMarkKind[] {
+    const parsed: unknown = typeof json === "string" ? JSON.parse(json) : [];
+    return Array.isArray(parsed) ? sortSongMarks(parsed) : [];
+}
+
 /** Aliases grouped by the hymn or tune they belong to, from rows of `owner`, `alias`. */
 function aliasesByOwner(rows: Row[]): Map<number, string[]> {
     const aliases = new Map<number, string[]>();
@@ -145,9 +154,9 @@ function aliasesByOwner(rows: Row[]): Map<number, string[]> {
 /**
  * Songs as list rows, in `orderBy` order, each with its hymn's and tune's
  * aliases, its link and when its Planning Center song was last scheduled,
- * and its labelled entries in book order. Four queries, whatever the number
- * of songs: the songs (with their links), their entries, and the two kinds
- * of alias.
+ * its labelled entries in book order and its marks. Four queries, whatever
+ * the number of songs: the songs (with their links and marks), their
+ * entries, and the two kinds of alias.
  */
 function songSummaries(
     db: DatabaseSync,
@@ -163,7 +172,8 @@ function songSummaries(
     const songs = db
         .prepare(
             `SELECT s.id, s.hymn_id, h.title, s.tune_id, t.name AS tune_name, s.pco_song_id,
-                    s.linked_by, p.last_scheduled_at
+                    s.linked_by, p.last_scheduled_at,
+                    (SELECT json_group_array(m.mark) FROM song_marks m WHERE m.song_id = s.id) AS marks
              FROM songs s
              JOIN hymns h ON h.id = s.hymn_id
              LEFT JOIN tunes t ON t.id = s.tune_id
@@ -220,6 +230,7 @@ function songSummaries(
             linkedBy: linkSource(row.linked_by),
             lastScheduledAt: nullableText(row.last_scheduled_at),
             entries: entries.get(id) ?? [],
+            marks: markKinds(row.marks),
         };
     });
 }
@@ -243,9 +254,9 @@ export function songLabelOf(title: string, tuneName: string | null): string {
 }
 
 /**
- * One song with its hymn, tune, aliases, entries, the hymn's other songs (by
- * tune name, an unknown tune last) and the tune's other hymns (by title), or
- * null when there is no such song. Five queries.
+ * One song with its hymn, tune, aliases, entries, marks, the hymn's other
+ * songs (by tune name, an unknown tune last) and the tune's other hymns (by
+ * title), or null when there is no such song. Five queries.
  */
 export function findCatalogSong(
     db: DatabaseSync,
@@ -255,7 +266,8 @@ export function findCatalogSong(
         .prepare(
             `SELECT s.id, s.hymn_id, s.tune_id, s.pco_song_id, s.linked_at, s.linked_by, s.notes,
                     h.title, h.first_line, h.notes AS hymn_notes,
-                    t.name AS tune_name, t.meter, t.notes AS tune_notes
+                    t.name AS tune_name, t.meter, t.notes AS tune_notes,
+                    ${SONG_MARKS_JSON} AS marks
              FROM songs s
              JOIN hymns h ON h.id = s.hymn_id
              LEFT JOIN tunes t ON t.id = s.tune_id
@@ -310,6 +322,7 @@ export function findCatalogSong(
         entries: self?.entries ?? [],
         otherTunes,
         otherHymns,
+        marks: songMarksFromJson(row.marks),
     };
 }
 
@@ -333,9 +346,12 @@ export function findCatalogSongLabel(
 /**
  * The catalog songs linked to these Planning Center songs, by Planning
  * Center song id, each with its hymn's title, its tune's name and its
- * labelled entries in book order: what a plan page shows beside its items.
- * Ids no song is linked to are left out. Two queries, however many ids, and
- * none for no ids.
+ * labelled entries in book order: what a plan page shows beside its items,
+ * and what the schedule text, the hymnal notes and the dashboard print.
+ * So the entries are those of the books in use only: a book that is not
+ * active stays browsable, but its numbers are printed nowhere. Ids no song
+ * is linked to are left out. Two queries, however many ids, and none for no
+ * ids.
  */
 export function findCatalogMatches(
     db: DatabaseSync,
@@ -354,7 +370,7 @@ export function findCatalogMatches(
                  FROM entries e
                  JOIN books b ON b.id = e.book_id
                  JOIN songs s ON s.id = e.song_id
-                 WHERE ${linked}
+                 WHERE ${linked} AND b.active = 1
                  ORDER BY ${BOOK_ORDER}, ${PLACEMENT_ORDER}, ${VARIANT_ORDER}`
             )
             .all(ids)
@@ -452,13 +468,21 @@ export function findTuneLabel(db: DatabaseSync, tuneId: number): string | null {
 // Books
 // ---------------------------------------------------------------------------
 
-/** Every book with its number of entries, in book order. One query. */
-export function listBooks(db: DatabaseSync): BookSummary[] {
+/**
+ * Every book with its number of entries, in book order, or with
+ * `activeOnly` the books in use only: those the songs list's book filter
+ * offers. One query.
+ */
+export function listBooks(
+    db: DatabaseSync,
+    { activeOnly = false }: { activeOnly?: boolean } = {}
+): BookSummary[] {
     return db
         .prepare(
             `SELECT ${BOOK_COLUMNS}, count(e.id) AS entry_count
              FROM books b
              LEFT JOIN entries e ON e.book_id = b.id
+             ${activeOnly ? "WHERE b.active = 1" : ""}
              GROUP BY b.id
              ORDER BY ${BOOK_ORDER}`
         )

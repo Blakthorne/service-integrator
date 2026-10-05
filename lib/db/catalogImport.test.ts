@@ -1,7 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import { afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { planHymnsJsonImport, type HymnsJsonImport } from "@/lib/import/hymnsJson";
-import { hymnsJsonRecords } from "@/lib/import/hymnsJsonFile";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
     countCatalog,
     findBook,
@@ -9,9 +7,20 @@ import {
     listCatalogSongs,
     listTunes,
 } from "./catalog";
-import { applyImportRun, findApplyRefusal } from "./catalogImport";
+import { applyImportRun, findApplyRefusal, previewBookCsvRun, readBookCsvCatalog } from "./catalogImport";
 import { createImportRun, findImportRun, ImportRunError } from "./importRuns";
-import { openTestDb, seedBook, seedImportRun } from "./testing";
+import {
+    SEED_FIXTURE_COUNTS,
+    emptySeedRows,
+    openTestDb,
+    seedBook,
+    seedEntry,
+    seedHymn,
+    seedImportRun,
+    seedPlan,
+    seedSong,
+    seedTune,
+} from "./testing";
 
 let db: DatabaseSync;
 
@@ -23,7 +32,8 @@ afterEach(() => {
     db.close();
 });
 
-function preview(plan: HymnsJsonImport): number {
+/** Store a seed run, as a preview did while the seed could be previewed: its stored report and rows. */
+function preview(plan: ReturnType<typeof seedPlan> = seedPlan()): number {
     return createImportRun(db, { kind: "hymns-json", sourceName: "hymns.json", ...plan });
 }
 
@@ -46,26 +56,24 @@ function refusal(call: () => unknown): ImportRunError {
 
 const EMPTY = { books: 0, hymns: 0, tunes: 0, songs: 0, entries: 0 };
 
-describe("applyImportRun with the real seed", () => {
-    let seed: HymnsJsonImport;
+describe("applyImportRun with a seed's stored rows", () => {
+    // The seed can no longer be previewed, but a run it stored can be applied
+    // while the catalog is empty, so what applying writes is still pinned,
+    // against the small fixture (`smallSeedRows`).
     let runId: number;
 
-    beforeAll(() => {
-        seed = planHymnsJsonImport(hymnsJsonRecords);
-    });
-
     beforeEach(() => {
-        runId = preview(seed);
+        runId = preview();
     });
 
     test("adds exactly what the preview planned, and marks the run applied", () => {
-        expect(applyImportRun(db, runId)).toEqual(seed.report.planned);
+        expect(applyImportRun(db, runId)).toEqual(SEED_FIXTURE_COUNTS);
         expect(countCatalog(db)).toEqual({
             books: 2,
-            hymns: 895,
-            tunes: 768,
-            songs: 921,
-            entries: 1247,
+            hymns: 6,
+            tunes: 6,
+            songs: 8,
+            entries: 13,
         });
         expect(findImportRun(db, runId)?.status).toBe("applied");
     });
@@ -93,11 +101,11 @@ describe("applyImportRun with the real seed", () => {
             locationLabel: "front cover",
             label: "G-Front Cover",
         });
-        expect(great?.entries).toHaveLength(539);
-        expect(findBook(db, "r")?.entries).toHaveLength(708);
+        expect(great?.entries).toHaveLength(5);
+        expect(findBook(db, "r")?.entries).toHaveLength(8);
     });
 
-    test("keeps the merges' aliases and the variants' notes", () => {
+    test("keeps the aliases and the variants' notes", () => {
         applyImportRun(db, runId);
         const rejoice = listCatalogSongs(db).find(
             ({ title }) => title === "Rejoice, the Lord Is King"
@@ -148,21 +156,21 @@ describe("applyImportRun with the real seed", () => {
     test("refuses to run twice", () => {
         applyImportRun(db, runId);
         expect(refusal(() => applyImportRun(db, runId)).reason).toBe("not-preview");
-        const again = preview(seed);
+        const again = preview();
         expect(refusal(() => applyImportRun(db, again))).toMatchObject({
             reason: "catalog-not-empty",
             message: "The catalog already has books, so the seed import cannot run again.",
         });
         expect(status(again)).toBe("preview");
-        expect(countCatalog(db).songs).toBe(921);
+        expect(countCatalog(db).songs).toBe(8);
     });
 });
 
 describe("applyImportRun's refusals", () => {
     test("refuses a run that does not exist, or of a kind this build does not know", () => {
         expect(refusal(() => applyImportRun(db, 999)).reason).toBe("not-found");
-        const csv = seedImportRun(db, { kind: "csv" });
-        expect(refusal(() => applyImportRun(db, csv)).reason).toBe("not-found");
+        const unknown = seedImportRun(db, { kind: "spreadsheet" });
+        expect(refusal(() => applyImportRun(db, unknown)).reason).toBe("not-found");
         expect(countCatalog(db)).toEqual(EMPTY);
     });
 
@@ -196,10 +204,9 @@ describe("applyImportRun's refusals", () => {
     });
 
     test("refuses rows that do not hang together, writing nothing", () => {
-        const { rows } = planHymnsJsonImport([]);
         const id = seedImportRun(db, {
             rows: {
-                ...rows,
+                ...emptySeedRows(),
                 songs: [{ hymnKey: "missing hymn", tuneKey: null }],
             },
         });
@@ -209,14 +216,7 @@ describe("applyImportRun's refusals", () => {
     });
 
     test("refuses rows that plan a key twice, writing nothing", () => {
-        const plan = planHymnsJsonImport([
-            {
-                song_title: "Amazing Grace",
-                tune_name: "NEW BRITAIN",
-                rejoice_hymns: 130,
-                great_hymns_of_the_faith: 236,
-            },
-        ]);
+        const plan = seedPlan();
         for (const rows of [
             { ...plan.rows, hymns: [...plan.rows.hymns, ...plan.rows.hymns] },
             { ...plan.rows, tunes: [...plan.rows.tunes, ...plan.rows.tunes] },
@@ -230,14 +230,7 @@ describe("applyImportRun's refusals", () => {
     });
 
     test("writes nothing when the database refuses a row", () => {
-        const plan = planHymnsJsonImport([
-            {
-                song_title: "Amazing Grace",
-                tune_name: "NEW BRITAIN",
-                rejoice_hymns: 108,
-                great_hymns_of_the_faith: -1,
-            },
-        ]);
+        const plan = seedPlan();
         const duplicate = { ...plan.rows.entries[0] };
         const id = seedImportRun(db, {
             report: plan.report,
@@ -256,7 +249,7 @@ describe("findApplyRefusal", () => {
 
     test("names what apply would refuse, without writing", () => {
         expect(findApplyRefusal(db, 999)).toBe("not-found");
-        expect(findApplyRefusal(db, seedImportRun(db, { kind: "csv" }))).toBe("not-found");
+        expect(findApplyRefusal(db, seedImportRun(db, { kind: "spreadsheet" }))).toBe("not-found");
         expect(findApplyRefusal(db, seedImportRun(db, { status: "applied" }))).toBe(
             "not-preview"
         );
@@ -264,5 +257,165 @@ describe("findApplyRefusal", () => {
         seedBook(db);
         expect(findApplyRefusal(db, preview)).toBe("catalog-not-empty");
         expect(status(preview)).toBe("preview");
+    });
+});
+
+describe("a book's CSV file", () => {
+    const AT = new Date("2026-10-04T12:00:00.000Z");
+
+    /** Rejoice Hymns with Amazing Grace (NEW BRITAIN) at R-108, and a Chorus Book with one chorus. */
+    function seedBooks() {
+        const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns" });
+        const chorus = seedBook(db, { code: "CB", name: "Chorus Book", numbered: false });
+        const newBritain = seedTune(db, { name: "NEW BRITAIN" });
+        const amazingGrace = seedSong(db, {
+            hymnId: seedHymn(db, { title: "Amazing Grace", aliases: ["Amazing Grace! How Sweet the Sound"] }),
+            tuneId: newBritain,
+        });
+        seedEntry(db, { bookId: rejoice, songId: amazingGrace, number: 108 });
+        const alleluia = seedSong(db, { hymnId: seedHymn(db, { title: "Alleluia" }) });
+        seedEntry(db, { bookId: chorus, songId: alleluia, position: 1 });
+        return { rejoice, chorus, newBritain, amazingGrace };
+    }
+
+    const REJOICE_FILE = [
+        "number,title,tune,variant",
+        "109,Amazing Grace! How Sweet the Sound,NEW BRITAIN,Descant",
+        "400,Be Thou My Vision,SLANE,",
+        '401,"Come, Thou Fount",,',
+        "",
+    ].join("\r\n");
+
+    function previewFile(bookId: number, text: string): number {
+        const id = previewBookCsvRun(db, { bookId, sourceName: "rejoice.csv", text }, AT);
+        if (id === null) {
+            throw new Error("expected a run");
+        }
+        return id;
+    }
+
+    test("previews a file as a run of the book, with its report and what apply plans from", () => {
+        const { rejoice } = seedBooks();
+        const id = previewFile(rejoice, REJOICE_FILE);
+        const run = findImportRun(db, id);
+        expect(run).toMatchObject({
+            id,
+            at: AT.toISOString(),
+            kind: "csv",
+            status: "preview",
+            sourceName: "rejoice.csv",
+            bookId: rejoice,
+            planned: { books: 0, hymns: 2, tunes: 1, songs: 2, songsWithoutTune: 1, entries: 3 },
+        });
+        expect(run?.kind === "csv" && run.report.problems).toEqual([]);
+        const stored = JSON.parse(String(db.prepare("SELECT rows FROM import_runs WHERE id = ?").get(id)?.rows));
+        expect(stored.records).toHaveLength(4);
+        expect(stored.planned.entries).toHaveLength(3);
+        expect(findApplyRefusal(db, id)).toBeNull();
+        expect(previewBookCsvRun(db, { bookId: 999, sourceName: "x.csv", text: REJOICE_FILE })).toBeNull();
+    });
+
+    test("applies a numbered book's file: new hymns, tunes and songs, and the entries", () => {
+        const { rejoice, amazingGrace } = seedBooks();
+        const id = previewFile(rejoice, REJOICE_FILE);
+        expect(applyImportRun(db, id)).toEqual({
+            books: 0,
+            hymns: 2,
+            hymnAliases: 0,
+            tunes: 1,
+            tuneAliases: 0,
+            songs: 2,
+            songsWithoutTune: 1,
+            entries: 3,
+        });
+        expect(findImportRun(db, id)?.status).toBe("applied");
+        expect(findBook(db, "R")?.entries.map(({ label, title, tuneName, variantNote }) => [label, title, tuneName, variantNote])).toEqual([
+            ["R-108", "Amazing Grace", "NEW BRITAIN", null],
+            ["R-109", "Amazing Grace", "NEW BRITAIN", "Descant"],
+            ["R-400", "Be Thou My Vision", "SLANE", null],
+            ["R-401", "Come, Thou Fount", null, null],
+        ]);
+        expect(findCatalogSong(db, amazingGrace)?.entries.map(({ label }) => label)).toEqual(["R-108", "R-109"]);
+        expect(refusal(() => applyImportRun(db, id)).reason).toBe("not-preview");
+    });
+
+    test("applies a file to a book without numbers, after its entries", () => {
+        const { chorus } = seedBooks();
+        const id = previewFile(chorus, "position,title\n2,Deep and Wide\n1,Jesus Loves Me\n");
+        applyImportRun(db, id);
+        expect(findBook(db, "CB")?.entries.map(({ title, position }) => [title, position])).toEqual([
+            ["Alleluia", 1],
+            ["Jesus Loves Me", 2],
+            ["Deep and Wide", 3],
+        ]);
+    });
+
+    test("applies a file with no tune column: its rows join the songs the catalog has, making no twins", () => {
+        const { chorus, amazingGrace } = seedBooks();
+        const before = countCatalog(db);
+        const id = previewFile(chorus, "position,title\n1,Amazing Grace\n");
+        expect(applyImportRun(db, id)).toMatchObject({ hymns: 0, tunes: 0, songs: 0, entries: 1 });
+        expect(countCatalog(db)).toEqual({ ...before, entries: before.entries + 1 });
+        expect(findCatalogSong(db, amazingGrace)?.entries.map(({ label }) => label)).toEqual(["R-108", "Chorus Book"]);
+    });
+
+    test("refuses a file with problems, writing nothing", () => {
+        const { rejoice } = seedBooks();
+        const id = previewFile(rejoice, "number,title\n108,Taken\n500,Fine\n");
+        const run = findImportRun(db, id);
+        expect(run?.kind === "csv" && run.report.problems.map(({ reason }) => reason)).toEqual(["number-taken"]);
+        expect(findApplyRefusal(db, id)).toBe("has-problems");
+        expect(refusal(() => applyImportRun(db, id))).toMatchObject({
+            reason: "has-problems",
+            message: "The file has problems that block the import. Fix them in the file, then preview it again.",
+        });
+        expect(findBook(db, "R")?.entries).toHaveLength(1);
+        expect(status(id)).toBe("preview");
+    });
+
+    test("refuses a file whose plan the catalog has changed since the preview, writing nothing", () => {
+        const { rejoice } = seedBooks();
+        const taken = previewFile(rejoice, REJOICE_FILE);
+        seedEntry(db, { bookId: rejoice, songId: seedSong(db), number: 400 });
+        expect(findApplyRefusal(db, taken)).toBe("stale");
+
+        const matched = previewFile(rejoice, "number,title\n500,Be Still My Soul\n");
+        seedHymn(db, { title: "be still my soul!" });
+        expect(refusal(() => applyImportRun(db, matched))).toMatchObject({
+            reason: "stale",
+            message:
+                "The catalog has changed since this preview, so it would not add what the report shows. Preview the file again.",
+        });
+        expect(countCatalog(db).entries).toBe(3);
+    });
+
+    test("refuses a file whose book is gone or no longer numbers its songs", () => {
+        const { rejoice, chorus } = seedBooks();
+        const numbered = previewFile(rejoice, "number,title\n500,A\n");
+        db.prepare("UPDATE books SET numbered = 0, label_format = 'Rejoice' WHERE id = ?").run(rejoice);
+        expect(findApplyRefusal(db, numbered)).toBe("book-not-found");
+
+        const gone = previewFile(chorus, "position,title\n1,B\n");
+        db.prepare("UPDATE import_runs SET book_id = NULL WHERE id = ?").run(gone);
+        expect(refusal(() => applyImportRun(db, gone)).reason).toBe("book-not-found");
+    });
+
+    test("refuses damaged rows", () => {
+        const { rejoice } = seedBooks();
+        const id = previewFile(rejoice, "number,title\n500,A\n");
+        db.prepare("UPDATE import_runs SET rows = '{\"records\": 7}' WHERE id = ?").run(id);
+        expect(refusal(() => applyImportRun(db, id)).reason).toBe("invalid-rows");
+    });
+
+    test("reads what the plan needs: every hymn and tune with their other names, the songs, the book's entries", () => {
+        const { rejoice, newBritain, amazingGrace } = seedBooks();
+        const snapshot = readBookCsvCatalog(db, rejoice);
+        expect(snapshot.hymns).toEqual([
+            { id: expect.any(Number), title: "Amazing Grace", aliases: ["Amazing Grace! How Sweet the Sound"] },
+            { id: expect.any(Number), title: "Alleluia", aliases: [] },
+        ]);
+        expect(snapshot.tunes).toEqual([{ id: newBritain, name: "NEW BRITAIN", aliases: [] }]);
+        expect(snapshot.songs).toHaveLength(2);
+        expect(snapshot.entries).toEqual([{ songId: amazingGrace, number: 108, position: null, variantNote: null }]);
     });
 });

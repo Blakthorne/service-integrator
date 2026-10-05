@@ -1,20 +1,27 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { parsePlannedRows } from "@/lib/import/rows";
 import {
+    SEED_FIXTURE_COUNTS,
+    emptySeedRows,
     openTestDb,
     seedBook,
     seedEntry,
     seedHymn,
+    seedImportRun,
     seedPcoSong,
     seedPcoSongCredits,
     seedPcoSongTag,
     seedPcoTag,
     seedPcoTagGroup,
+    seedPlan,
     seedScheduleSelection,
     seedSetting,
     seedSong,
+    seedSongMark,
     seedTune,
     seedWriteLog,
+    smallSeedRows,
 } from "./testing";
 
 let db: DatabaseSync;
@@ -422,5 +429,73 @@ describe("seedPcoTagGroup, seedPcoTag and seedPcoSongTag", () => {
         expect(db.prepare("SELECT * FROM pco_song_tags").all().map((row) => ({ ...row }))).toEqual([
             { pco_song_id: songId, tag_id: "42" },
         ]);
+    });
+});
+
+describe("seedSongMark", () => {
+    test("marks a song to learn, with no note, by default", () => {
+        const song = seedSong(db);
+        seedSongMark(db, song);
+        seedSongMark(db, song, { mark: "newer-mark", note: "Later", createdAt: "2026-10-05T08:00:00.000Z" });
+        expect(
+            db.prepare("SELECT * FROM song_marks WHERE song_id = ? ORDER BY mark").all(song)
+        ).toEqual([
+            { song_id: song, mark: "newer-mark", note: "Later", created_at: "2026-10-05T08:00:00.000Z" },
+            { song_id: song, mark: "to-learn", note: null, created_at: "2026-10-04T12:00:00.000Z" },
+        ]);
+    });
+});
+
+describe("the seed fixture", () => {
+    test("is stored rows that apply would accept, with what its counts say", () => {
+        const { report, rows } = seedPlan();
+
+        expect(parsePlannedRows(JSON.parse(JSON.stringify(rows)))).toEqual(smallSeedRows());
+        expect(report.planned).toEqual(SEED_FIXTURE_COUNTS);
+        expect(report.entriesByBook).toEqual({ R: 8, G: 5 });
+        expect(report.input.recordsByBook).toEqual({ R: 8, G: 5 });
+    });
+
+    test("has what the seed's tests count on: two tunes for a hymn, a song without a tune, a descant, the front cover", () => {
+        const { entries, songs } = smallSeedRows();
+
+        expect(songs.filter(({ hymnKey }) => hymnKey === "thank you lord").map(({ tuneKey }) => tuneKey)).toEqual([
+            "LYNCH",
+            "THANK YOU, LORD",
+            null,
+        ]);
+        expect(entries.filter(({ variantNote }) => variantNote !== null)).toHaveLength(1);
+        expect(entries.filter(({ locationLabel }) => locationLabel === "front cover")).toEqual([
+            expect.objectContaining({ bookCode: "G", number: null }),
+        ]);
+    });
+
+    test("an empty seed is its two books and nothing else", () => {
+        expect(emptySeedRows().books.map(({ code }) => code)).toEqual(["R", "G"]);
+        expect(seedPlan(emptySeedRows()).report.planned).toEqual({
+            books: 2,
+            hymns: 0,
+            hymnAliases: 0,
+            tunes: 0,
+            tuneAliases: 0,
+            songs: 0,
+            songsWithoutTune: 0,
+            entries: 0,
+        });
+    });
+
+    test("seedImportRun stores a preview of an empty seed by default, and what it is given otherwise", () => {
+        const plain = seedImportRun(db);
+        const given = seedImportRun(db, { ...seedPlan(), status: "applied", sourceName: "seed.json" });
+
+        expect(
+            db.prepare("SELECT kind, status, source_name FROM import_runs WHERE id = ?").get(plain)
+        ).toEqual({ kind: "hymns-json", status: "preview", source_name: "hymns.json" });
+        expect(
+            JSON.parse(String(db.prepare("SELECT report FROM import_runs WHERE id = ?").get(plain)?.report)).planned
+        ).toMatchObject({ books: 2, songs: 0 });
+        expect(
+            JSON.parse(String(db.prepare("SELECT report FROM import_runs WHERE id = ?").get(given)?.report)).planned
+        ).toEqual(SEED_FIXTURE_COUNTS);
     });
 });

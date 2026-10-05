@@ -1,17 +1,19 @@
+import type { EntryEditorBook } from "@/lib/catalog/entryEditor";
 import { songOptionLabel } from "@/lib/catalog/pickers";
-import type { Book, CatalogSongDetail, MirroredPcoSong, PcoTag, PcoTagGroup } from "@/lib/domain";
+import type { CatalogSongDetail, MirroredPcoSong, PcoTag, PcoTagGroup } from "@/lib/domain";
 import type { CreditSettings } from "@/lib/settings";
 import CreditsCard from "./CreditsCard";
 import EntriesCard from "./EntriesCard";
 import HymnCard from "./HymnCard";
 import PcoLinkCard from "./PcoLinkCard";
 import TagsCard from "./TagsCard";
+import ToLearnCard from "./ToLearnCard";
 import TuneCard from "./TuneCard";
 
 interface SongDetailViewProps {
     song: CatalogSongDetail;
-    /** The catalog's books, for the Books card. */
-    books: readonly Pick<Book, "id" | "name" | "numbered">[];
+    /** Every book, in use or not, in book order, for the Books card and its editor. */
+    books: readonly EntryEditorBook[];
     /**
      * The linked Planning Center song as the mirror has it; null when the
      * song is not linked or the mirror lacks it.
@@ -33,11 +35,14 @@ interface SongDetailViewProps {
 /**
  * The cards of a song's page: where it is in the books first (the numbers
  * are what a planner looks for), then its hymn and its tune side by side,
- * then its link to Planning Center (with Add to a plan, or Create in
- * Planning Center), and, for a song linked to one the app's copy of the
- * library has, its credits and its tags. Server components, except the
- * Planning Center, Credits and Tags cards, which edit. Those two are keyed
- * by the Planning Center song, so a new link starts them afresh.
+ * then whether it is marked to learn, then its link to Planning Center
+ * (with Add to a plan, or Create in Planning Center), and, for a song
+ * linked to one the app's copy of the library has, its credits and its
+ * tags. Server components, except the Books, Hymn, To learn, Planning
+ * Center, Credits and Tags cards, which edit. The Hymn card is keyed by
+ * the hymn, so a merge that leaves the page on this song starts it
+ * afresh; the last two are keyed by the Planning Center song, so a new
+ * link starts them afresh.
  */
 export default function SongDetailView({
     song,
@@ -51,11 +56,15 @@ export default function SongDetailView({
     const linkedSong = song.pcoSongId !== null && pcoSong !== null ? pcoSong : null;
     return (
         <div className="space-y-6">
-            <EntriesCard entries={song.entries} books={books} />
+            <EntriesCard songId={song.id} entries={song.entries} books={books} />
             <div className="grid gap-6 md:grid-cols-2">
-                <HymnCard hymn={song.hymn} otherTunes={song.otherTunes} />
+                <HymnCard key={song.hymn.id} songId={song.id} hymn={song.hymn} otherTunes={song.otherTunes} />
                 <TuneCard tune={song.tune} otherHymns={song.otherHymns} />
             </div>
+            <ToLearnCard
+                songId={song.id}
+                mark={song.marks.find(({ mark }) => mark === "to-learn") ?? null}
+            />
             <PcoLinkCard
                 songId={song.id}
                 songLabel={songOptionLabel({

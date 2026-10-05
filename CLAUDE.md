@@ -4,7 +4,7 @@ Next.js 15 (App Router) app that reads Planning Center Services data, generates 
 
 ## Before you add or change a feature
 
-- Read `docs/architecture.md` first: the route map, the data layer, the conventions and the recipes for adding a page, a catalog page, a server-action form, a plan tab, a Planning Center resource, a Planning Center write or a setting.
+- Read `docs/architecture.md` first: the route map, the data layer, the conventions and the recipes for adding a page, a catalog page, a server-action form, a plan tab, a Planning Center resource, a Planning Center write, a setting, a book or a book's CSV import.
 - Follow its conventions and recipes rather than inventing new structure. The ones that bite most:
   - Hrefs come only from `lib/routes.ts`. Server pages get data from `lib/queries/*` and never fetch `/api/*`.
   - Validate every ID taken from a URL with the parser for its kind (`parsePcoId`, `parseCatalogId`, `parseBookCode`; convention 19), and import PCO code only from `@/lib/pco`.

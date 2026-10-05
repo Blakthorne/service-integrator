@@ -37,6 +37,11 @@ export const routes = {
     catalogTune: (tuneId: number) => `/catalog/tunes/${tuneId}` as const,
     catalogBooks: () => "/catalog/books" as const,
     catalogBook: (bookCode: string) => `/catalog/books/${bookCode}` as const,
+    /**
+     * The Add a book form, on the books page: a link that scrolls to it
+     * (`ADD_BOOK_ID` in lib/catalog/bookText.ts is its id).
+     */
+    catalogBookAdd: () => "/catalog/books#add-book" as const,
     catalogImport: () => "/catalog/import" as const,
     catalogImportRun: (runId: number) => `/catalog/import/${runId}` as const,
     /**

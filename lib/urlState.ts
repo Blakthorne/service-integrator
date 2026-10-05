@@ -24,6 +24,24 @@ export function parsePage(value: string | null, totalPages?: number): number {
 }
 
 /**
+ * The query updates (for `withSearchParams`) that take a paged view from
+ * `currentPage`, the page it shows, to `page`: the `page` parameter, which
+ * page 1 does not have; or `null` when `page` is the page already shown, so
+ * the caller writes nothing.
+ *
+ * The page shown is not always the one the URL spells (`?page=007`,
+ * `?page=1`, a page past the last, text that is not a page), so writing the
+ * page shown can still change the URL, and a push would add a history entry
+ * identical to the one before it: the first Back seems to do nothing.
+ */
+export function pageUpdates(page: number, currentPage: number): Record<string, string | null> | null {
+    if (page === currentPage) {
+        return null;
+    }
+    return { page: page === 1 ? null : String(page) };
+}
+
+/**
  * Narrow a query-string value to one of `allowed`, or `fallback` when it is
  * missing or not listed. The comparison is exact (case-sensitive).
  */

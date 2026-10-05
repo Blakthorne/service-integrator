@@ -1,128 +1,141 @@
 "use client";
 
-import Link from "next/link";
 import Pagination from "../ui/Pagination";
 import { useUrlState } from "@/app/hooks/useUrlState";
-import { formatPlanDateHeading } from "@/lib/format";
-import { routes } from "@/lib/routes";
-import { parsePage } from "@/lib/urlState";
+import {
+    PLAN_DATES_PER_PAGE,
+    jumpToMonth,
+    planMonths,
+    splitPlanDates,
+    type MonthJump,
+} from "@/lib/plansByDate";
+import { pageUpdates, parsePage } from "@/lib/urlState";
 import type { PlanSummary } from "@/lib/domain";
-
-/** How many dates each page of the list shows. */
-const DATES_PER_PAGE = 25;
+import JumpToMonth from "./JumpToMonth";
+import PlanDateCard from "./PlanDateCard";
 
 interface PlansListProps {
     /** The dates (`YYYY-MM-DD`) that have plans, newest first. */
     dates: string[];
     /** The plans on each date, in service-type order. */
     plansByDate: Record<string, PlanSummary[]>;
+    /**
+     * Today, `YYYY-MM-DD`, by the server's calendar (`localYmd`). It comes from
+     * the page, not from the browser's clock, so the list renders the same on
+     * the server and in the browser, and a plan dated today is upcoming for
+     * the whole day.
+     */
+    today: string;
 }
 
+const SECTION_HEADING = "text-xl font-semibold text-gray-900 dark:text-gray-100";
+
 /**
- * Every plan, grouped by date, 25 dates a page. The server loads the plans;
- * this only pages through them. The page number lives in `?page=` (page 1
- * has none), changed without a server round trip, and each page change adds a
- * history entry, so Back returns to the previous page. Each row links to the
- * plan's page: the service type is a real link stretched over the row.
+ * Every plan, in two sections. Upcoming (the plans dated today or later,
+ * soonest first) is at the top of the first page. Past plans, newest first,
+ * are paged 25 dates a page, with Jump to month, a choice of the months that
+ * have past plans, which takes the list to the page that holds the month's
+ * first date. The server loads the plans; this only splits and pages them.
+ *
+ * The page number lives in `?page=` (page 1 has none), changed without a
+ * server round trip, and each page change, a jump too, adds a history entry,
+ * so Back returns to the previous page. Going to the page already shown
+ * (a jump to a month on it) writes nothing and adds none (`pageUpdates`).
+ * Each row links to the plan's page: the service type is a real link
+ * stretched over the row.
  */
 export default function PlansList({
     dates,
     plansByDate,
+    today,
 }: PlansListProps): React.ReactElement {
     const { searchParams, setSearchParams } = useUrlState();
 
-    const totalPages = Math.ceil(dates.length / DATES_PER_PAGE);
+    const { upcoming, past } = splitPlanDates(dates, today);
+    const totalPages = Math.ceil(past.length / PLAN_DATES_PER_PAGE);
     const currentPage = parsePage(searchParams.get("page"), totalPages);
 
-    const startIndex = (currentPage - 1) * DATES_PER_PAGE;
-    const endIndex = startIndex + DATES_PER_PAGE;
-    const currentDates = dates.slice(startIndex, endIndex);
+    const startIndex = (currentPage - 1) * PLAN_DATES_PER_PAGE;
+    const currentDates = past.slice(startIndex, startIndex + PLAN_DATES_PER_PAGE);
 
-    function handlePageChange(page: number) {
-        setSearchParams(
-            { page: page === 1 ? null : String(page) },
-            { history: "push" }
-        );
+    function goToPage(page: number) {
+        const updates = pageUpdates(page, currentPage);
+        if (updates !== null) {
+            setSearchParams(updates, { history: "push" });
+        }
+    }
+
+    function handleJump(month: string): MonthJump {
+        const jump = jumpToMonth(past, month);
+        if (jump.ok) {
+            goToPage(jump.page);
+        }
+        return jump;
     }
 
     return (
-        <div className="w-full space-y-8">
-            {totalPages > 1 && (
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden px-4">
-                    <Pagination
-                        currentPage={currentPage}
-                        totalPages={totalPages}
-                        onPageChange={handlePageChange}
-                    />
-                </div>
+        <div className="w-full space-y-10">
+            {currentPage === 1 && (
+                <section aria-labelledby="upcoming-heading" className="space-y-4">
+                    <h2 id="upcoming-heading" className={SECTION_HEADING}>
+                        Upcoming
+                    </h2>
+                    {upcoming.length === 0 ? (
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                            No plans are dated today or later.
+                        </p>
+                    ) : (
+                        upcoming.map((date) => (
+                            <PlanDateCard key={date} date={date} plans={plansByDate[date]} />
+                        ))
+                    )}
+                </section>
             )}
 
-            {currentDates.map((date) => (
-                <div
-                    key={date}
-                    className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden"
-                >
-                    <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-                        <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                            {formatPlanDateHeading(date)}
-                        </h2>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-gray-50 dark:bg-gray-700">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/3">
-                                        Service Type
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-1/3">
-                                        Items
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                {plansByDate[date].map((plan: PlanSummary) => (
-                                    // `relative` makes the row the box the
-                                    // link's overlay fills; `transform-gpu`
-                                    // does the same in Safari, which ignored
-                                    // `relative` on table rows until 2026
-                                    // (WebKit bug 240961).
-                                    <tr
-                                        key={plan.id}
-                                        className="relative transform-gpu hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                                    >
-                                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {/* No prefetch: a page of rows would each load a plan from PCO. */}
-                                            <Link
-                                                prefetch={false}
-                                                href={routes.plan(
-                                                    plan.serviceType.id,
-                                                    plan.id
-                                                )}
-                                                className="after:absolute after:inset-0"
-                                            >
-                                                {plan.serviceType.name}
-                                            </Link>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                                            {plan.itemsCount} items
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+            <section aria-labelledby="past-heading" className="space-y-8">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <h2 id="past-heading" className={SECTION_HEADING}>
+                        Past plans
+                    </h2>
+                    {past.length > 0 && (
+                        <JumpToMonth
+                            months={planMonths(past)}
+                            currentPage={currentPage}
+                            onJump={handleJump}
+                        />
+                    )}
                 </div>
-            ))}
 
-            {totalPages > 1 && (
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden px-4 mt-8">
-                    <Pagination
-                        currentPage={currentPage}
-                        totalPages={totalPages}
-                        onPageChange={handlePageChange}
-                    />
-                </div>
-            )}
+                {past.length === 0 && (
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                        No plans are dated before today.
+                    </p>
+                )}
+
+                {totalPages > 1 && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden px-4">
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={goToPage}
+                        />
+                    </div>
+                )}
+
+                {currentDates.map((date) => (
+                    <PlanDateCard key={date} date={date} plans={plansByDate[date]} />
+                ))}
+
+                {totalPages > 1 && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden px-4 mt-8">
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={goToPage}
+                        />
+                    </div>
+                )}
+            </section>
         </div>
     );
 }

@@ -4,6 +4,7 @@ import PlansList from "@/app/components/Plans/PlansList";
 import EmptyState from "@/app/components/ui/EmptyState";
 import LoadingState from "@/app/components/ui/LoadingState";
 import PageHeader from "@/app/components/ui/PageHeader";
+import { localYmd } from "@/lib/plansByDate";
 import { getPlansByDate } from "@/lib/queries/plans";
 
 export const metadata: Metadata = {
@@ -12,11 +13,14 @@ export const metadata: Metadata = {
 
 /**
  * The plans list. The server loads every service type's plans; PlansList
- * pages through them in the browser. When a service type fails to load, the
- * others are still listed, with a note that the list may be incomplete.
+ * splits them at today (the server's calendar date, `localYmd`: the Upcoming
+ * section, then the past plans) and pages through the past in the browser.
+ * When a service type fails to load, the others are still listed, with a note
+ * that the list may be incomplete.
  */
 export default async function PlansPage() {
     const { dates, plansByDate, failedServiceTypeIds } = await getPlansByDate();
+    const today = localYmd(new Date());
 
     return (
         <div className="font-sans">
@@ -36,7 +40,7 @@ export default async function PlansPage() {
                 ) : (
                     // PlansList reads ?page=, which needs a Suspense boundary.
                     <Suspense fallback={<LoadingState label="Loading plans…" />}>
-                        <PlansList dates={dates} plansByDate={plansByDate} />
+                        <PlansList dates={dates} plansByDate={plansByDate} today={today} />
                     </Suspense>
                 )}
             </div>

@@ -144,6 +144,23 @@ describe("toBookRows", () => {
         expect(rows.map((row) => row.note)).toEqual(["", "", "back cover"]);
     });
 
+    test("an unnumbered book's rows carry their entry's id, for moving them; a numbered book's do not", () => {
+        const unnumbered = toBookRows({
+            ...UNNUMBERED,
+            entries: [
+                entry({ id: 41, songId: 1, position: 1, label: "Chorus Book" }),
+                entry({ id: 17, songId: 2, position: 2, label: "Chorus Book" }),
+            ],
+        });
+        const numbered = toBookRows({
+            ...NUMBERED,
+            entries: [entry({ id: 41, songId: 1, number: 1, label: "R-1" })],
+        });
+
+        expect(unnumbered.map((row) => row.entryId)).toEqual([41, 17]);
+        expect("entryId" in numbered[0]).toBe(false);
+    });
+
     test("is empty for a book with no entries", () => {
         expect(toBookRows({ ...NUMBERED, entries: [] })).toEqual([]);
     });

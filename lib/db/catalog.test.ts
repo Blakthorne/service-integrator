@@ -20,6 +20,7 @@ import {
     seedHymn,
     seedPcoSong,
     seedSong,
+    seedSongMark,
     seedTune,
 } from "./testing";
 
@@ -236,6 +237,7 @@ describe("listCatalogSongs", () => {
             pcoSongId: "1001",
             linkedBy: "import",
             lastScheduledAt: null,
+            marks: [],
             entries: [
                 {
                     id: entries.amazingGraceRejoice,
@@ -341,6 +343,19 @@ describe("listCatalogSongs", () => {
         });
     });
 
+    test("gives each song its marks, leaving out a mark this build does not know", () => {
+        const { songs } = seedCatalog();
+        seedSongMark(db, songs.doxology, { note: "For Advent" });
+        seedSongMark(db, songs.rejoice, { mark: "newer-mark" });
+        seedSongMark(db, songs.allPeople);
+        seedSongMark(db, songs.allPeople, { mark: "newer-mark" });
+        const rows = new Map(listCatalogSongs(db).map((row) => [row.id, row.marks]));
+        expect(rows.get(songs.doxology)).toEqual(["to-learn"]);
+        expect(rows.get(songs.allPeople)).toEqual(["to-learn"]);
+        expect(rows.get(songs.rejoice)).toEqual([]);
+        expect(rows.get(songs.amazingGrace)).toEqual([]);
+    });
+
     test("runs four queries, however many songs there are", () => {
         seedCatalog();
         expect(countQueries(() => listCatalogSongs(db))).toBe(4);
@@ -381,8 +396,27 @@ describe("findCatalogSong", () => {
             },
             otherTunes: [],
             otherHymns: [],
+            marks: [],
         });
         expect(labels(detail!)).toEqual(["R-108", "R-109", "G-247", "Chorus Book"]);
+    });
+
+    test("gives the song's marks with their notes, and its relatives' marks", () => {
+        const { songs } = catalog;
+        seedSongMark(db, songs.thankYouOwnTune, {
+            note: "For Thanksgiving",
+            createdAt: "2026-10-01T09:00:00.000Z",
+        });
+        seedSongMark(db, songs.thankYouOwnTune, { mark: "newer-mark" });
+        seedSongMark(db, songs.thankYouLynch);
+        const detail = findCatalogSong(db, songs.thankYouOwnTune);
+        expect(detail?.marks).toEqual([
+            { mark: "to-learn", note: "For Thanksgiving", createdAt: "2026-10-01T09:00:00.000Z" },
+        ]);
+        expect(detail?.otherTunes.map(({ id, marks }) => [id, marks])).toEqual([
+            [songs.thankYouLynch, ["to-learn"]],
+            [songs.thankYouNoTune, []],
+        ]);
     });
 
     test("gives the hymn's other tunes by tune name, the unknown one last", () => {
@@ -482,6 +516,18 @@ describe("findCatalogMatches", () => {
         expect(labels(matches.get("1016")!)).toEqual(["R-14", "G-Front Cover"]);
     });
 
+    test("leaves out the entries in a book not in use, which prints no numbers", () => {
+        const { books, songs } = seedCatalog();
+        db.prepare("UPDATE books SET active = 0 WHERE id = ?").run(books.great);
+        db.prepare("UPDATE songs SET pco_song_id = '1016' WHERE id = ?").run(songs.thankYouNoTune);
+        const matches = findCatalogMatches(db, ["1001", "1016"]);
+        expect(labels(matches.get("1001")!)).toEqual(["R-108", "R-109", "Chorus Book"]);
+        // Its only entry is in the book not in use: still a match, with no numbers.
+        expect(matches.get("1016")).toMatchObject({ songId: songs.thankYouNoTune, entries: [] });
+        // The song's own page still shows every entry.
+        expect(labels(findCatalogSong(db, songs.amazingGrace)!)).toEqual(["R-108", "R-109", "G-247", "Chorus Book"]);
+    });
+
     test("gives a linked song with no tune and no entries", () => {
         const song = seedSong(db, { pcoSongId: "1002" });
         expect(findCatalogMatches(db, ["1002"]).get("1002")).toMatchObject({
@@ -561,6 +607,18 @@ describe("findTuneLabel", () => {
 describe("listBooks", () => {
     test("is empty for an empty catalog", () => {
         expect(listBooks(db)).toEqual([]);
+    });
+
+    test("lists the books in use only, when asked", () => {
+        const { books } = seedCatalog();
+        db.prepare("UPDATE books SET active = 0 WHERE id IN (?, ?)").run(books.great, books.empty);
+        expect(listBooks(db, { activeOnly: true }).map(({ code }) => code)).toEqual(["R", "CB"]);
+        expect(listBooks(db).map(({ code, active }) => [code, active])).toEqual([
+            ["R", true],
+            ["G", false],
+            ["CB", true],
+            ["X", false],
+        ]);
     });
 
     test("lists the books in book order with their entry counts", () => {

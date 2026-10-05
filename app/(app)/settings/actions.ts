@@ -15,8 +15,10 @@ import {
     type FormState,
     type FormValues,
 } from "@/lib/forms";
+import { EXPORT_FAILED_MESSAGE } from "@/lib/catalog/exportText";
 import { parsePcoId } from "@/lib/pco";
 import { getCreditLabelSets, rederiveAllCredits } from "@/lib/queries/credits";
+import { exportCatalogJson } from "@/lib/queries/export";
 import { syncPcoSongsNow, type RunJobResult } from "@/lib/queries/reconcile";
 import { getSettings, saveSettings, type SaveSettingsResult } from "@/lib/queries/settings";
 import { routes } from "@/lib/routes";
@@ -78,6 +80,35 @@ export async function syncPcoSongsAction(): Promise<SyncNowResult> {
     return run.ok
         ? { ok: true, message: run.message ?? "Synced." }
         : { ok: false, message: `The sync failed: ${run.message ?? "no reason was recorded"}.` };
+}
+
+/** What exporting the catalog tells its button: the JSON to download, or why there is none. */
+export type ExportCatalogResult = { ok: true; json: string } | { ok: false; message: string };
+
+/**
+ * Settings' "Export catalog (JSON)": read the whole catalog as its
+ * deterministic JSON document (`exportCatalogJson`) and hand it to the button,
+ * which saves it as a file in the browser (a Blob named with
+ * `catalogExportFileName`): there is no download route, since nothing the
+ * server renders may fetch `/api/*` and the document is made on demand. It
+ * only reads, so it revalidates nothing. It checks the session first and
+ * throws without one; a failure is logged and comes back as a message.
+ *
+ * The button calls it from its click with its pending state in `useState`
+ * (convention 15), as Sync now does: the export reads every row of the
+ * catalog, and a transition held open across it would stall navigation.
+ */
+export async function exportCatalogAction(): Promise<ExportCatalogResult> {
+    const session = await auth();
+    if (!session) {
+        throw new Error("Not signed in");
+    }
+    try {
+        return { ok: true, json: exportCatalogJson() };
+    } catch (error) {
+        console.error("Failed to export the catalog:", error);
+        return { ok: false, message: EXPORT_FAILED_MESSAGE };
+    }
 }
 
 /**

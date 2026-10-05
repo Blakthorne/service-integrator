@@ -2,10 +2,31 @@ import { describe, expect, test } from "vitest";
 import { buildCatalogIndex, type IndexableSong } from "@/lib/reconcile";
 import {
     EMPTY_NEW_SONG,
+    MARK_NOTE_MAX_LENGTH,
+    NOTES_MAX_LENGTH,
+    VARIANT_NOTE_MAX_LENGTH,
     cleanText,
     draftFromPcoTitle,
     previewEntryLabel,
+    BOOK_CSV_MAX_BYTES,
+    cleanSourceName,
+    defaultLabelFormat,
+    labelFormatProblem,
+    validateBookCsvUpload,
+    validateBookEdit,
+    validateBookMove,
+    validateEntryDelete,
+    validateEntryEdit,
+    validateEntryMove,
+    validateHymnAlias,
+    validateHymnEdit,
+    validateMerge,
+    validateNewBook,
+    validateNewEntry,
     validateNewSong,
+    validateSongMark,
+    validateTuneAlias,
+    validateTuneEdit,
     type NewSongBook,
     type NewSongValues,
 } from "./validation";
@@ -377,5 +398,414 @@ describe("draftFromPcoTitle", () => {
             tune: "new",
             tuneName: "PRITCHARD",
         });
+    });
+});
+
+/** A form as posted: each field's text. */
+function fields(values: Record<string, string>): FormData {
+    const formData = new FormData();
+    for (const [name, value] of Object.entries(values)) {
+        formData.set(name, value);
+    }
+    return formData;
+}
+
+describe("validateSongMark", () => {
+    test("reads the song, the mark and the note, cleaned", () => {
+        expect(
+            validateSongMark(fields({ songId: "12", mark: "to-learn", note: "  For   Advent " }))
+        ).toEqual({ ok: true, input: { songId: 12, mark: "to-learn", note: "For Advent" } });
+    });
+
+    test("reads a blank or missing note as none", () => {
+        expect(validateSongMark(fields({ songId: "12", mark: "to-learn", note: "  " }))).toEqual({
+            ok: true,
+            input: { songId: 12, mark: "to-learn", note: null },
+        });
+        expect(validateSongMark(fields({ songId: "12", mark: "to-learn" }))).toMatchObject({
+            ok: true,
+            input: { note: null },
+        });
+    });
+
+    test("refuses a song id, mark or note that is not one, each on its part", () => {
+        expect(
+            validateSongMark(
+                fields({ songId: "012", mark: "favourite", note: "x".repeat(MARK_NOTE_MAX_LENGTH + 1) })
+            )
+        ).toEqual({
+            ok: false,
+            fieldErrors: {
+                song: { message: "That song is not in the catalog." },
+                mark: { message: "That is not a mark the catalog knows." },
+                note: { message: "A note has at most 200 characters." },
+            },
+        });
+        expect(validateSongMark(fields({ mark: "to-learn" }))).toMatchObject({
+            ok: false,
+            fieldErrors: { song: expect.anything() },
+        });
+        expect(
+            validateSongMark(fields({ songId: "1", mark: "to-learn", note: "x".repeat(MARK_NOTE_MAX_LENGTH) }))
+        ).toMatchObject({ ok: true });
+    });
+});
+
+describe("validateNewEntry", () => {
+    test("reads a number in a book, with a variant note", () => {
+        expect(
+            validateNewEntry(
+                fields({ songId: "5", bookId: "1", placement: "number", number: " 396 ", variantNote: " Descant " })
+            )
+        ).toEqual({
+            ok: true,
+            input: { songId: 5, bookId: 1, placement: { kind: "number", number: 396 }, variantNote: "Descant" },
+        });
+    });
+
+    test("reads a location, the end and a position, and a blank variant note as none", () => {
+        const base = { songId: "5", bookId: "1", variantNote: "  " };
+        expect(validateNewEntry(fields({ ...base, placement: "location", location: " front  cover " }))).toEqual({
+            ok: true,
+            input: {
+                songId: 5,
+                bookId: 1,
+                placement: { kind: "location", locationLabel: "front cover" },
+                variantNote: null,
+            },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "end", number: "abc" }))).toMatchObject({
+            ok: true,
+            input: { placement: { kind: "end" } },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "position", position: "3" }))).toMatchObject({
+            ok: true,
+            input: { placement: { kind: "position", position: 3 } },
+        });
+    });
+
+    test("refuses what the placement needs when it is missing or not a whole number", () => {
+        const base = { songId: "5", bookId: "1" };
+        expect(validateNewEntry(fields({ ...base, placement: "number", number: "" }))).toEqual({
+            ok: false,
+            fieldErrors: { placement: { message: "Type the song's number, a whole number from 1 to 99,999." } },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "number", number: "1.5" }))).toMatchObject({
+            ok: false,
+            fieldErrors: { placement: expect.anything() },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "location", location: " " }))).toEqual({
+            ok: false,
+            fieldErrors: { placement: { message: "Type where the book has the song, such as front cover." } },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "position", position: "0" }))).toEqual({
+            ok: false,
+            fieldErrors: {
+                placement: { message: "Type the song's position in the book, a whole number from 1 to 99,999." },
+            },
+        });
+        expect(validateNewEntry(fields({ ...base, placement: "sideways" }))).toEqual({
+            ok: false,
+            fieldErrors: { placement: { message: "Choose where the book has the song." } },
+        });
+    });
+
+    test("refuses ids that do not parse and a variant note that is too long, all at once", () => {
+        expect(
+            validateNewEntry(
+                fields({
+                    songId: "x",
+                    bookId: "",
+                    placement: "end",
+                    variantNote: "x".repeat(VARIANT_NOTE_MAX_LENGTH + 1),
+                })
+            )
+        ).toEqual({
+            ok: false,
+            fieldErrors: {
+                song: { message: "That song is not in the catalog." },
+                book: { message: "Choose a book from the list." },
+                variantNote: { message: "A variant note has at most 100 characters." },
+            },
+        });
+    });
+});
+
+describe("validateEntryEdit, validateEntryDelete and validateEntryMove", () => {
+    test("read the entry and what changes", () => {
+        expect(
+            validateEntryEdit(fields({ entryId: "7", placement: "number", number: "12", variantNote: "" }))
+        ).toEqual({
+            ok: true,
+            input: { entryId: 7, placement: { kind: "number", number: 12 }, variantNote: null },
+        });
+        expect(validateEntryDelete(fields({ entryId: "7" }))).toEqual({ ok: true, input: { entryId: 7 } });
+        expect(validateEntryMove(fields({ entryId: "7", direction: "down" }))).toEqual({
+            ok: true,
+            input: { entryId: 7, direction: "down" },
+        });
+    });
+
+    test("refuse an entry id that does not parse, and a direction that is not one", () => {
+        expect(validateEntryEdit(fields({ entryId: "-1", placement: "end" }))).toEqual({
+            ok: false,
+            fieldErrors: { entry: { message: "That entry is not in the catalog." } },
+        });
+        expect(validateEntryDelete(fields({}))).toMatchObject({ ok: false, fieldErrors: { entry: expect.anything() } });
+        expect(validateEntryMove(fields({ entryId: "7", direction: "sideways" }))).toEqual({
+            ok: false,
+            fieldErrors: { direction: { message: "Choose Move up or Move down." } },
+        });
+    });
+});
+
+describe("validateHymnEdit", () => {
+    test("reads the title and first line cleaned, and the notes with their line breaks", () => {
+        expect(
+            validateHymnEdit(
+                fields({
+                    hymnId: "3",
+                    title: "  Amazing   Grace ",
+                    firstLine: " Amazing grace! how sweet the sound ",
+                    notes: "  John Newton, 1779  \r\n\r\n  Stanza 6 by others \n\n",
+                })
+            )
+        ).toEqual({
+            ok: true,
+            input: {
+                hymnId: 3,
+                title: "Amazing Grace",
+                firstLine: "Amazing grace! how sweet the sound",
+                notes: "John Newton, 1779\n\nStanza 6 by others",
+            },
+        });
+    });
+
+    test("reads a blank first line and blank notes as none", () => {
+        expect(validateHymnEdit(fields({ hymnId: "3", title: "Doxology", firstLine: " ", notes: " \n " }))).toEqual({
+            ok: true,
+            input: { hymnId: 3, title: "Doxology", firstLine: null, notes: null },
+        });
+    });
+
+    test("refuses a missing title, one with no letters or digits, and notes that are too long", () => {
+        expect(
+            validateHymnEdit(fields({ hymnId: "0", title: " ", notes: "x".repeat(NOTES_MAX_LENGTH + 1) }))
+        ).toEqual({
+            ok: false,
+            fieldErrors: {
+                hymn: { message: "That hymn is not in the catalog." },
+                title: { message: "Type the hymn's title." },
+                notes: { message: "Notes have at most 2,000 characters." },
+            },
+        });
+        expect(validateHymnEdit(fields({ hymnId: "3", title: "?!" }))).toEqual({
+            ok: false,
+            fieldErrors: { title: { message: "A title needs letters or numbers." } },
+        });
+        expect(validateHymnEdit(fields({ hymnId: "3", title: "x".repeat(201) }))).toEqual({
+            ok: false,
+            fieldErrors: { title: { message: "A title has at most 200 characters." } },
+        });
+    });
+});
+
+describe("validateTuneEdit", () => {
+    test("reads the name, meter and notes", () => {
+        expect(validateTuneEdit(fields({ tuneId: "4", name: " ST.  ANNE ", meter: " C.M. ", notes: "" }))).toEqual({
+            ok: true,
+            input: { tuneId: 4, name: "ST. ANNE", meter: "C.M.", notes: null },
+        });
+    });
+
+    test("refuses a missing name, and one or a meter that is too long", () => {
+        expect(validateTuneEdit(fields({ tuneId: "4", name: "", meter: "8".repeat(51) }))).toEqual({
+            ok: false,
+            fieldErrors: {
+                name: { message: "Type the tune's name." },
+                meter: { message: "A meter has at most 50 characters." },
+            },
+        });
+        expect(validateTuneEdit(fields({ tuneId: "4", name: "X".repeat(101) }))).toEqual({
+            ok: false,
+            fieldErrors: { name: { message: "A tune's name has at most 100 characters." } },
+        });
+    });
+});
+
+describe("validateHymnAlias and validateTuneAlias", () => {
+    test("read the hymn or tune and the other name, cleaned", () => {
+        expect(validateHymnAlias(fields({ hymnId: "3", alias: " Amazing Grace!  How Sweet " }))).toEqual({
+            ok: true,
+            input: { hymnId: 3, alias: "Amazing Grace! How Sweet" },
+        });
+        expect(validateTuneAlias(fields({ tuneId: "4", alias: " darwal " }))).toEqual({
+            ok: true,
+            input: { tuneId: 4, alias: "darwal" },
+        });
+    });
+
+    test("refuse a missing other name, and an id that does not parse", () => {
+        expect(validateHymnAlias(fields({ hymnId: "x", alias: "" }))).toEqual({
+            ok: false,
+            fieldErrors: {
+                hymn: { message: "That hymn is not in the catalog." },
+                alias: { message: "Type the other title." },
+            },
+        });
+        expect(validateTuneAlias(fields({ tuneId: "4", alias: " " }))).toEqual({
+            ok: false,
+            fieldErrors: { alias: { message: "Type the other name." } },
+        });
+    });
+});
+
+describe("validateMerge", () => {
+    test("reads the source and the target", () => {
+        expect(validateMerge(fields({ sourceId: "3", targetId: "8" }), "hymn")).toEqual({
+            ok: true,
+            input: { sourceId: 3, targetId: 8 },
+        });
+        expect(validateMerge(fields({ sourceId: "3", targetId: "3" }), "tune")).toMatchObject({ ok: true });
+    });
+
+    test("refuses ids that do not parse, in the words of the kind", () => {
+        expect(validateMerge(fields({ sourceId: "x", targetId: "" }), "tune")).toEqual({
+            ok: false,
+            fieldErrors: {
+                source: { message: "That tune is not in the catalog." },
+                target: { message: "Choose the tune to merge it into." },
+            },
+        });
+    });
+});
+
+describe("the book forms", () => {
+    test("default a numbered book's label to CODE-{n}, and an unnumbered one's to its short name", () => {
+        expect(defaultLabelFormat("CB", true, "Choruses")).toBe("CB-{n}");
+        expect(defaultLabelFormat("CB", false, "Choruses")).toBe("Choruses");
+    });
+
+    test("say what is wrong with a label format for the kind of book", () => {
+        expect(labelFormatProblem("R-{n}", true)).toBeNull();
+        expect(labelFormatProblem("Chorus Book", false)).toBeNull();
+        expect(labelFormatProblem("Rejoice", true)).toBe(
+            "A numbered book's label needs {n} where the number goes, such as R-{n}."
+        );
+        expect(labelFormatProblem("CB-{n}", false)).toBe(
+            "A book without numbers labels every entry alike, so its label has no {n}: its short name, such as Chorus Book."
+        );
+    });
+
+    test("read a new book, filling in the short name and label format left blank", () => {
+        expect(
+            validateNewBook(fields({ code: "CB", name: " Chorus  Book ", shortName: "", numbered: "no", labelFormat: "" }))
+        ).toEqual({
+            ok: true,
+            input: { code: "CB", name: "Chorus Book", shortName: "Chorus Book", numbered: false, labelFormat: "Chorus Book" },
+        });
+        expect(
+            validateNewBook(fields({ code: "hf", name: "Hymns of Faith", shortName: "Faith", numbered: "yes", labelFormat: "" }))
+        ).toEqual({
+            ok: true,
+            input: { code: "hf", name: "Hymns of Faith", shortName: "Faith", numbered: true, labelFormat: "hf-{n}" },
+        });
+        expect(
+            validateNewBook(fields({ code: "HF", name: "Hymns of Faith", numbered: "yes", labelFormat: " HF {n} " }))
+        ).toMatchObject({ ok: true, input: { labelFormat: "HF {n}" } });
+    });
+
+    test("refuse a new book's bad code, blank name, unknown kind and label format, all at once", () => {
+        expect(validateNewBook(fields({ code: "1CB", name: "", numbered: "maybe", labelFormat: "X" }))).toEqual({
+            ok: false,
+            fieldErrors: {
+                code: { message: "A code is a letter, then up to 7 letters, digits, - or _, such as CB." },
+                name: { message: "Type the book's name." },
+                numbered: { message: "Choose whether the book numbers its songs." },
+            },
+        });
+        expect(validateNewBook(fields({ code: "CB", name: "Chorus Book", numbered: "no", labelFormat: "CB-{n}" }))).toMatchObject({
+            ok: false,
+            fieldErrors: { labelFormat: { message: expect.stringContaining("has no {n}") } },
+        });
+        expect(
+            validateNewBook(fields({ code: "CB", name: "x".repeat(101), shortName: "y".repeat(41), numbered: "no" }))
+        ).toEqual({
+            ok: false,
+            fieldErrors: {
+                name: { message: "A book's name has at most 100 characters." },
+                shortName: { message: "A short name has at most 40 characters." },
+            },
+        });
+    });
+
+    test("read a book's edit, with blanks as none, and whether it is in use", () => {
+        expect(
+            validateBookEdit(fields({ bookId: "2", name: "Rejoice Hymns", shortName: " ", labelFormat: "", active: "no" }))
+        ).toEqual({
+            ok: true,
+            input: { bookId: 2, name: "Rejoice Hymns", shortName: null, labelFormat: null, active: false },
+        });
+        expect(validateBookEdit(fields({ bookId: "2", name: "R", active: "" }))).toEqual({
+            ok: false,
+            fieldErrors: { active: { message: "Choose whether the book is in use." } },
+        });
+        expect(validateBookMove(fields({ bookId: "2", direction: "up" }))).toEqual({
+            ok: true,
+            input: { bookId: 2, direction: "up" },
+        });
+        expect(validateBookMove(fields({ bookId: "two", direction: "up" }))).toMatchObject({
+            ok: false,
+            fieldErrors: { book: { message: "That book is not in the catalog." } },
+        });
+    });
+});
+
+describe("validateBookCsvUpload", () => {
+    function upload(bookId: string, file: File | null): FormData {
+        const formData = new FormData();
+        formData.set("bookId", bookId);
+        if (file) {
+            formData.set("file", file);
+        }
+        return formData;
+    }
+
+    test("reads the book and the file, with its name cleaned", () => {
+        const file = new File(["number,title\n1,A\n"], "  my   book.csv ", { type: "text/csv" });
+        expect(validateBookCsvUpload(upload("3", file))).toEqual({
+            ok: true,
+            input: { bookId: 3, file, sourceName: "my book.csv" },
+        });
+    });
+
+    test("refuses no file, an empty one and one over 1 MB, and a book id that does not parse", () => {
+        expect(validateBookCsvUpload(upload("x", null))).toEqual({
+            ok: false,
+            fieldErrors: {
+                book: { message: "Choose the book to import into." },
+                file: { message: "Choose a CSV file." },
+            },
+        });
+        expect(validateBookCsvUpload(upload("3", new File([], "")))).toMatchObject({
+            ok: false,
+            fieldErrors: { file: { message: "Choose a CSV file." } },
+        });
+        expect(validateBookCsvUpload(upload("3", new File([], "empty.csv")))).toMatchObject({
+            ok: false,
+            fieldErrors: { file: { message: "empty.csv is empty." } },
+        });
+        expect(validateBookCsvUpload(upload("3", new File(["x".repeat(BOOK_CSV_MAX_BYTES + 1)], "big.csv")))).toMatchObject({
+            ok: false,
+            fieldErrors: { file: { message: expect.stringContaining("larger than 1 MB") } },
+        });
+        const formData = upload("3", null);
+        formData.set("file", "not a file");
+        expect(validateBookCsvUpload(formData)).toMatchObject({ ok: false, fieldErrors: { file: expect.anything() } });
+    });
+
+    test("keeps at most 200 characters of a file's name, and names a nameless one", () => {
+        expect(cleanSourceName(`${"a".repeat(250)}.csv`)).toHaveLength(200);
+        expect(cleanSourceName("  ")).toBe("upload.csv");
     });
 });

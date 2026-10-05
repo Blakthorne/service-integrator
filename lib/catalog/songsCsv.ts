@@ -2,6 +2,7 @@ import { toCsv } from "@/lib/csv";
 import type { Book, CatalogSongSummary } from "@/lib/domain";
 import type { CatalogSongsQuery } from "./filter";
 import { lastScheduledDate } from "./lastScheduled";
+import { SONG_MARKS, SONG_MARK_LABELS } from "./marks";
 
 /**
  * The songs list as a CSV file (`/catalog`'s Export CSV): which rows and
@@ -29,21 +30,29 @@ function labelsIn(song: CatalogSongSummary, bookCode: string): string {
  * order given. The columns are the title, the tune ("" when it is unknown),
  * one column for each of `books` (in the order given) holding the song's
  * labels in that book, whether the song is linked to a Planning Center song
- * ("yes" or "no"), and the date it was last scheduled as `YYYY-MM-DD` ("" when
- * it never was).
+ * ("yes" or "no"), the date it was last scheduled as `YYYY-MM-DD` ("" when
+ * it never was), and a column for each mark ("To learn": "yes" or "no").
  */
 export function catalogSongsCsvRecords(
     songs: readonly CatalogSongSummary[],
     books: readonly CsvBook[]
 ): string[][] {
     return [
-        ["Title", "Tune", ...books.map(({ name }) => name), "Linked", "Last scheduled"],
+        [
+            "Title",
+            "Tune",
+            ...books.map(({ name }) => name),
+            "Linked",
+            "Last scheduled",
+            ...SONG_MARKS.map((mark) => SONG_MARK_LABELS[mark]),
+        ],
         ...songs.map((song) => [
             song.title,
             song.tuneName ?? "",
             ...books.map(({ code }) => labelsIn(song, code)),
             song.pcoSongId === null ? "no" : "yes",
             lastScheduledDate(song.lastScheduledAt) ?? "",
+            ...SONG_MARKS.map((mark) => (song.marks.includes(mark) ? "yes" : "no")),
         ]),
     ];
 }
@@ -72,10 +81,12 @@ export function localDateStamp(date: Date): string {
  * the day, such as `catalog-unused-2026-10-04.csv` for the songs never
  * scheduled, or `catalog-g-unlinked-2026-10-04.csv` for the songs of book G
  * with no Planning Center song. The words are the book's code in lower case,
- * "linked" or "unlinked", "unused" and, for a search, "search".
+ * "linked" or "unlinked", "unused", the mark ("to-learn") and, for a search,
+ * "search".
  */
 export function catalogCsvFilename(
-    filters: Pick<CatalogSongsQuery, "q" | "book" | "linked" | "used">,
+    filters: Pick<CatalogSongsQuery, "q" | "book" | "linked" | "used"> &
+        Partial<Pick<CatalogSongsQuery, "mark">>,
     now: Date
 ): string {
     const parts = ["catalog"];
@@ -89,6 +100,9 @@ export function catalogCsvFilename(
     }
     if (filters.used === "never") {
         parts.push("unused");
+    }
+    if (filters.mark !== undefined && filters.mark !== "all") {
+        parts.push(filters.mark);
     }
     if (filters.q !== "") {
         parts.push("search");

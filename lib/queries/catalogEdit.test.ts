@@ -29,10 +29,29 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 }));
 
 import {
+    addCatalogBook,
+    addCatalogEntry,
+    addCatalogHymnAlias,
+    addCatalogTuneAlias,
     createSong,
+    deleteCatalogEntry,
+    editCatalogBook,
+    editCatalogEntry,
+    editCatalogHymn,
+    editCatalogTune,
+    getHymnOptions,
     getMirroredPcoSong,
     getNewSongBooks,
     getNewSongFormData,
+    getTuneOptions,
+    mergeCatalogHymns,
+    mergeCatalogTunes,
+    moveCatalogBook,
+    moveCatalogEntry,
+    previewCatalogHymnMerge,
+    previewCatalogTuneMerge,
+    removeCatalogHymnAlias,
+    removeCatalogTuneAlias,
     unlinkCatalogSong,
 } from "./catalogEdit";
 
@@ -320,5 +339,147 @@ describe("unlinkCatalogSong", () => {
             reason: "not-linked",
         });
         expect(findCatalogSong(db, songs.amazingGrace)?.pcoSongId).toBe("1001");
+    });
+});
+
+describe("the song page's entries, end to end", () => {
+    test("adds, edits, moves and deletes entries, refusing a number that is taken", () => {
+        const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns" });
+        const chorus = seedBook(db, { code: "CB", name: "Chorus Book", numbered: false });
+        const song = seedSong(db, { hymnId: seedHymn(db, { title: "Jesus Loves Me" }) });
+        const other = seedSong(db, { hymnId: seedHymn(db, { title: "Deep and Wide" }) });
+        seedEntry(db, { bookId: chorus, songId: other, position: 1 });
+        seedEntry(db, { bookId: rejoice, songId: other, number: 7 });
+
+        const added = addCatalogEntry({
+            songId: song,
+            bookId: rejoice,
+            placement: { kind: "number", number: 7 },
+            variantNote: null,
+        });
+        expect(added).toMatchObject({ ok: false, problems: [{ reason: "number-taken" }] });
+
+        const numbered = addCatalogEntry({
+            songId: song,
+            bookId: rejoice,
+            placement: { kind: "number", number: 8 },
+            variantNote: null,
+        });
+        const inChorus = addCatalogEntry({
+            songId: song,
+            bookId: chorus,
+            placement: { kind: "position", position: 1 },
+            variantNote: null,
+        });
+        expect(numbered).toMatchObject({ ok: true, label: "R-8" });
+        expect(inChorus).toMatchObject({ ok: true, label: "Chorus Book" });
+        const entryIds = [numbered, inChorus].map((result) => (result.ok ? result.entryId : 0));
+
+        expect(
+            editCatalogEntry({ entryId: entryIds[0], placement: { kind: "number", number: 9 }, variantNote: null })
+        ).toMatchObject({ ok: true, label: "R-9" });
+        expect(moveCatalogEntry(entryIds[1], "down")).toEqual({ ok: true, changed: true, position: 2 });
+        expect(deleteCatalogEntry(entryIds[0])).toEqual({ ok: true, songId: song, label: "R-9" });
+        expect(findCatalogSong(db, song)?.entries.map(({ label, position }) => [label, position])).toEqual([
+            ["Chorus Book", 2],
+        ]);
+    });
+});
+
+describe("the hymn and tune edits, end to end", () => {
+    test("renames a hymn and a tune, keeping what Planning Center titles still match, and edits their other names", () => {
+        // The mirror has "Abba, Father (PRITCHARD)", which matches the hymn's
+        // old title and names the tune's old name.
+        const { abbaFather, tunes, songs } = seed();
+        expect(
+            editCatalogHymn({ hymnId: abbaFather, title: "Abba Father", firstLine: "Abba, Father, we approach Thee", notes: null })
+        ).toEqual({ ok: true, hymnId: abbaFather, aliasKept: "Abba, Father", aliasDropped: null });
+        expect(
+            editCatalogTune({ tuneId: tunes.pritchard, name: "PRITCHARD TUNE", meter: "8.7.8.7.D", notes: null })
+        ).toMatchObject({ ok: true, aliasKept: "PRITCHARD" });
+        expect(addCatalogHymnAlias({ hymnId: abbaFather, alias: "Abba (Father)" })).toEqual({
+            ok: true,
+            alias: "Abba (Father)",
+        });
+        expect(removeCatalogHymnAlias({ hymnId: abbaFather, alias: "Father, We Adore You" })).toMatchObject({
+            ok: true,
+        });
+        expect(addCatalogTuneAlias({ tuneId: tunes.newBritain, alias: "PRICHARD" })).toMatchObject({
+            ok: false,
+            problems: [{ reason: "name-taken" }],
+        });
+        expect(removeCatalogTuneAlias({ tuneId: tunes.pritchard, alias: "prichard" })).toMatchObject({ ok: true });
+
+        const song = findCatalogSong(db, songs.abbaFatherPritchard);
+        expect(song?.hymn).toMatchObject({
+            title: "Abba Father",
+            firstLine: "Abba, Father, we approach Thee",
+            aliases: ["Abba (Father)", "Abba, Father"],
+        });
+        expect(song?.tune).toMatchObject({ name: "PRITCHARD TUNE", aliases: ["PRITCHARD"] });
+    });
+});
+
+describe("the merges, end to end", () => {
+    test("preview a hymn merge without writing, then merge, and do the same for tunes", () => {
+        const { abbaFather, tunes, songs } = seed();
+        const other = seedHymn(db, { title: "Father, We Love You" });
+        const otherSong = seedSong(db, { hymnId: other, tuneId: tunes.abbaFather });
+
+        const preview = previewCatalogHymnMerge(other, abbaFather);
+        expect(preview).toMatchObject({
+            ok: true,
+            preview: {
+                merges: [{ sourceSongId: otherSong, targetSongId: songs.abbaFather }],
+                aliasesAdded: ["Father, We Love You"],
+                refusals: [],
+            },
+        });
+        expect(getHymnOptions().map(({ title }) => title)).toContain("Father, We Love You");
+
+        expect(mergeCatalogHymns(other, abbaFather)).toMatchObject({ ok: true });
+        expect(getHymnOptions().map(({ title }) => title)).not.toContain("Father, We Love You");
+        expect(findCatalogSong(db, songs.abbaFather)?.hymn.aliases).toEqual([
+            "Father, We Adore You",
+            "Father, We Love You",
+        ]);
+
+        expect(previewCatalogTuneMerge(tunes.abbaFather, tunes.abbaFather)).toMatchObject({
+            ok: true,
+            preview: { refusals: [{ reason: "same" }] },
+        });
+        expect(mergeCatalogTunes(tunes.newBritain, tunes.pritchard)).toMatchObject({
+            ok: true,
+            preview: { moves: [{ songId: songs.amazingGrace }], aliasesAdded: ["NEW BRITAIN"] },
+        });
+        expect(getTuneOptions().map(({ name }) => name)).toEqual(["ABBA, FATHER", "PRITCHARD"]);
+    });
+});
+
+describe("the books, end to end", () => {
+    test("adds a book without numbers, edits it, reorders it, and refuses a code taken", () => {
+        seed();
+        const added = addCatalogBook({
+            code: "CB",
+            name: "Chorus Book",
+            shortName: "Chorus Book",
+            numbered: false,
+            labelFormat: "Chorus Book",
+        });
+        expect(added).toMatchObject({ ok: true, code: "CB" });
+        const bookId = added.ok ? added.bookId : 0;
+        expect(
+            addCatalogBook({ code: "r", name: "Another", shortName: "Another", numbered: true, labelFormat: "r-{n}" })
+        ).toMatchObject({ ok: false, problems: [{ reason: "code-taken" }] });
+
+        expect(
+            editCatalogBook({ bookId, name: "Chorus Book", shortName: "Choruses", labelFormat: null, active: true })
+        ).toEqual({ ok: true, bookId, code: "CB" });
+        expect(moveCatalogBook(bookId, "up")).toEqual({ ok: true, changed: true, sortOrder: 3 });
+        expect(getNewSongBooks().map(({ name }) => name)).toEqual([
+            "Rejoice Hymns",
+            "Great Hymns of the Faith",
+            "Chorus Book",
+        ]);
     });
 });

@@ -451,6 +451,63 @@ Decisions the orchestrator made where the plan was silent or inconsistent. They 
 
 **Settings.** New cards for credits (roles and their phrases) and email (recipients, subject template, and whether the transport is configured).
 
+### Phase 5 design (catalog editing and books)
+
+**Schema (`0006_marks.ts`).**
+- `song_marks`: `song_id` (FK, cascade), `mark` (`'to-learn'`, checked in TypeScript), `note`, `created_at`, with primary key `(song_id, mark)`.
+- Any book change the editing needs goes in the same migration.
+
+**Forms.** Every phase 5 form uses the `onSubmit` + `useState` pattern, as Settings' forms do. The song page renders cards that read Planning Center (for example the Add-to-plan picker), so revalidating it may wait on PCO (convention 15 as refined). Writes go through `lib/db/catalogEdit.ts` (named SQL, one `withTransaction` per action) and server-only `lib/queries/catalogEdit.ts`. Validation lives in `lib/catalog/validation.ts`.
+- **Entries** (song page, EntriesCard):
+  - add, edit and delete (delete is confirmed);
+  - a numbered book takes a number, or a location label such as the front cover;
+  - an unnumbered book places the entry by position (append; move up/down);
+  - variant note;
+  - taken numbers and duplicate plain entries are field errors that link to what exists.
+- **Hymn** (song page, HymnCard): edit the title, first line and notes; add or remove aliases (the normalized form must be unique across hymn aliases).
+- **Tune** (tune page): edit the name, meter and notes; add or remove aliases.
+- **Merge hymns** (from a song's HymnCard: "Merge this hymn into…", pick the target).
+  - `lib/catalog/merge.ts` (pure) plans it and the preview shows:
+    - every song that moves;
+    - songs that collide on the same tune (they merge: entries, marks and notes move; the target keeps its fields);
+    - conflicts that refuse the merge: two colliding songs linked to *different* PCO songs, or entries that would collide on a number.
+  - The source's title and aliases become aliases of the target, and the source hymn is deleted.
+  - One transaction; the result names everything that changed.
+- **Merge tunes** (tune page): the same, keyed by hymn.
+- **Books** (`/catalog/books`):
+  - add a book: code (`parseBookCode` plus the DB CHECK), name, short name, numbered or unnumbered, label format, defaulting to `CODE-{n}` or the short name;
+  - edit name, short name, label format and active; reorder (up/down `sort_order`).
+  - **Inactive** books stay browsable, but their entries are left out of schedule text, hymnal notes and the book filter.
+  - An unnumbered book (such as a "Chorus Book") lists its entries by position. On its book page they can be reordered, and new entries append.
+
+**Book CSV import** (`/catalog/import` → "Import a book from CSV").
+- Upload a file (at most 1 MB) for one book, chosen or created first.
+- Columns, with a header row:
+  - numbered book: `number,title,tune,variant`;
+  - unnumbered book: `position,title,tune,variant`.
+- `lib/csv.ts` gains an RFC 4180 **parser**. `lib/import/bookCsv.ts` (pure) plans each row against the catalog:
+  - the hymn by normalized title or alias, else new;
+  - the tune by normalized name or alias, else new;
+  - the song by (hymn, tune), else new.
+- The report blocks numbers duplicated in the file, numbers already taken in the book and blank titles, and lists ambiguous matches.
+- Stored as an `import_runs` row (`kind: "csv"`, `book_id`), previewed on the run page, then applied in one transaction or discarded. Today's seed runs keep rendering in the runs list.
+
+**JSON export** (Settings › Data › "Export catalog (JSON)").
+- A server action returns a deterministic JSON document (sorted keys and rows, stable ids, pretty-printed), so two exports diff cleanly in git. The browser downloads it as `catalog-YYYY-MM-DD.json` (Blob).
+- Contents: books, hymns with aliases, tunes with aliases, songs (with their PCO link), entries and marks.
+- There is no `scripts/export-catalog.ts`: the database lives on the server, and lib code needs Next's module resolution, so the download is the export.
+
+**"To learn" shelf.** The song page gets "Mark to learn" (with an optional note) and "Unmark". The catalog list gains `?mark=to-learn` and a count, and the CSV export includes the mark.
+
+**Plans list.**
+- An "Upcoming" section at the top: plans dated today or later, by the plan's calendar date against the server's today.
+- Below it, the past plans as today, plus "Jump to month": a select of the months that have plans, which moves `?page=` to the page holding that month's first date. Paging is unchanged, and it is all in the browser.
+
+**Removed in phase 5.**
+- The seed import: `lib/import/hymnsJson.ts`, `lib/import/hymnsJsonFile.ts`, `hymns.json`, the "Preview seed" action and its UI.
+- Past seed runs still render, so their report types and views stay.
+- A fresh database is then restored from a backup file (Database section), not seeded. The PR description must say to apply the seed in production **before** this phase deploys.
+
 **Agent rules** (every implementer brief):
 - Work only inside your phase's worktree (named in your brief), with absolute paths. Never touch `/Users/davidpolar/dev/service-integrator` (the main checkout).
 - Stay inside your listed file set. Commit with explicit paths (`git commit -m "…" -- <paths>`), retrying if `index.lock` is held, so agents sharing the tree never commit each other's files.

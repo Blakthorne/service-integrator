@@ -1,9 +1,9 @@
 import "server-only";
 import { parseCatalogId } from "@/lib/catalog/ids";
+import { BOOK_CSV_MAX_BYTES, cleanSourceName } from "@/lib/catalog/validation";
 import { getDb } from "@/lib/db";
-import { applyImportRun, findApplyRefusal } from "@/lib/db/catalogImport";
+import { applyImportRun, findApplyRefusal, previewBookCsvRun } from "@/lib/db/catalogImport";
 import {
-    createImportRun,
     discardImportRun,
     findImportRun,
     findImportRunLabel,
@@ -12,21 +12,20 @@ import {
     type ImportRunErrorReason,
 } from "@/lib/db/importRuns";
 import type { ImportCounts, ImportRunDetail, ImportRunSummary } from "@/lib/domain";
-import { planHymnsJsonImport } from "@/lib/import/hymnsJson";
-import { hymnsJsonRecords } from "@/lib/import/hymnsJsonFile";
 import { labelOr } from "./catalog";
 
 /**
- * The catalog's imports, for the Import pages and their actions: preview the
- * seed from hymns.json, review a run, apply or discard it. Synchronous, like
- * the database. Apply and discard return a refusal (a run already applied,
- * a catalog that already has books) rather than throwing, so an action can
- * show it; anything unexpected, such as a database that cannot be opened,
- * still throws.
+ * The catalog's imports, for the Import pages and their actions: preview a
+ * book's CSV file; review a run, the seed's or a file's; apply or discard it.
+ * Synchronous, like the database. A preview, apply and discard return a
+ * refusal (a file too large, a run already applied, a book file whose plan
+ * changed) rather than throwing, so an action can show it; anything
+ * unexpected, such as a database that cannot be opened, still throws.
+ *
+ * The seed from hymns.json is gone: it cannot be previewed any more. The runs
+ * it stored are still listed and reviewed from their stored report, and one
+ * that was never applied can still be, while the catalog is empty.
  */
-
-/** What the seed import reads. */
-export const SEED_SOURCE_NAME = "hymns.json";
 
 /** Why a run cannot be applied or discarded, with a message fit to show. */
 export interface ImportRunRefusal {
@@ -38,21 +37,38 @@ function refusalOf(reason: ImportRunErrorReason): ImportRunRefusal {
     return { reason, message: new ImportRunError(reason).message };
 }
 
+/** What previewing a book's CSV file did: the new run's id, or why there is none. */
+export type BookCsvPreviewResult =
+    | { ok: true; runId: number }
+    | { ok: false; reason: "too-large" | "book-not-found"; message: string };
+
 /**
- * Plan the seed import from hymns.json and store it as a preview, returning
- * the new run's id for its review page. Previewing always works; applying is
- * what refuses once the catalog has books.
+ * Plan importing a CSV file's text into book `bookId` and store it as a
+ * preview, returning the new run's id for its review page. The file's
+ * problems (not CSV, a header that does not fit, numbers taken, …) are in
+ * the run's report, and block applying it; only a file over
+ * `BOOK_CSV_MAX_BYTES` (as UTF-8) or a book that is not in the catalog is
+ * refused here, storing nothing. `sourceName`, the file's name, is cleaned
+ * (`cleanSourceName`).
  */
-export function previewSeedImport(): number {
-    const plan = planHymnsJsonImport(hymnsJsonRecords);
-    return createImportRun(getDb(), {
-        kind: "hymns-json",
-        sourceName: SEED_SOURCE_NAME,
-        ...plan,
-    });
+export function previewBookCsvImport(
+    { bookId, sourceName, text }: { bookId: number; sourceName: string; text: string },
+    at: Date = new Date()
+): BookCsvPreviewResult {
+    if (Buffer.byteLength(text, "utf8") > BOOK_CSV_MAX_BYTES) {
+        return {
+            ok: false,
+            reason: "too-large",
+            message: "The file is larger than 1 MB. A book's CSV file is much smaller: is it the right file?",
+        };
+    }
+    const runId = previewBookCsvRun(getDb(), { bookId, sourceName: cleanSourceName(sourceName), text }, at);
+    return runId === null
+        ? { ok: false, reason: "book-not-found", message: "That book is not in the catalog. Choose one from the list." }
+        : { ok: true, runId };
 }
 
-/** Every import run, newest first. */
+/** Every import run, newest first: the book files' and the seed's. */
 export function getCatalogImportRuns(): ImportRunSummary[] {
     return listImportRuns(getDb());
 }
@@ -80,17 +96,28 @@ export function getCatalogImportRun(runId: number): ImportRunReview | null {
 
 /** What applying a run did: the rows it added, or why it was refused. */
 export type ApplyCatalogImportResult =
-    | { ok: true; counts: ImportCounts }
+    | {
+          ok: true;
+          counts: ImportCounts;
+          /** The code of the book a book's file was imported into, to go to; null for the seed, which adds the books. */
+          bookCode: string | null;
+      }
     | ({ ok: false } & ImportRunRefusal);
 
 /**
  * Apply a previewed run: add every row it planned, in one transaction, and
- * mark it applied. Refused for a run that is not a preview, while the catalog
- * has books, or when its rows are damaged.
+ * mark it applied. Refused for a run that is not a preview, or whose rows
+ * are damaged; the seed while the catalog has books; a book's file when its
+ * report has problems, its book is gone, or the catalog has changed so that
+ * it would not add what the preview showed.
  */
 export function applyCatalogImport(runId: number): ApplyCatalogImportResult {
+    const db = getDb();
     try {
-        return { ok: true, counts: applyImportRun(getDb(), runId) };
+        const counts = applyImportRun(db, runId);
+        // Read once it is applied, so a run that is refused is never read for nothing.
+        const run = findImportRun(db, runId);
+        return { ok: true, counts, bookCode: run?.kind === "csv" ? run.report.book.code : null };
     } catch (error) {
         if (error instanceof ImportRunError) {
             return { ok: false, ...refusalOf(error.reason) };

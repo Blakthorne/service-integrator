@@ -12,8 +12,8 @@ interface ImportRunsListProps {
 }
 
 /**
- * The import runs: each with its status, what it read, when it was
- * previewed and what it adds. A row's name is a real link stretched over the
+ * The import runs, a book's CSV file's or the seed's: each with its status,
+ * what it read, when it was previewed and what it adds. A row's name is a real link stretched over the
  * row, so it works from the keyboard and with cmd-click.
  */
 export default function ImportRunsList({ runs }: ImportRunsListProps) {
@@ -26,7 +26,7 @@ export default function ImportRunsList({ runs }: ImportRunsListProps) {
                     No import runs yet
                 </h3>
                 <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    Preview the seed to create the first one.
+                    Preview a CSV file to create the first one.
                 </p>
             </div>
         );
