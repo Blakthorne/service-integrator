@@ -20,6 +20,7 @@ import {
     createSong,
     createSongItem,
     deleteItemNote,
+    reorderPlanItems,
     updateItemNote,
     updateSong,
     type NewPcoSong,
@@ -387,6 +388,79 @@ describe("assignSongTags", () => {
     });
 });
 
+describe("reorderPlanItems", () => {
+    const reorderUrl = `${PCO_BASE}/service_types/${ST}/plans/${PLAN}/item_reorder`;
+
+    test("POSTs a PlanItemReorder whose sequence is every id in the new order, and returns that order", async () => {
+        const fetchMock = stubFetchRoutes({ [`POST ${reorderUrl}`]: () => new Response(null, { status: 204 }) });
+
+        await expect(reorderPlanItems(ST, PLAN, ["903", "901", "902"])).resolves.toEqual({
+            planId: PLAN,
+            itemIds: ["903", "901", "902"],
+        });
+
+        expect(calledRequests(fetchMock)).toEqual([
+            {
+                method: "POST",
+                url: reorderUrl,
+                body: { data: { type: "PlanItemReorder", attributes: { sequence: ["903", "901", "902"] } } },
+            },
+        ]);
+        expect(fetchMock.mock.calls[0][1]).toMatchObject({
+            cache: "no-store",
+            headers: { Authorization: PCO_AUTH },
+        });
+    });
+
+    test("checks every id before it sends anything", async () => {
+        const fetchMock = stubFetchRoutes({});
+        for (const attempt of [
+            () => reorderPlanItems("x", PLAN, ["901"]),
+            () => reorderPlanItems(ST, "01", ["901"]),
+            () => reorderPlanItems(ST, PLAN, ["901", "../1"]),
+            () => reorderPlanItems(ST, PLAN, ["901", ""]),
+            () => reorderPlanItems(ST, PLAN, ["901", "1 "]),
+        ]) {
+            await expect(attempt()).rejects.toBeInstanceOf(InvalidPcoIdError);
+        }
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("sends nothing for no items, or an item named twice, which would not be an order", async () => {
+        const fetchMock = stubFetchRoutes({});
+        await expect(reorderPlanItems(ST, PLAN, [])).rejects.toThrow("No items to put in order");
+        await expect(reorderPlanItems(ST, PLAN, ["901", "902", "901"])).rejects.toThrow(
+            "An item is named twice in the new order"
+        );
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("throws PcoValidationError, with its reasons, for a 422", async () => {
+        stubFetchRoutes({
+            [`POST ${reorderUrl}`]: () =>
+                json(
+                    {
+                        errors: [
+                            { status: "422", title: "Validation Error", detail: "is invalid", source: { parameter: "sequence" } },
+                        ],
+                    },
+                    { status: 422 }
+                ),
+        });
+        const error = await reorderPlanItems(ST, PLAN, ["901"]).catch((thrown: unknown) => thrown);
+        expect(error).toBeInstanceOf(PcoValidationError);
+        expect(error).toMatchObject({ status: 422, details: ["sequence: is invalid"] });
+    });
+
+    test("throws a PcoError for any other failure, a missing plan's 404 included", async () => {
+        stubFetchRoutes({ [`POST ${reorderUrl}`]: () => json({ errors: [] }, { status: 404 }) });
+        await expect(reorderPlanItems(ST, PLAN, ["901"])).rejects.toMatchObject({
+            name: "PcoError",
+            status: 404,
+        });
+    });
+});
+
 describe("every write", () => {
     const writes = {
         create: (st: string, plan: string, item: string, other: string) =>
@@ -423,6 +497,8 @@ describe("every write", () => {
             [`POST ${PCO_BASE}/service_types/${ST}/plans/${PLAN}/items`]: () =>
                 json({ data: itemResource("950") }, { status: 201 }),
             [`POST ${songUrl}/assign_tags`]: () => new Response(null, { status: 204 }),
+            [`POST ${PCO_BASE}/service_types/${ST}/plans/${PLAN}/item_reorder`]: () =>
+                new Response(null, { status: 204 }),
         });
         await createItemNote(ST, PLAN, ITEM, CATEGORY, "R-1");
         await updateItemNote(ST, PLAN, ITEM, NOTE, "R-1");
@@ -431,6 +507,7 @@ describe("every write", () => {
         await updateSong(SONG, { title: "T" });
         await createSongItem(ST, PLAN, { songId: SONG, arrangementId: "5001", title: "T" });
         await assignSongTags(SONG, ["71"]);
+        await reorderPlanItems(ST, PLAN, ["901", "902"]);
         expect(acquire).not.toHaveBeenCalled();
     });
 

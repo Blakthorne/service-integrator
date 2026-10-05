@@ -50,6 +50,7 @@ export {
     createSong,
     createSongItem,
     deleteItemNote,
+    reorderPlanItems,
     updateItemNote,
     updateSong,
     type AssignedSongTags,
@@ -57,4 +58,5 @@ export {
     type NewPcoSong,
     type NewSongItem,
     type PcoSongChanges,
+    type ReorderedPlanItems,
 } from "./writes";
