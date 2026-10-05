@@ -316,6 +316,62 @@ export function countSongsSung(db: DatabaseSync, from: string, today: string): n
     return Number(row?.n);
 }
 
+/** A song's latest past occurrence: the plan it was last sung in. */
+export interface PastOccurrence {
+    pcoSongId: string;
+    planId: string;
+    serviceTypeId: string;
+    /** The plan's date, `YYYY-MM-DD`. */
+    planDate: string;
+}
+
+/** What `lastPastOccurrences` is asked for. */
+export interface PastOccurrencesRange {
+    /** The earliest plan date, inclusive. */
+    from: string;
+    /** Today: only plans dated before it are past. */
+    today: string;
+    /** A plan to leave out, such as the one being looked at. */
+    excludePlanId?: string;
+}
+
+/**
+ * Where each of these Planning Center songs was last sung: its latest past
+ * plan (dated from `from`, before `today`, not `excludePlanId`), by song id.
+ * A song in none has no entry. When two plans share the latest date, the one
+ * with the greater id is given. One query.
+ */
+export function lastPastOccurrences(
+    db: DatabaseSync,
+    pcoSongIds: readonly string[],
+    { from, today, excludePlanId = "" }: PastOccurrencesRange
+): Map<string, PastOccurrence> {
+    const latest = new Map<string, PastOccurrence>();
+    if (pcoSongIds.length === 0) {
+        return latest;
+    }
+    const rows = db
+        .prepare(
+            `SELECT pco_song_id, plan_id, service_type_id, plan_date FROM plan_occurrences
+             WHERE pco_song_id IN (SELECT value FROM json_each(?))
+               AND plan_date >= ? AND plan_date < ? AND plan_id <> ?
+             ORDER BY plan_date DESC, length(plan_id) DESC, plan_id DESC`
+        )
+        .all(JSON.stringify([...new Set(pcoSongIds)]), from, today, excludePlanId);
+    for (const row of rows) {
+        const pcoSongId = String(row.pco_song_id);
+        if (!latest.has(pcoSongId)) {
+            latest.set(pcoSongId, {
+                pcoSongId,
+                planId: String(row.plan_id),
+                serviceTypeId: String(row.service_type_id),
+                planDate: String(row.plan_date),
+            });
+        }
+    }
+    return latest;
+}
+
 /** How much the history holds. */
 export interface HistoryCounts {
     /** Plans listed. */

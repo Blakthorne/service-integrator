@@ -3,6 +3,7 @@ import { cache } from "react";
 import { getDb } from "@/lib/db";
 import { findCatalogMatches, listCatalogSongs } from "@/lib/db/catalog";
 import { errorMessage } from "@/lib/db/errors";
+import { lastPastOccurrences } from "@/lib/db/history";
 import { findPcoSongs } from "@/lib/db/pcoSongs";
 import type {
     CatalogMatch,
@@ -22,8 +23,9 @@ import {
     parsePcoId,
 } from "@/lib/pco";
 import { planLabel } from "@/lib/planLabel";
-import { groupPlansByDate, sortPlanDates } from "@/lib/plansByDate";
+import { groupPlansByDate, localYmd, sortPlanDates } from "@/lib/plansByDate";
 import { TOP_SUGGESTIONS, buildCatalogIndex, suggestLinks } from "@/lib/reconcile";
+import { repeatWarningFor, repeatWindowStart, type RepeatWarning } from "@/lib/repeatWarnings";
 import { planTextSettings, type PlanTextSettings } from "@/lib/settings";
 import { createTtlCache } from "@/lib/ttlCache";
 import { readAppWrittenNoteIds, readItemNoteCategories } from "./hymnNotes";
@@ -115,6 +117,17 @@ export interface PlanDetail extends PlanData {
      * categories or the catalog could not be read.
      */
     hymnNoteStatus: HymnNoteStatus;
+    /**
+     * The song items that repeat a song sung lately, by item id: the past
+     * plan (dated before today) its Planning Center song was last sung in,
+     * from the plan history, when that is within the `repeatWarningWeeks`
+     * setting's weeks before today, leaving out this plan itself. An item
+     * with no song, or whose song was not sung lately, has no entry, and
+     * none has when the warnings are off (0 weeks). When the history cannot
+     * be read it is logged and there are none: the plan's pages go on
+     * without the warnings.
+     */
+    repeatWarnings: Record<string, RepeatWarning>;
 }
 
 /**
@@ -229,11 +242,52 @@ function readPlanSelections(
 }
 
 /**
+ * The warnings for the song items of plan `planId` that repeat a song sung
+ * in the last `weeks` weeks (see `PlanDetail.repeatWarnings`), as of `now`.
+ * One query, and none for a plan without song items or with the warnings
+ * off. Never throws: a failure is logged and gives none.
+ */
+function readRepeatWarnings(
+    planId: string,
+    items: readonly PlanItemWithSong[],
+    weeks: number,
+    now: Date = new Date()
+): Record<string, RepeatWarning> {
+    const songItems = items.filter((item) => item.itemType === "song" && item.songId !== null);
+    if (weeks <= 0 || songItems.length === 0) {
+        return {};
+    }
+    try {
+        const today = localYmd(now);
+        const from = repeatWindowStart(today, weeks);
+        if (from === null) {
+            return {};
+        }
+        const latest = lastPastOccurrences(
+            getDb(),
+            songItems.flatMap((item) => (item.songId === null ? [] : [item.songId])),
+            { from, today, excludePlanId: planId }
+        );
+        const warnings: Record<string, RepeatWarning> = {};
+        for (const item of songItems) {
+            const sung = item.songId === null ? undefined : latest.get(item.songId);
+            if (sung !== undefined) {
+                warnings[item.id] = repeatWarningFor(sung, today);
+            }
+        }
+        return warnings;
+    } catch (error) {
+        console.error(`Failed to read the repeat warnings of plan ${planId}:`, error);
+        return {};
+    }
+}
+
+/**
  * Load a plan, its service type and its items, and the service type's item
  * note categories, in parallel (four requests); then find the songs'
- * catalog links and suggestions, the plan's saved choices, the settings and
- * which of its notes the app wrote in the database (at most ten queries),
- * and compare the hymnal notes. PCO
+ * catalog links and suggestions, the plan's saved choices, the settings,
+ * which of its notes the app wrote and which of its songs were sung lately
+ * in the database (at most eleven queries), and compare the hymnal notes. PCO
  * errors in the plan, its service type or its items pass through (wrap the
  * call in orNotFound to turn a missing plan into a 404). Nothing else does:
  * categories or a database that cannot be read leave the plan without what
@@ -266,6 +320,7 @@ export const getPlanDetail = cache(
                 settingsError,
                 ownedNoteIds: readAppWrittenNoteIds(items),
             }),
+            repeatWarnings: readRepeatWarnings(plan.id, items, settings.repeatWarningWeeks),
         };
     }
 );

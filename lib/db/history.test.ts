@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
     bookCoverage,
     countHistory,
@@ -8,6 +8,7 @@ import {
     deleteUnlistedPlans,
     listHistoryPlans,
     listOccurrences,
+    lastPastOccurrences,
     listSongOccurrences,
     replacePlanOccurrences,
     upsertListedPlans,
@@ -465,5 +466,75 @@ describe("countSongsSung", () => {
 
     test("is zero for a history never synced", () => {
         expect(countSongsSung(db, "2026-01-01", "2026-10-04")).toBe(0);
+    });
+});
+
+describe("lastPastOccurrences", () => {
+    const TODAY = "2026-10-04";
+    const FROM = "2026-08-23";
+
+    function sing(pcoSongId: string, planDate: string, planId?: string, serviceTypeId = MORNING): string {
+        const id = seedHistoryPlan(db, { planDate, serviceTypeId, ...(planId === undefined ? {} : { planId }) });
+        seedOccurrence(db, { planId: id, pcoSongId });
+        return id;
+    }
+
+    test("gives each song the latest past plan it was in, as a map by song id", () => {
+        sing("5001", "2026-09-06");
+        const latest = sing("5001", "2026-09-27", undefined, EVENING);
+        sing("5001", "2026-09-20");
+        const other = sing("5002", "2026-09-13");
+        sing("5003", "2026-01-01");
+
+        expect(lastPastOccurrences(db, ["5001", "5002", "5003", "5004"], { from: FROM, today: TODAY })).toEqual(
+            new Map([
+                ["5001", { pcoSongId: "5001", planId: latest, serviceTypeId: EVENING, planDate: "2026-09-27" }],
+                ["5002", { pcoSongId: "5002", planId: other, serviceTypeId: MORNING, planDate: "2026-09-13" }],
+            ])
+        );
+    });
+
+    test("leaves out a plan dated today or later, and one dated before the window, and counts the first day of it", () => {
+        sing("5001", "2026-10-04");
+        sing("5001", "2026-10-11");
+        sing("5002", "2026-08-22");
+        const onTheFirstDay = sing("5003", "2026-08-23");
+
+        const latest = lastPastOccurrences(db, ["5001", "5002", "5003"], { from: FROM, today: TODAY });
+        expect([...latest.keys()]).toEqual(["5003"]);
+        expect(latest.get("5003")?.planId).toBe(onTheFirstDay);
+    });
+
+    test("leaves out the plan it is asked to, and gives the one before it", () => {
+        const before = sing("5001", "2026-09-20");
+        const excluded = sing("5001", "2026-09-27");
+
+        expect(lastPastOccurrences(db, ["5001"], { from: FROM, today: TODAY }).get("5001")?.planId).toBe(excluded);
+        expect(
+            lastPastOccurrences(db, ["5001"], { from: FROM, today: TODAY, excludePlanId: excluded }).get("5001")?.planId
+        ).toBe(before);
+        expect(
+            lastPastOccurrences(db, ["5001"], { from: FROM, today: TODAY, excludePlanId: before }).get("5001")?.planId
+        ).toBe(excluded);
+    });
+
+    test("gives the plan with the greater id when two share the latest date, numerically", () => {
+        sing("5001", "2026-09-27", "99");
+        sing("5001", "2026-09-27", "100");
+        expect(lastPastOccurrences(db, ["5001"], { from: FROM, today: TODAY }).get("5001")?.planId).toBe("100");
+    });
+
+    test("gives a song in a plan twice once, and asks for no song at no cost", () => {
+        const planId = sing("5001", "2026-09-27");
+        seedOccurrence(db, { planId, pcoSongId: "5001" });
+        expect(lastPastOccurrences(db, ["5001", "5001"], { from: FROM, today: TODAY }).size).toBe(1);
+        expect(lastPastOccurrences(db, [], { from: FROM, today: TODAY }).size).toBe(0);
+    });
+
+    test("asks one query", () => {
+        sing("5001", "2026-09-27");
+        const prepare = vi.spyOn(db, "prepare");
+        lastPastOccurrences(db, ["5001", "5002"], { from: FROM, today: TODAY });
+        expect(prepare).toHaveBeenCalledTimes(1);
     });
 });
