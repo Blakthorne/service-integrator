@@ -177,7 +177,9 @@ describe("syncPlanHistory", () => {
             removed: 0,
             read: 6,
             weekly: 0,
+            failed: 0,
             occurrences: 9,
+            failures: [],
         });
 
         // The service types, each type's plans, then the items of each plan, the latest date first.
@@ -244,7 +246,9 @@ describe("syncPlanHistory", () => {
             removed: 0,
             read: 4,
             weekly: 0,
+            failed: 0,
             occurrences: 9,
+            failures: [],
         });
         // The older plans keep when they were read.
         expect(storedPlans().map(([id, , , readAt]) => [id, readAt])).toEqual([
@@ -539,20 +543,146 @@ describe("syncPlanHistory", () => {
                 removed: 0,
                 read: 0,
                 weekly: 0,
+                failed: 0,
                 occurrences: 0,
+                failures: [],
             });
         });
 
-        test("keeps what it read before a read failed, and the next sync reads the plans that are left, whether or not it reads the rest again", async () => {
-            stubPcoPacer();
-            const failing = stubFetchRoutes(
-                routes(church(), { [itemsUrl(MORNING, "398")]: () => json({ errors: [] }, { status: 500 }) })
+        /** Routes on which Planning Center answers 500 to the items of `plans`. */
+        const failItems = (plans: FakePlan[]) =>
+            Object.fromEntries(
+                plans.map(({ serviceType, id }) => [
+                    itemsUrl(serviceType, id),
+                    () => json({ errors: [] }, { status: 500 }),
+                ])
             );
 
-            await expect(syncPlanHistory(db, () => T0)).rejects.toMatchObject({ status: 500 });
+        test("goes on past a plan whose read failed, leaves it unread and names it, and the next sync reads it again", async () => {
+            stubPcoPacer();
+            const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+            const plans = church();
+            const failing = stubFetchRoutes(routes(plans, failItems(plans.filter(({ id }) => id === "200"))));
 
-            // 400 and 399 were read before the failure; 398 and everything after it were not.
-            expect(itemRequests(failing)).toEqual(["400", "399", "398"]);
+            const result = await syncPlanHistory(db, () => T0);
+
+            // 200 failed, and 100, older than it, was read all the same.
+            expect(itemRequests(failing)).toEqual(["400", "399", "398", "397", "200", "100"]);
+            expect(result).toEqual({
+                plans: 6,
+                added: 6,
+                changed: 0,
+                removed: 0,
+                read: 5,
+                weekly: 0,
+                failed: 1,
+                occurrences: 8,
+                failures: [{ planId: "200", message: expect.stringContaining("status: 500") }],
+            });
+            expect(consoleError).toHaveBeenCalledTimes(1);
+            expect(storedPlans().map(([id, , , readAt]) => [id, readAt])).toEqual([
+                ["100", T0.toISOString()],
+                ["200", null],
+                ["397", T0.toISOString()],
+                ["398", T0.toISOString()],
+                ["399", T0.toISOString()],
+                ["400", T0.toISOString()],
+            ]);
+            expect(songsOf("200")).toEqual([]);
+
+            // Unread, it is read again, with the recent plans; 100, read an hour ago, is not.
+            const fetchMock = stubFetchRoutes(routes(plans));
+            const next = await syncPlanHistory(db, () => after(HOUR_MS));
+
+            expect(itemRequests(fetchMock)).toEqual(["400", "399", "398", "397", "200"]);
+            expect(next).toMatchObject({ read: 5, failed: 0, failures: [], occurrences: 9 });
+            expect(songsOf("200")).toHaveLength(1);
+        });
+
+        test("keeps what an earlier sync read of a plan whose read fails now", async () => {
+            stubPcoPacer();
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const plans = church();
+            stubFetchRoutes(routes(plans));
+            await syncPlanHistory(db, () => T0);
+
+            // 398 is recent, so it is read again, and fails.
+            stubFetchRoutes(routes(plans, failItems(plans.filter(({ id }) => id === "398"))));
+            const result = await syncPlanHistory(db, () => after(HOUR_MS));
+
+            expect(result).toMatchObject({ read: 3, failed: 1, occurrences: 9 });
+            expect(songsOf("398")).toHaveLength(3);
+            expect(storedPlans().find(([id]) => id === "398")?.[3]).toBe(T0.toISOString());
+        });
+
+        test("fails when every plan it chose failed, after trying them all, and keeps what the listing found", async () => {
+            stubPcoPacer();
+            const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+            const plans = church();
+            const fetchMock = stubFetchRoutes(routes(plans, failItems(plans)));
+
+            await expect(syncPlanHistory(db, () => T0)).rejects.toThrow(
+                /^Could not read the 6 plans that needed reading \(first: plan 400: .*status: 500/
+            );
+
+            expect(itemRequests(fetchMock)).toEqual(["400", "399", "398", "397", "200", "100"]);
+            expect(consoleError).toHaveBeenCalledTimes(6);
+            expect(storedPlans().map(([id, , , readAt]) => [id, readAt])).toEqual([
+                ["100", null],
+                ["200", null],
+                ["397", null],
+                ["398", null],
+                ["399", null],
+                ["400", null],
+            ]);
+            expect(countHistory(db).occurrences).toBe(0);
+        });
+
+        test("fails when the only plan it chose failed", async () => {
+            stubPcoPacer();
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const plans = church().slice(0, 1);
+            stubFetchRoutes(routes(plans, failItems(plans)));
+
+            await expect(syncPlanHistory(db, () => T0)).rejects.toThrow(
+                /^Could not read the 1 plan that needed reading \(plan 400: .*status: 500/
+            );
+        });
+
+        test("does not count a plan found deleted as failed, so the sync does not fail when the only other plan it chose did", async () => {
+            stubPcoPacer();
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const plans = church().slice(0, 2);
+            stubFetchRoutes(
+                routes(plans, {
+                    ...failItems(plans.filter(({ id }) => id === "399")),
+                    [itemsUrl(MORNING, "400")]: () => json({ errors: [] }, { status: 404 }),
+                })
+            );
+
+            await expect(syncPlanHistory(db, () => T0)).resolves.toMatchObject({
+                read: 0,
+                removed: 1,
+                failed: 1,
+                failures: [{ planId: "399" }],
+            });
+            expect(storedPlans().map(([id]) => id)).toEqual(["399"]);
+        });
+
+        test("stops at a 429 the pacer gave up on, since the plans after it would be refused too, keeping what it read before", async () => {
+            stubPcoPacer();
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            const fetchMock = stubFetchRoutes(
+                routes(church(), {
+                    // Longer than a paced request waits, so the client gives up on it at once.
+                    [itemsUrl(MORNING, "398")]: () =>
+                        json({ errors: [] }, { status: 429, headers: { "Retry-After": "120" } }),
+                })
+            );
+
+            await expect(syncPlanHistory(db, () => T0)).rejects.toMatchObject({ status: 429 });
+
+            expect(itemRequests(fetchMock)).toEqual(["400", "399", "398"]);
             expect(storedPlans().map(([id, , , readAt]) => [id, readAt])).toEqual([
                 ["100", null],
                 ["200", null],
@@ -561,16 +691,16 @@ describe("syncPlanHistory", () => {
                 ["399", T0.toISOString()],
                 ["400", T0.toISOString()],
             ]);
-            expect(songsOf("399")).toHaveLength(2);
-            expect(songsOf("398")).toEqual([]);
+        });
 
+        test("stops at a failed write to the database, which is not a plan's failure", async () => {
+            stubPcoPacer();
             const fetchMock = stubFetchRoutes(routes(church()));
-            const counts = await syncPlanHistory(db, () => after(HOUR_MS));
+            db.exec("CREATE TRIGGER no_songs BEFORE INSERT ON plan_occurrences BEGIN SELECT RAISE(ABORT, 'disk is full'); END");
 
-            // The plans never read are read; the two read already are recent, so they are read again.
-            expect(itemRequests(fetchMock).sort()).toEqual(["100", "200", "397", "398", "399", "400"]);
-            expect(counts).toMatchObject({ added: 0, read: 6, occurrences: 9 });
-            expect(songsOf("398")).toHaveLength(3);
+            await expect(syncPlanHistory(db, () => T0)).rejects.toThrow("disk is full");
+
+            expect(itemRequests(fetchMock)).toEqual(["400"]);
         });
     });
 
@@ -603,6 +733,7 @@ describe("describePlanHistorySync", () => {
         removed: 0,
         read: 21,
         weekly: 0,
+        failed: 0,
         occurrences: 1386,
     };
 
@@ -624,6 +755,27 @@ describe("describePlanHistorySync", () => {
         );
         expect(describePlanHistorySync({ ...counts, plans: 0, read: 0, occurrences: 0 })).toBe(
             "Synced 0 plans (0 song items): nothing needed reading"
+        );
+    });
+
+    test("says how many plans failed, last, and names the first with its message", () => {
+        const failure = { planId: "398", message: "Planning Center API responded with status: 500" };
+        expect(describePlanHistorySync({ ...counts, removed: 1, failed: 1 }, [failure])).toBe(
+            "Synced 216 plans (1386 song items): read 21 plans, 1 removed, 1 failed (plan 398: Planning Center API responded with status: 500)"
+        );
+        expect(
+            describePlanHistorySync({ ...counts, failed: 2 }, [failure, { planId: "397", message: "timed out" }])
+        ).toBe(
+            "Synced 216 plans (1386 song items): read 21 plans, 2 failed (first: plan 398: Planning Center API responded with status: 500)"
+        );
+        expect(describePlanHistorySync({ ...counts, failed: 2 })).toBe(
+            "Synced 216 plans (1386 song items): read 21 plans, 2 failed"
+        );
+    });
+
+    test("does not say that nothing needed reading when the plans that did all failed or were deleted", () => {
+        expect(describePlanHistorySync({ ...counts, read: 0, removed: 1, failed: 1 })).toBe(
+            "Synced 216 plans (1386 song items): read 0 plans, 1 removed, 1 failed"
         );
     });
 });

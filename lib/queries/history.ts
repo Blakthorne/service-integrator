@@ -1,6 +1,7 @@
 import "server-only";
 import type { DatabaseSync } from "node:sqlite";
 import { withTransaction } from "@/lib/db";
+import { errorMessage } from "@/lib/db/errors";
 import {
     countHistory,
     deleteHistoryPlan,
@@ -38,9 +39,24 @@ export type PlanHistorySyncCounts = {
     read: number;
     /** Of those, plans read only because it was a week since the last reading of their items. */
     weekly: number;
+    /** Plans whose items could not be read: left as they were, so the next sync tries them again. */
+    failed: number;
     /** Song items the history holds in all its plans, after the sync. */
     occurrences: number;
 };
+
+/** A plan whose items could not be read. */
+export type PlanReadFailure = {
+    planId: string;
+    /** What went wrong, in the error's words. */
+    message: string;
+};
+
+/**
+ * What `syncPlanHistory` gives: its counts, which the run records, and the
+ * plans that failed (`failed` counts them), which the run's message names.
+ */
+export type PlanHistorySyncResult = PlanHistorySyncCounts & { failures: PlanReadFailure[] };
 
 /** The song items of a plan as the history keeps them. */
 function occurrencesOf(
@@ -66,6 +82,14 @@ async function readSongItems(plan: Pick<HistoryPlan, "serviceTypeId" | "planId">
 }
 
 /**
+ * A 429 that the client gave up on, after the retries a paced request is
+ * allowed: Planning Center is refusing, and so it would the plans after this one.
+ */
+function isRateLimited(error: unknown): boolean {
+    return error instanceof PcoError && error.status === 429;
+}
+
+/**
  * Mirror the songs of Planning Center's plans: the work of the `history` job
  * (lib/jobs.ts), daily, at boot when it never ran, and on demand.
  *
@@ -87,11 +111,15 @@ async function readSongItems(plan: Pick<HistoryPlan, "serviceTypeId" | "planId">
  * the whole run, so it never reads a plan twice for want of a record, and
  * one that fails part-way picks up where it stopped.
  * Each plan's songs replace what it held in a transaction of their own,
- * right after its read, so a sync that fails part-way keeps what it did,
- * and a plan whose read failed is still unread and is tried again by the
- * next. A read that fails stops the sync with its error, except a 404
- * (Planning Center deleted the plan since the listing), which drops the
- * plan.
+ * right after its read, so a sync that fails part-way keeps what it did.
+ * A plan whose read fails is counted (`failed`), named with its message
+ * (`failures`), logged and left as it was, so it is still due and the next
+ * sync tries it again, and the sync goes on to the rest: one plan that keeps
+ * failing never keeps the older ones unread. Only when every plan it chose
+ * failed does the sync throw, and so record a failed run. Two reads are not
+ * a plan's failure: a 404 (Planning Center deleted the plan since the
+ * listing) drops the plan, and a 429 that the pacer gave up on stops the
+ * sync with its error, since the plans after it would be refused too.
  *
  * `now` says when it starts and, with the church's calendar date it gives,
  * which plans are recent.
@@ -99,7 +127,7 @@ async function readSongItems(plan: Pick<HistoryPlan, "serviceTypeId" | "planId">
 export async function syncPlanHistory(
     db: DatabaseSync,
     now: () => Date = () => new Date()
-): Promise<PlanHistorySyncCounts> {
+): Promise<PlanHistorySyncResult> {
     const startedAt = now();
     const today = localYmd(startedAt);
     const listing = await fetchAllPlans({ paced: true });
@@ -130,11 +158,23 @@ export async function syncPlanHistory(
         return { added: added.length, changed: changed.length, removed: removed.length };
     });
 
+    const chosen = choosePlansToRead(listHistoryPlans(db), startedAt, today);
     let { removed } = stored;
     let read = 0;
     let weekly = 0;
-    for (const { plan, reason } of choosePlansToRead(listHistoryPlans(db), startedAt, today)) {
-        const items = await readSongItems(plan);
+    const failures: PlanReadFailure[] = [];
+    for (const { plan, reason } of chosen) {
+        let items: Awaited<ReturnType<typeof readSongItems>>;
+        try {
+            items = await readSongItems(plan);
+        } catch (error) {
+            if (isRateLimited(error)) {
+                throw error;
+            }
+            console.error(`Failed to read the items of plan ${plan.planId} for the history:`, error);
+            failures.push({ planId: plan.planId, message: errorMessage(error) });
+            continue;
+        }
         if (items === null) {
             if (deleteHistoryPlan(db, plan.planId)) {
                 removed += 1;
@@ -147,6 +187,11 @@ export async function syncPlanHistory(
             weekly += 1;
         }
     }
+    if (failures.length > 0 && failures.length === chosen.length) {
+        throw new Error(
+            `Could not read the ${counted(failures.length, "plan", "plans")} that needed reading (${describeFailures(failures)})`
+        );
+    }
     return {
         plans: listed.length,
         added: stored.added,
@@ -154,7 +199,9 @@ export async function syncPlanHistory(
         removed,
         read,
         weekly,
+        failed: failures.length,
         occurrences: countHistory(db).occurrences,
+        failures,
     };
 }
 
@@ -163,27 +210,34 @@ function counted(count: number, singular: string, plural: string): string {
     return `${count} ${count === 1 ? singular : plural}`;
 }
 
+/** The first failed plan in words, "plan 398: Planning Center API responded with status: 500 (…)", led by "first: " when others failed too. */
+function describeFailures(failures: readonly PlanReadFailure[]): string {
+    const [first] = failures;
+    return `${failures.length > 1 ? "first: " : ""}plan ${first.planId}: ${first.message}`;
+}
+
 /**
  * A sync's counts in words, for its run's message: "Synced 216 plans (1386
  * song items): read 21 plans (4 in the weekly pass), 2 added, 1 changed, 1
  * removed", leaving out what did not happen, or "…: nothing needed reading".
+ * Plans that failed come last, with the first one's message when
+ * `failures` has them: "…, 2 failed (first: plan 398: Planning Center API
+ * responded with status: 500 (…))".
  */
-export function describePlanHistorySync({
-    plans,
-    added,
-    changed,
-    removed,
-    read,
-    weekly,
-    occurrences,
-}: PlanHistorySyncCounts): string {
+export function describePlanHistorySync(
+    { plans, added, changed, removed, read, weekly, failed, occurrences }: PlanHistorySyncCounts,
+    failures: readonly PlanReadFailure[] = []
+): string {
     const parts = [
-        read === 0
+        read === 0 && failed === 0
             ? "nothing needed reading"
             : `read ${counted(read, "plan", "plans")}${weekly > 0 ? ` (${weekly} in the weekly pass)` : ""}`,
         ...(added > 0 ? [`${added} added`] : []),
         ...(changed > 0 ? [`${changed} changed`] : []),
         ...(removed > 0 ? [`${removed} removed`] : []),
+        ...(failed > 0
+            ? [`${failed} failed${failures.length > 0 ? ` (${describeFailures(failures)})` : ""}`]
+            : []),
     ];
     return `Synced ${counted(plans, "plan", "plans")} (${counted(occurrences, "song item", "song items")}): ${parts.join(", ")}`;
 }

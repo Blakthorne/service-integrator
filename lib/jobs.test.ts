@@ -532,6 +532,36 @@ describe("historyJob", () => {
         expect(db.prepare("SELECT pco_song_id FROM plan_occurrences").all()).toEqual([{ pco_song_id: "77" }]);
     });
 
+    test("records a plan it could not read without failing the run, and names it", async () => {
+        stubPcoCredentials();
+        stubPcoPacer();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        stubFetchRoutes({
+            [SERVICE_TYPES]: listPage([serviceTypeResource({}, "1405391")]),
+            [PLANS]: listPage([
+                planResource({ id: "501" }, { sort_date: "2026-09-27T08:00:00Z" }),
+                planResource({ id: "502" }, { sort_date: "2026-09-20T08:00:00Z" }),
+            ]),
+            [ITEMS]: () => json({ errors: [] }, { status: 500 }),
+            [`${PCO_BASE}/service_types/1405391/plans/502/items?include=song&per_page=100`]: listPage([
+                itemResource("1", { title: "Amazing Grace", sequence: 1 }, { song: { data: { type: "Song", id: "77" } } }),
+            ]),
+        });
+
+        await runJob(historyJob, openDb);
+
+        const run = latestSyncRun(db, "history");
+        expect(run).toMatchObject({
+            ok: true,
+            message: expect.stringMatching(
+                /^Synced 2 plans \(1 song item\): read 1 plan, 2 added, 1 failed \(plan 501: .*status: 500/
+            ),
+            counts: { plans: 2, added: 2, read: 1, failed: 1, occurrences: 1 },
+        });
+        // The counts are numbers only: which plans failed is in the message.
+        expect(Object.values(run?.counts ?? {}).every((count) => typeof count === "number")).toBe(true);
+    });
+
     test("runs at boot only when it never ran, then is checked hourly", async () => {
         vi.useFakeTimers();
         const fetchMock = stubPlanning();

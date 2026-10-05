@@ -119,7 +119,10 @@ export const tagsJob: Job = {
  * succeed (it failed, or a restart interrupted it), or when its last
  * success is a day old (`isHistorySyncDue`), so a restart (every deploy is
  * one) never stretches the gap much past a day. "Sync history now" runs it
- * on demand through `runJob`.
+ * on demand through `runJob`. A plan it cannot read does not fail the run:
+ * the plan is counted and named in the message, and the next run tries it
+ * again. The run fails when the listing does, or when every plan it chose
+ * to read failed.
  */
 export const historyJob: Job = {
     kind: "history",
@@ -127,8 +130,8 @@ export const historyJob: Job = {
     atBoot: true,
     isDue: (db, now) => isHistorySyncDue(latestSyncRun(db, "history"), now),
     run: async (db) => {
-        const counts = await syncPlanHistory(db);
-        return { message: describePlanHistorySync(counts), counts };
+        const { failures, ...counts } = await syncPlanHistory(db);
+        return { message: describePlanHistorySync(counts, failures), counts };
     },
 };
 
