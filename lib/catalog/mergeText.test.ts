@@ -3,6 +3,7 @@ import type { MergePreview } from "./merge";
 import {
     canMerge,
     describeMergeDone,
+    hymnMergeLanding,
     joinWords,
     mergeDestinationSong,
     mergeHeading,
@@ -10,6 +11,7 @@ import {
     mergeRefusalLines,
     mergeSections,
     mergeWarning,
+    tuneMergeLanding,
 } from "./mergeText";
 
 /** "Rejoice - the Lord Is King" into "Rejoice, the Lord Is King": one song moves, one merges. */
@@ -263,5 +265,43 @@ describe("mergeDestinationSong", () => {
         expect(mergeDestinationSong(hymnPreview(), 999)).toBe(102);
         expect(mergeDestinationSong(hymnPreview({ moves: [] }), 999)).toBe(201);
         expect(mergeDestinationSong(hymnPreview({ moves: [], merges: [] }), 999)).toBeNull();
+    });
+});
+
+describe("where a merge that is done lands", () => {
+    test("a hymn's merge opens the page of the song the page's song is now, which says what was merged", () => {
+        expect(hymnMergeLanding(hymnPreview(), 102)).toEqual({
+            href: "/catalog/songs/102",
+            notice: { kind: "song", id: 102 },
+        });
+        expect(hymnMergeLanding(hymnPreview(), 101)).toEqual({
+            href: "/catalog/songs/201",
+            notice: { kind: "song", id: 201 },
+        });
+    });
+
+    test("goes by what the merge did, not by the preview it was confirmed from", () => {
+        // The preview had song 101 merging into 201; planned again, the merge moved it instead.
+        const previewed = hymnPreview();
+        const done = hymnPreview({
+            moves: [{ songId: 101, from: "A (DARWALL)", to: "B (DARWALL)", entries: [] }],
+            merges: [],
+        });
+        expect(hymnMergeLanding(previewed, 101).href).toBe("/catalog/songs/201");
+        expect(hymnMergeLanding(done, 101)).toEqual({ href: "/catalog/songs/101", notice: { kind: "song", id: 101 } });
+    });
+
+    test("a hymn with no song to go to opens the catalog, which has no notice", () => {
+        expect(hymnMergeLanding(hymnPreview({ moves: [], merges: [] }), 999)).toEqual({
+            href: "/catalog",
+            notice: null,
+        });
+    });
+
+    test("a tune's merge opens the target tune's page, which says what was merged", () => {
+        expect(tuneMergeLanding(tunePreview())).toEqual({
+            href: "/catalog/tunes/11",
+            notice: { kind: "tune", id: 11 },
+        });
     });
 });

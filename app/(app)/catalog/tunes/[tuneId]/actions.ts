@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { RedirectType, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import {
     STALE_PAGE_MESSAGE,
@@ -71,10 +70,16 @@ export type TuneMergePreviewState = { ok: true; preview: MergePreview } | { ok: 
 
 /**
  * What the merge gives back when it does not merge: why, with the plan
- * whose refusals say so when it was refused as it was written. A merge
- * that is done lands on the target tune's page instead.
+ * whose refusals say so when it was refused as it was written.
  */
 export type TuneMergeRefusalState = { ok: false; message: string; preview: MergePreview | null };
+
+/**
+ * What the merge gives back: what it did, which is the plan it carried out,
+ * planned again where it wrote and so not always the preview that was
+ * confirmed; or why it did not merge.
+ */
+export type TuneMergeState = { ok: true; preview: MergePreview } | TuneMergeRefusalState;
 
 /**
  * A server action is a public POST endpoint, so each one checks the session
@@ -250,10 +255,12 @@ export async function previewTuneMergeAction(formData: FormData): Promise<TuneMe
  * Merge, once the dialog has confirmed it: merge the posted tune into the
  * one chosen (`mergeCatalogTunes`, planned afresh and written in one
  * transaction). Then every page that shows the catalog is revalidated, and
- * the page, whose tune is gone, is replaced by the target tune's page. A
- * merge refused as it is written comes back with its plan.
+ * what the merge did comes back: its notice says that, not what the preview
+ * showed. The panel then replaces the page, whose tune is gone, with the
+ * target tune's (`tuneMergeLanding`). A merge refused as it is written
+ * comes back with its plan.
  */
-export async function mergeTunesAction(formData: FormData): Promise<TuneMergeRefusalState> {
+export async function mergeTunesAction(formData: FormData): Promise<TuneMergeState> {
     await requireSession();
     const checked = validateMerge(formData, "tune");
     if (!checked.ok) {
@@ -273,6 +280,5 @@ export async function mergeTunesAction(formData: FormData): Promise<TuneMergeRef
             : { ok: false, message: result.message, preview: null };
     }
     revalidateTuneEdits();
-    // redirect() throws, so it stays outside every try block.
-    redirect(routes.catalogTune(result.preview.target.id), RedirectType.replace);
+    return { ok: true, preview: result.preview };
 }

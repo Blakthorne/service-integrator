@@ -4,9 +4,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
     auth: vi.fn(),
     revalidatePath: vi.fn(),
-    redirect: vi.fn((url: string) => {
-        throw new Error(`NEXT_REDIRECT ${url}`);
-    }),
     editCatalogTune: vi.fn(),
     addCatalogTuneAlias: vi.fn(),
     removeCatalogTuneAlias: vi.fn(),
@@ -16,10 +13,6 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/auth", () => ({ auth: mocks.auth }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock("next/navigation", () => ({
-    redirect: mocks.redirect,
-    RedirectType: { push: "push", replace: "replace" },
-}));
 vi.mock("@/lib/queries/catalogEdit", () => ({
     editCatalogTune: mocks.editCatalogTune,
     addCatalogTuneAlias: mocks.addCatalogTuneAlias,
@@ -226,14 +219,16 @@ describe("previewTuneMergeAction", () => {
 });
 
 describe("mergeTunesAction", () => {
-    test("merges, revalidates, and replaces the page with the target tune's", async () => {
-        mocks.mergeCatalogTunes.mockReturnValue({ ok: true, preview: preview() });
-        await expect(mergeTunesAction(form({ sourceId: "10", targetId: "11" }))).rejects.toThrow(
-            "NEXT_REDIRECT /catalog/tunes/11"
-        );
+    test("merges, revalidates, and gives back what the merge did, which the preview may not have shown", async () => {
+        // The catalog changed after the preview, so the merge planned again moved another song.
+        const done = preview({
+            moves: [{ songId: 303, from: "B (DARWAL)", to: "B (DARWALL)", entries: ["R-43"] }],
+        });
+        mocks.mergeCatalogTunes.mockReturnValue({ ok: true, preview: done });
+        expect(await mergeTunesAction(form({ sourceId: "10", targetId: "11" }))).toEqual({ ok: true, preview: done });
         expect(mocks.mergeCatalogTunes).toHaveBeenCalledWith(10, 11);
+        expect(mocks.previewCatalogTuneMerge).not.toHaveBeenCalled();
         expectTuneEditsRevalidated();
-        expect(mocks.redirect).toHaveBeenCalledWith("/catalog/tunes/11", "replace");
     });
 
     test("gives back a refused merge with its plan, a tune that is gone, and a failure", async () => {
@@ -266,6 +261,5 @@ describe("mergeTunesAction", () => {
         });
         expect(console.error).toHaveBeenCalledOnce();
         expect(mocks.revalidatePath).not.toHaveBeenCalled();
-        expect(mocks.redirect).not.toHaveBeenCalled();
     });
 });

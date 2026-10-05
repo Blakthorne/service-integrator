@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { RedirectType, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import {
     STALE_PAGE_MESSAGE,
@@ -16,7 +15,7 @@ import {
 } from "@/lib/catalog/editForms";
 import { twinEntry, twinEntryLink } from "@/lib/catalog/entryEditor";
 import { parseCatalogId } from "@/lib/catalog/ids";
-import { MERGE_REFUSED_NOW_MESSAGE, mergeDestinationSong } from "@/lib/catalog/mergeText";
+import { MERGE_REFUSED_NOW_MESSAGE } from "@/lib/catalog/mergeText";
 import type { HymnOption } from "@/lib/catalog/pickers";
 import {
     ENTRY_FIELDS,
@@ -512,10 +511,16 @@ export type MergePreviewState = { ok: true; preview: MergePreview } | { ok: fals
 
 /**
  * What the merge gives back when it does not merge: why, with the plan
- * whose refusals say so when it was refused as it was written. A merge
- * that is done never gives anything back: it lands on the song's page.
+ * whose refusals say so when it was refused as it was written.
  */
 export type MergeRefusalState = { ok: false; message: string; preview: MergePreview | null };
+
+/**
+ * What the merge gives back: what it did, which is the plan it carried out,
+ * planned again where it wrote and so not always the preview that was
+ * confirmed; or why it did not merge.
+ */
+export type MergeState = { ok: true; preview: MergePreview } | MergeRefusalState;
 
 const HYMN_OPTIONS_FAILURE_MESSAGE =
     "The hymns could not be read. Try again; the server log has the details.";
@@ -568,21 +573,16 @@ export async function previewHymnMergeAction(formData: FormData): Promise<MergeP
  * Merge, once the dialog has confirmed it: merge the posted hymn into the
  * one chosen (`mergeCatalogHymns`, which plans afresh and writes it all in
  * one transaction). Then every page that shows the catalog is revalidated,
- * and the page is replaced by the page of the song this page's song
- * (`songId`) is now (`mergeDestinationSong`): itself when it moved, the
- * target's song when it merged into it. The page it was on may be gone,
- * hence the redirect, which renders the page landed on and not the one
- * left. A merge refused as it is written comes back with its plan.
+ * and what the merge did comes back: its notice says that, not what the
+ * preview showed. The panel then replaces the page, which may be gone, with
+ * the song this page's song is now (`hymnMergeLanding`). A merge refused as
+ * it is written comes back with its plan.
  */
-export async function mergeHymnsAction(formData: FormData): Promise<MergeRefusalState> {
+export async function mergeHymnsAction(formData: FormData): Promise<MergeState> {
     await requireSession();
     const checked = validateMerge(formData, "hymn");
-    const songId = readId(formData, "songId", parseCatalogId);
     if (!checked.ok) {
         return { ok: false, message: mergeFormMessage(checked.fieldErrors), preview: null };
-    }
-    if (songId === null) {
-        return { ok: false, message: STALE_PAGE_MESSAGE, preview: null };
     }
     const { sourceId, targetId } = checked.input;
     let result: MergeApplyResult;
@@ -598,7 +598,5 @@ export async function mergeHymnsAction(formData: FormData): Promise<MergeRefusal
             : { ok: false, message: result.message, preview: null };
     }
     revalidateCatalogEdits();
-    const destination = mergeDestinationSong(result.preview, songId);
-    // redirect() throws, so it stays outside every try block.
-    redirect(destination === null ? routes.catalog() : routes.catalogSong(destination), RedirectType.replace);
+    return { ok: true, preview: result.preview };
 }

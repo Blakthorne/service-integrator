@@ -9,6 +9,7 @@ import {
     previewTuneMergeAction,
     removeTuneAliasAction,
 } from "@/app/(app)/catalog/tunes/[tuneId]/actions";
+import { tuneMergeLanding } from "@/lib/catalog/mergeText";
 import { describeTuneOption, searchTuneOptions, type TuneOption } from "@/lib/catalog/pickers";
 import { METER_MAX_LENGTH, NOTES_MAX_LENGTH, TUNE_NAME_MAX_LENGTH } from "@/lib/catalog/validation";
 import type { TuneWithAliases } from "@/lib/domain";
@@ -101,7 +102,7 @@ export default function TuneDetailsCard({ tune }: TuneDetailsCardProps) {
                         <MergePanel<TuneOption>
                             kind="tune"
                             source={{ id: tune.id, name: tune.name }}
-                            landingKey={(preview) => mergeNoticeKey("tune", preview.target.id)}
+                            landing={tuneMergeLanding}
                             loadOptions={listTuneOptionsAction}
                             previewMerge={previewTuneMergeAction}
                             merge={mergeTunesAction}

@@ -1,6 +1,6 @@
 "use client";
 
-import { unstable_rethrow } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import Dialog from "@/app/components/ui/Dialog";
 import { buttonClasses } from "@/app/components/ui/buttonClasses";
@@ -14,13 +14,14 @@ import {
     mergeRefusalLines,
     mergeSections,
     mergeWarning,
+    type MergeLanding,
 } from "@/lib/catalog/mergeText";
 import type { PickerMatches } from "@/lib/catalog/pickers";
 import { formStateKey } from "@/lib/forms";
 import ChoiceFromList from "../SongForm/ChoiceFromList";
 import { HINT_CLASS } from "../SongForm/Fields";
 import { ALERT_BOX_CLASS, StatusLine } from "./EditFields";
-import { leaveMergeNotice, takeMergeNotice } from "./mergeNotice";
+import { leaveMergeNotice, mergeNoticeKey } from "./mergeNotice";
 
 /** What reading the options gives back. */
 type OptionsResult<T> = { ok: true; options: T[] } | { ok: false; message: string };
@@ -28,21 +29,14 @@ type OptionsResult<T> = { ok: true; options: T[] } | { ok: false; message: strin
 /** What the preview gives back. */
 type PreviewResult = { ok: true; preview: MergePreview } | { ok: false; message: string };
 
-/** What the merge gives back when it does not merge (a merge that is done redirects). */
+/** What the merge gives back when it does not merge. */
 type MergeRefusal = { ok: false; message: string; preview: MergePreview | null };
+
+/** What the merge gives back: what it did (the plan it carried out, planned again where it wrote), or why it did not merge. */
+type MergeResult = { ok: true; preview: MergePreview } | MergeRefusal;
 
 /** A failure to show in an alert: a new object per attempt, whose `formStateKey` keys the alert. */
 type Failure = { message: string };
-
-/** Whether `error` is how Next says a server action navigated (its `redirect()`): not a failure. */
-function isNavigation(error: unknown): boolean {
-    try {
-        unstable_rethrow(error);
-        return false;
-    } catch {
-        return true;
-    }
-}
 
 const WORDS: Readonly<Record<MergeKind, { noun: string; plural: string }>> = {
     hymn: { noun: "hymn", plural: "hymns" },
@@ -89,13 +83,11 @@ interface MergePanelProps<T> {
     kind: MergeKind;
     /** The hymn or tune of the page, which is merged and deleted. */
     source: { id: number; name: string };
-    /** More hidden fields the merge posts, such as the song page's song. */
-    extraFields?: Record<string, string>;
-    /** The notice key (`mergeNoticeKey`) of the page a merge lands on, for its notice. */
-    landingKey: (preview: MergePreview) => string;
+    /** Where a merge that is done goes, from what the merge did (`hymnMergeLanding`, `tuneMergeLanding`). */
+    landing: (done: MergePreview) => MergeLanding;
     loadOptions: () => Promise<OptionsResult<T>>;
     previewMerge: (formData: FormData) => Promise<PreviewResult>;
-    merge: (formData: FormData) => Promise<MergeRefusal>;
+    merge: (formData: FormData) => Promise<MergeResult>;
     searchOptions: (options: readonly T[], query: string) => PickerMatches<T>;
     keyOf: (option: T) => number;
     nameOf: (option: T) => string;
@@ -109,10 +101,11 @@ interface MergePanelProps<T> {
  * every one on each load), a picker over them, then the preview of merging
  * into the one chosen: the songs that move, the songs that merge, what else
  * changes, and why the merge is refused, if it is. Merge… confirms in a
- * dialog that names everything; Merge there merges, and the page is
- * replaced by the one the merge lands on, which says what was merged
- * (`mergeNotice`). A merge refused as it is written stays in the dialog,
- * with why.
+ * dialog that names everything; Merge there merges. The action gives back
+ * what the merge did, which was planned again where it wrote and so may
+ * differ from the preview, and the page is replaced by the one the merge
+ * lands on (`landing`), which says what was done (`mergeNotice`). A merge
+ * refused as it is written stays in the dialog, with why.
  *
  * Every step is called from a click, with its state in `useState`
  * (convention 15). A preview nobody waits for any more (another hymn was
@@ -121,8 +114,7 @@ interface MergePanelProps<T> {
 export default function MergePanel<T>({
     kind,
     source,
-    extraFields = {},
-    landingKey,
+    landing,
     loadOptions,
     previewMerge,
     merge,
@@ -132,6 +124,7 @@ export default function MergePanel<T>({
     describe,
 }: MergePanelProps<T>) {
     const words = WORDS[kind];
+    const router = useRouter();
     const panelId = useId();
     const [open, setOpen] = useState(false);
     const [options, setOptions] = useState<T[] | null>(null);
@@ -219,29 +212,27 @@ export default function MergePanel<T>({
         const formData = new FormData();
         formData.set("sourceId", String(confirmed.source.id));
         formData.set("targetId", String(confirmed.target.id));
-        for (const [name, value] of Object.entries(extraFields)) {
-            formData.set(name, value);
-        }
-        // Left before the merge, since the page it lands on may take it
-        // before the action's promise settles.
-        const key = landingKey(confirmed);
-        leaveMergeNotice(key, describeMergeDone(confirmed));
         try {
-            const refusal = await merge(formData);
-            takeMergeNotice(key);
-            setMergeFailure({ message: refusal.message });
-            if (refusal.preview !== null) {
-                setPreview(refusal.preview);
-            }
-        } catch (error) {
-            if (isNavigation(error)) {
-                // Merged: Next has already rendered the page it lands on.
-                // When that is this page (the song moved), put the panel away.
+            const result = await merge(formData);
+            if (result.ok) {
+                // What the notice says, and where it goes, is what the merge
+                // did, not what `confirmed` showed: it was planned again where
+                // it wrote. It is left before the page opens, which takes it.
+                const { href, notice } = landing(result.preview);
+                if (notice !== null) {
+                    leaveMergeNotice(mergeNoticeKey(notice.kind, notice.id), describeMergeDone(result.preview));
+                }
+                // The page it was on may be gone: replace it, so Back does not return there.
                 setConfirming(false);
                 setOpen(false);
+                router.replace(href);
                 return;
             }
-            takeMergeNotice(key);
+            setMergeFailure({ message: result.message });
+            if (result.preview !== null) {
+                setPreview(result.preview);
+            }
+        } catch (error) {
             console.error("Merging failed:", error);
             setMergeFailure({ message: NO_ANSWER_MESSAGE });
         } finally {

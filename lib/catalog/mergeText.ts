@@ -1,3 +1,4 @@
+import { routes } from "@/lib/routes";
 import { countOf } from "./counts";
 import { SONG_MARK_LABELS } from "./marks";
 import type { MergeKind, MergePreview, SongMergeStep, SongMove } from "./merge";
@@ -5,9 +6,8 @@ import type { MergeKind, MergePreview, SongMergeStep, SongMove } from "./merge";
 /**
  * The words of "Merge this hymn into…" (the song page) and "Merge this tune
  * into…" (a tune's page): the preview of what a merge does, the question
- * that confirms it, what is said once it is done, and which song's page
- * the person lands on. Pure and safe on both sides: the forms are client
- * components, and the actions use `mergeDestinationSong`.
+ * that confirms it, what is said once it is done, and which page the person
+ * lands on. Pure and safe on both sides: the forms are client components.
  *
  * A hymn's title is quoted, as the merge's own refusals quote it; a tune's
  * name is not, since tune names are written in capitals (DARWALL), as the
@@ -186,6 +186,35 @@ export function mergeDestinationSong(
         return merged.targetSongId;
     }
     return preview.moves[0]?.songId ?? preview.merges[0]?.targetSongId ?? null;
+}
+
+/**
+ * Where a merge that is done takes the person. The href is one of
+ * `lib/routes.ts`, keeping the literal type `router.replace` is checked
+ * against.
+ */
+export interface MergeLanding {
+    href: ReturnType<typeof routes.catalog | typeof routes.catalogSong | typeof routes.catalogTune>;
+    /** The song's page or the tune's page whose card says what was merged; null when the page has no card for it. */
+    notice: { kind: "song" | "tune"; id: number } | null;
+}
+
+/**
+ * Where the merge of a hymn lands, from what the merge did (not from the
+ * preview, which it may have differed from): the page of the song the page's
+ * song (`songId`) is now (`mergeDestinationSong`), or the catalog's when the
+ * hymn had no song to go to.
+ */
+export function hymnMergeLanding(done: Pick<MergePreview, "moves" | "merges">, songId: number): MergeLanding {
+    const destination = mergeDestinationSong(done, songId);
+    return destination === null
+        ? { href: routes.catalog(), notice: null }
+        : { href: routes.catalogSong(destination), notice: { kind: "song", id: destination } };
+}
+
+/** Where the merge of a tune lands: the target tune's page. */
+export function tuneMergeLanding(done: Pick<MergePreview, "target">): MergeLanding {
+    return { href: routes.catalogTune(done.target.id), notice: { kind: "tune", id: done.target.id } };
 }
 
 /**

@@ -4,9 +4,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
     auth: vi.fn(),
     revalidatePath: vi.fn(),
-    redirect: vi.fn((url: string) => {
-        throw new Error(`NEXT_REDIRECT ${url}`);
-    }),
     getCatalogSong: vi.fn(),
     markCatalogSong: vi.fn(),
     unmarkCatalogSong: vi.fn(),
@@ -23,10 +20,6 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/auth", () => ({ auth: mocks.auth }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
-vi.mock("next/navigation", () => ({
-    redirect: mocks.redirect,
-    RedirectType: { push: "push", replace: "replace" },
-}));
 vi.mock("@/lib/queries/catalog", () => ({ getCatalogSong: mocks.getCatalogSong }));
 vi.mock("@/lib/queries/marks", () => ({
     markCatalogSong: mocks.markCatalogSong,
@@ -45,7 +38,7 @@ vi.mock("@/lib/queries/catalogEdit", () => ({
     mergeCatalogHymns: mocks.mergeCatalogHymns,
 }));
 
-import { FIX_MARKED_FIELDS_MESSAGE, STALE_PAGE_MESSAGE } from "@/lib/catalog/editForms";
+import { FIX_MARKED_FIELDS_MESSAGE } from "@/lib/catalog/editForms";
 import type { MergePreview } from "@/lib/catalog/merge";
 import { MERGE_REFUSED_NOW_MESSAGE } from "@/lib/catalog/mergeText";
 import { FORM_FAILURE_MESSAGE } from "@/lib/forms";
@@ -109,7 +102,7 @@ describe("every action", () => {
         ["removeHymnAliasAction", () => removeHymnAliasAction(form({ hymnId: "5", alias: "Grace" }))],
         ["listHymnOptionsAction", () => listHymnOptionsAction()],
         ["previewHymnMergeAction", () => previewHymnMergeAction(form({ sourceId: "5", targetId: "6" }))],
-        ["mergeHymnsAction", () => mergeHymnsAction(form({ sourceId: "5", targetId: "6", songId: "42" }))],
+        ["mergeHymnsAction", () => mergeHymnsAction(form({ sourceId: "5", targetId: "6" }))],
     ];
 
     test.each(calls)("%s throws without a session, before it reads or writes anything", async (_name, call) => {
@@ -610,21 +603,17 @@ describe("previewHymnMergeAction", () => {
 });
 
 describe("mergeHymnsAction", () => {
-    test("merges, revalidates, and replaces the page with the song the page's song merged into", async () => {
-        mocks.mergeCatalogHymns.mockReturnValue({ ok: true, preview: preview() });
-        await expect(mergeHymnsAction(form({ sourceId: "5", targetId: "6", songId: "42" }))).rejects.toThrow(
-            "NEXT_REDIRECT /catalog/songs/61"
-        );
+    test("merges, revalidates, and gives back what the merge did, which the preview may not have shown", async () => {
+        // The catalog changed after the preview, so the merge planned again moved another song.
+        const done = preview({
+            moves: [{ songId: 44, from: "C (GOPSAL)", to: "D (GOPSAL)", entries: ["G-150"] }],
+            merges: [],
+        });
+        mocks.mergeCatalogHymns.mockReturnValue({ ok: true, preview: done });
+        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "6" }))).toEqual({ ok: true, preview: done });
         expect(mocks.mergeCatalogHymns).toHaveBeenCalledWith(5, 6);
+        expect(mocks.previewCatalogHymnMerge).not.toHaveBeenCalled();
         expectCatalogEditsRevalidated();
-        expect(mocks.redirect).toHaveBeenCalledWith("/catalog/songs/61", "replace");
-    });
-
-    test("lands on the page's own song when it moved", async () => {
-        mocks.mergeCatalogHymns.mockReturnValue({ ok: true, preview: preview() });
-        await expect(mergeHymnsAction(form({ sourceId: "5", targetId: "6", songId: "43" }))).rejects.toThrow(
-            "NEXT_REDIRECT /catalog/songs/43"
-        );
     });
 
     test("gives back a merge refused as it is written, with its plan, writing nothing", async () => {
@@ -632,41 +621,46 @@ describe("mergeHymnsAction", () => {
             refusals: [{ reason: "linked-apart", message: "Linked to different Planning Center songs.", songIds: [42, 61] }],
         });
         mocks.mergeCatalogHymns.mockReturnValue({ ok: false, reason: "refused", preview: refused });
-        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "6", songId: "42" }))).toEqual({
+        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "6" }))).toEqual({
             ok: false,
             message: MERGE_REFUSED_NOW_MESSAGE,
             preview: refused,
         });
         expect(mocks.revalidatePath).not.toHaveBeenCalled();
-        expect(mocks.redirect).not.toHaveBeenCalled();
     });
 
-    test("says a hymn that is gone, a page song that is not an id, and a failure", async () => {
+    test("asks for a target, says a hymn that is gone, and says a failure", async () => {
+        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "" }))).toEqual({
+            ok: false,
+            message: "Choose the hymn to merge it into.",
+            preview: null,
+        });
+        expect(await mergeHymnsAction(form({ sourceId: "x", targetId: "6" }))).toEqual({
+            ok: false,
+            message: "That hymn is not in the catalog.",
+            preview: null,
+        });
+        expect(mocks.mergeCatalogHymns).not.toHaveBeenCalled();
         mocks.mergeCatalogHymns.mockReturnValueOnce({
             ok: false,
             reason: "source-not-found",
             message: "That hymn is not in the catalog. It may have been merged already.",
         });
-        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "6", songId: "42" }))).toEqual({
+        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "6" }))).toEqual({
             ok: false,
             message: "That hymn is not in the catalog. It may have been merged already.",
-            preview: null,
-        });
-        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "6", songId: "x" }))).toEqual({
-            ok: false,
-            message: STALE_PAGE_MESSAGE,
             preview: null,
         });
         mocks.mergeCatalogHymns.mockImplementationOnce(() => {
             throw new Error("disk I/O error");
         });
-        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "6", songId: "42" }))).toEqual({
+        expect(await mergeHymnsAction(form({ sourceId: "5", targetId: "6" }))).toEqual({
             ok: false,
             message: FORM_FAILURE_MESSAGE,
             preview: null,
         });
         expect(console.error).toHaveBeenCalledOnce();
         expect(mocks.mergeCatalogHymns).toHaveBeenCalledTimes(2);
-        expect(mocks.redirect).not.toHaveBeenCalled();
+        expect(mocks.revalidatePath).not.toHaveBeenCalled();
     });
 });

@@ -9,7 +9,7 @@ import {
     previewHymnMergeAction,
     removeHymnAliasAction,
 } from "@/app/(app)/catalog/songs/[songId]/editActions";
-import { mergeDestinationSong } from "@/lib/catalog/mergeText";
+import { hymnMergeLanding } from "@/lib/catalog/mergeText";
 import { describeHymnOption, searchHymnOptions, type HymnOption } from "@/lib/catalog/pickers";
 import {
     FIRST_LINE_MAX_LENGTH,
@@ -123,10 +123,7 @@ export default function HymnCard({ songId, hymn, otherTunes }: HymnCardProps) {
                         <MergePanel<HymnOption>
                             kind="hymn"
                             source={{ id: hymn.id, name: hymn.title }}
-                            extraFields={{ songId: String(songId) }}
-                            landingKey={(preview) =>
-                                mergeNoticeKey("song", mergeDestinationSong(preview, songId) ?? songId)
-                            }
+                            landing={(done) => hymnMergeLanding(done, songId)}
                             loadOptions={listHymnOptionsAction}
                             previewMerge={previewHymnMergeAction}
                             merge={mergeHymnsAction}
