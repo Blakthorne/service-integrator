@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { MIGRATIONS } from "@/lib/db/migrations";
 import { finishSyncRun, startSyncRun } from "@/lib/db/syncRuns";
-import { openTestDb } from "@/lib/db/testing";
+import { openTestDb, seedHistoryPlan, seedOccurrence } from "@/lib/db/testing";
 
 // vi.hoisted: vi.mock factories run before the module's own declarations.
 const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
@@ -11,7 +11,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
     getDb,
 }));
 
-import { getDatabaseStatus, getLastPcoSongsSync } from "./system";
+import { getDatabaseStatus, getLastHistorySync, getLastPcoSongsSync } from "./system";
 
 let db: DatabaseSync;
 
@@ -111,6 +111,51 @@ describe("getLastPcoSongsSync", () => {
             throw new Error("Could not open the database at /srv/data/x: denied");
         });
         expect(getLastPcoSongsSync()).toEqual({ ok: false });
+        expect(console.error).toHaveBeenCalledOnce();
+    });
+});
+
+describe("getLastHistorySync", () => {
+    test("is no run and an empty history before the first sync", () => {
+        expect(getLastHistorySync()).toEqual({
+            ok: true,
+            lastRun: null,
+            counts: { plans: 0, plansRead: 0, occurrences: 0, firstPlanDate: null, lastPlanDate: null },
+        });
+    });
+
+    test("gives the latest run of the history sync, finished or not, and what the history holds", () => {
+        const at = new Date("2026-10-03T12:00:00.000Z");
+        const first = startSyncRun(db, "history", at);
+        finishSyncRun(db, first, { ok: true, message: "Synced 2 plans" }, at);
+        startSyncRun(db, "pco-songs", at);
+        const plan = seedHistoryPlan(db, { planDate: "2026-09-27" });
+        seedHistoryPlan(db, { planDate: "2026-10-04", itemsSyncedAt: null });
+        seedOccurrence(db, { planId: plan, pcoSongId: "5001" });
+        expect(getLastHistorySync()).toEqual({
+            ok: true,
+            lastRun: expect.objectContaining({ id: first, kind: "history", ok: true, message: "Synced 2 plans" }),
+            counts: {
+                plans: 2,
+                plansRead: 1,
+                occurrences: 1,
+                firstPlanDate: "2026-09-27",
+                lastPlanDate: "2026-10-04",
+            },
+        });
+
+        const second = startSyncRun(db, "history", at);
+        expect(getLastHistorySync()).toMatchObject({
+            ok: true,
+            lastRun: { id: second, finishedAt: null, ok: null },
+        });
+    });
+
+    test("logs, and says so, when the database cannot be read", () => {
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        expect(getLastHistorySync()).toEqual({ ok: false });
         expect(console.error).toHaveBeenCalledOnce();
     });
 });

@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
-import type { ItemNoteCategory, PlanItemWithSong } from "../domain";
-import { pcoFetchAll } from "./client";
+import type { ItemNoteCategory, PlanItem, PlanItemWithSong } from "../domain";
+import { pcoFetchAll, type PcoRequestOptions } from "./client";
 import { assertPcoId } from "./ids";
 import {
     itemNotesByItem,
@@ -47,6 +47,34 @@ export async function fetchPlanItems(
         })),
         totalCount,
     };
+}
+
+/**
+ * A plan's song items, in sequence order: its items with `include=song`
+ * (paged 100 at a time) kept to those of type "song" that name a Planning
+ * Center song, which is what the history keeps of a plan. An item whose
+ * song was deleted in Planning Center becomes a plain item there, so it is
+ * left out too. Read afresh every time, and paced when `paced` is true: the
+ * history sync's reads, which run outside any request. Throws
+ * InvalidPcoIdError before fetching, or PcoError (404 if the plan is
+ * missing).
+ */
+export async function fetchPlanSongItems(
+    serviceTypeId: string,
+    planId: string,
+    { paced = false }: PcoRequestOptions = {}
+): Promise<PlanItem[]> {
+    const st = assertPcoId(serviceTypeId);
+    const id = assertPcoId(planId);
+    const { data } = await pcoFetchAll<PcoItemResource>(
+        `/service_types/${st}/plans/${id}/items?include=song&per_page=100`,
+        "planItems",
+        { paced }
+    );
+    return data
+        .map(toPlanItem)
+        .filter((item) => item.itemType === "song" && item.songId !== null)
+        .sort((a, b) => a.sequence - b.sequence);
 }
 
 /**

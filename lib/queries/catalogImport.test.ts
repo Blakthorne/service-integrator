@@ -26,6 +26,7 @@ import {
     getCatalogImportRunLabel,
     getCatalogImportRuns,
     previewBookCsvImport,
+    previewSeedImport,
 } from "./catalogImport";
 
 let db: DatabaseSync;
@@ -42,9 +43,72 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe("a seed run the app stored, now that the seed cannot be previewed", () => {
-    // The seed's preview is gone from the app, but the runs it stored are in the
-    // database, and render and apply from their stored report and rows.
+const SEED_COUNTS = {
+    books: 2,
+    hymns: 895,
+    hymnAliases: 4,
+    tunes: 768,
+    tuneAliases: 1,
+    songs: 921,
+    songsWithoutTune: 107,
+    entries: 1247,
+};
+
+describe("the seed import, end to end", () => {
+    // Reads the real hymns.json, so it pins the file's counts. It goes with the
+    // seed once production has applied it; the tests below build their run from a
+    // small fixture instead, and stay.
+    test("previews the seed from hymns.json, applies it once, and refuses a second", () => {
+        const first = previewSeedImport();
+        expect(getCatalogImportRuns()).toEqual([
+            expect.objectContaining({
+                id: first,
+                kind: "hymns-json",
+                status: "preview",
+                sourceName: "hymns.json",
+                planned: SEED_COUNTS,
+            }),
+        ]);
+        const review = getCatalogImportRun(first);
+        expect(review?.applyRefusal).toBeNull();
+        expect(review?.run.report.planned).toEqual(SEED_COUNTS);
+        expect(review?.run.kind === "hymns-json" && review.run.report.splitPairs).toHaveLength(3);
+        expect(countCatalog(db).books).toBe(0);
+
+        expect(applyCatalogImport(first)).toEqual({ ok: true, counts: SEED_COUNTS, bookCode: null });
+        expect(countCatalog(db)).toEqual({
+            books: 2,
+            hymns: 895,
+            tunes: 768,
+            songs: 921,
+            entries: 1247,
+        });
+        expect(getCatalogImportRun(first)).toMatchObject({
+            run: { status: "applied" },
+            applyRefusal: {
+                reason: "not-preview",
+                message: "The import run has already been applied or discarded.",
+            },
+        });
+
+        const second = previewSeedImport();
+        const catalogNotEmpty = {
+            reason: "catalog-not-empty",
+            message: "The catalog already has books, so the seed import cannot run again.",
+        };
+        expect(getCatalogImportRun(second)?.applyRefusal).toEqual(catalogNotEmpty);
+        expect(applyCatalogImport(second)).toEqual({ ok: false, ...catalogNotEmpty });
+        expect(getCatalogImportRuns().map(({ id, status }) => [id, status])).toEqual([
+            [second, "preview"],
+            [first, "applied"],
+        ]);
+    });
+});
+
+describe("a seed run stored from a small fixture", () => {
+    // A seed run in the database renders and applies from its stored report and
+    // rows, whatever made it. This one is made from the fixture (seedPlan), not
+    // from hymns.json, so these tests do not depend on the seed's planner.
     function storedSeedRun(): number {
         return createImportRun(db, { kind: "hymns-json", sourceName: "hymns.json", ...seedPlan() });
     }

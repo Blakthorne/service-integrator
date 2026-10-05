@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { linkPcoSong } from "@/app/(app)/plans/[serviceTypeId]/[planId]/actions";
 import { planDateFromSortDate } from "@/lib/format";
+import { warningsToShow } from "@/lib/repeatWarnings";
 import { routes } from "@/lib/routes";
 import type { LinkSong } from "./LinkToCatalogInline";
 import { usePlan } from "./PlanProvider";
@@ -16,7 +17,8 @@ import ServiceSchedule from "./ServiceSchedule";
  * provider, which keeps them while the user visits other tabs and items,
  * and saves them. A Link goes to the `linkPcoSong` action with this plan's
  * ids, and its revalidation brings the new numbers back through the
- * provider.
+ * provider. The repeat warnings (songs sung lately) come with the plan, and
+ * go to the cards only for a plan dated today or later (`warningsToShow`).
  */
 export default function ScheduleTab() {
     const {
@@ -29,12 +31,18 @@ export default function ScheduleTab() {
         scheduleSettings,
         settingsError,
         hymnNoteStatus,
+        repeatWarnings,
         scheduleItems,
         saves,
         chooseOption,
         setCustomText,
         retrySave,
     } = usePlan();
+    const planDate = planDateFromSortDate(plan.sortDate);
+    const warnings = useMemo(
+        () => warningsToShow(repeatWarnings, planDate),
+        [repeatWarnings, planDate]
+    );
 
     const onLink = useCallback<LinkSong>(
         (pcoSongId, songId) =>
@@ -52,8 +60,9 @@ export default function ScheduleTab() {
             settingsError={settingsError}
             hymnNoteStatus={hymnNoteStatus}
             saves={saves}
+            repeatWarnings={warnings}
             serviceTypeName={serviceType.name}
-            planDate={planDateFromSortDate(plan.sortDate)}
+            planDate={planDate}
             headerLabel={scheduleSettings.headerLabel}
             numberSeparator={scheduleSettings.numberSeparator}
             scheduleHref={routes.planSchedule(serviceType.id, plan.id)}

@@ -35,6 +35,7 @@ function song(
         pcoSongId: null,
         linkedBy: null,
         lastScheduledAt: null,
+        lastSungAt: null,
         marks: [],
         entries: entries.map(
             ([bookCode, label], index): LabelledEntry => ({
@@ -60,7 +61,12 @@ const amazingGrace = song(
         ["R", "R-108"],
         ["G", "G-247"],
     ],
-    { pcoSongId: "1001", linkedBy: "auto", lastScheduledAt: "2026-09-27T08:00:00Z" }
+    {
+        pcoSongId: "1001",
+        linkedBy: "auto",
+        lastScheduledAt: "2026-09-27T08:00:00Z",
+        lastSungAt: "2026-09-20",
+    }
 );
 const comeThouFount = song("Come, Thou Fount of Every Blessing", "NETTLETON", [["G", "G-60"]], {
     pcoSongId: "1002",
@@ -75,30 +81,40 @@ const withDescant = song("Come, Thou Almighty King", "ITALIAN HYMN", [
 const notInABook = song("Unplaced Hymn", "SOMEWHERE", []);
 
 describe("catalogSongsCsvRecords", () => {
-    test("starts with the header: title, tune, a column for each book, linked, last scheduled, to learn", () => {
+    test("starts with the header: title, tune, a column for each book, linked, last scheduled, last sung, to learn", () => {
         expect(catalogSongsCsvRecords([], BOOKS)).toEqual([
-            ["Title", "Tune", "Rejoice Hymns", "Great Hymns of the Faith", "Chorus Book", "Linked", "Last scheduled", "To learn"],
+            [
+                "Title",
+                "Tune",
+                "Rejoice Hymns",
+                "Great Hymns of the Faith",
+                "Chorus Book",
+                "Linked",
+                "Last scheduled",
+                "Last sung",
+                "To learn",
+            ],
         ]);
     });
 
     test("has a header with no book columns when there are no books", () => {
         expect(catalogSongsCsvRecords([amazingGrace], [])).toEqual([
-            ["Title", "Tune", "Linked", "Last scheduled", "To learn"],
-            ["Amazing Grace", "NEW BRITAIN", "yes", "2026-09-27", "no"],
+            ["Title", "Tune", "Linked", "Last scheduled", "Last sung", "To learn"],
+            ["Amazing Grace", "NEW BRITAIN", "yes", "2026-09-27", "2026-09-20", "no"],
         ]);
     });
 
     test("has a record for each song, in the order given", () => {
         expect(catalogSongsCsvRecords([comeThouFount, amazingGrace], BOOKS).slice(1)).toEqual([
-            ["Come, Thou Fount of Every Blessing", "NETTLETON", "", "G-60", "", "yes", "", "no"],
-            ["Amazing Grace", "NEW BRITAIN", "R-108", "G-247", "", "yes", "2026-09-27", "no"],
+            ["Come, Thou Fount of Every Blessing", "NETTLETON", "", "G-60", "", "yes", "", "", "no"],
+            ["Amazing Grace", "NEW BRITAIN", "R-108", "G-247", "", "yes", "2026-09-27", "2026-09-20", "no"],
         ]);
     });
 
     test("leaves the tune empty when it is unknown, and a book empty when the song is not in it", () => {
         expect(catalogSongsCsvRecords([doxology, notInABook], BOOKS).slice(1)).toEqual([
-            ["Doxology", "", "", "G-Front Cover", "", "no", "", "no"],
-            ["Unplaced Hymn", "SOMEWHERE", "", "", "", "no", "", "no"],
+            ["Doxology", "", "", "G-Front Cover", "", "no", "", "", "no"],
+            ["Unplaced Hymn", "SOMEWHERE", "", "", "", "no", "", "", "no"],
         ]);
     });
 
@@ -110,6 +126,7 @@ describe("catalogSongsCsvRecords", () => {
             "",
             "Chorus Book",
             "no",
+            "",
             "",
             "no",
         ]);
@@ -123,18 +140,37 @@ describe("catalogSongsCsvRecords", () => {
         });
         expect(
             catalogSongsCsvRecords([linkedNeverScheduled, lateInTheDay], []).map((record) =>
-                record.slice(2)
+                record.slice(2, 4)
             )
         ).toEqual([
-            ["Linked", "Last scheduled", "To learn"],
-            ["yes", "", "no"],
-            ["yes", "2026-01-04", "no"],
+            ["Linked", "Last scheduled"],
+            ["yes", ""],
+            ["yes", "2026-01-04"],
+        ]);
+    });
+
+    test("writes the date the song was last sung as it is, and nothing for a song never sung", () => {
+        const sungOnce = song("Sung", "A", [], {
+            pcoSongId: "1",
+            lastScheduledAt: "2026-10-11T08:00:00Z",
+            lastSungAt: "2026-03-01",
+        });
+        const scheduledOnly = song("Scheduled Only", "B", [], {
+            pcoSongId: "2",
+            lastScheduledAt: "2026-10-11T08:00:00Z",
+        });
+        expect(
+            catalogSongsCsvRecords([sungOnce, scheduledOnly], []).map((record) => record.slice(2, 5))
+        ).toEqual([
+            ["Linked", "Last scheduled", "Last sung"],
+            ["yes", "2026-10-11", "2026-03-01"],
+            ["yes", "2026-10-11", ""],
         ]);
     });
 
     test("writes whether the song is marked to learn", () => {
         const marked = song("Be Thou My Vision", "SLANE", [], { marks: ["to-learn"] });
-        expect(catalogSongsCsvRecords([marked], [])[1]).toEqual(["Be Thou My Vision", "SLANE", "no", "", "yes"]);
+        expect(catalogSongsCsvRecords([marked], [])[1]).toEqual(["Be Thou My Vision", "SLANE", "no", "", "", "yes"]);
     });
 });
 
@@ -142,9 +178,9 @@ describe("catalogSongsCsv", () => {
     test("writes the records as CSV: quoted where it must be, with CRLF line ends", () => {
         expect(catalogSongsCsv([comeThouFount, doxology], BOOKS)).toBe(
             [
-                "Title,Tune,Rejoice Hymns,Great Hymns of the Faith,Chorus Book,Linked,Last scheduled,To learn",
-                '"Come, Thou Fount of Every Blessing",NETTLETON,,G-60,,yes,,no',
-                "Doxology,,,G-Front Cover,,no,,no",
+                "Title,Tune,Rejoice Hymns,Great Hymns of the Faith,Chorus Book,Linked,Last scheduled,Last sung,To learn",
+                '"Come, Thou Fount of Every Blessing",NETTLETON,,G-60,,yes,,,no',
+                "Doxology,,,G-Front Cover,,no,,,no",
                 "",
             ].join("\r\n")
         );
@@ -152,14 +188,14 @@ describe("catalogSongsCsv", () => {
 
     test("writes just the header for no songs", () => {
         expect(catalogSongsCsv([], BOOKS)).toBe(
-            "Title,Tune,Rejoice Hymns,Great Hymns of the Faith,Chorus Book,Linked,Last scheduled,To learn\r\n"
+            "Title,Tune,Rejoice Hymns,Great Hymns of the Faith,Chorus Book,Linked,Last scheduled,Last sung,To learn\r\n"
         );
     });
 
     test("guards a title that a spreadsheet would run as a formula", () => {
         const formula = song("=HYPERLINK(\"http://example.com\")", "-TUNE", []);
         expect(catalogSongsCsv([formula], []).split("\r\n")[1]).toBe(
-            "\"'=HYPERLINK(\"\"http://example.com\"\")\",'-TUNE,no,,no"
+            "\"'=HYPERLINK(\"\"http://example.com\"\")\",'-TUNE,no,,,no"
         );
     });
 });
@@ -201,6 +237,11 @@ describe("catalogCsvFilename", () => {
         expect(filename({ mark: "all" })).toBe("catalog-2026-10-04.csv");
     });
 
+    test("names the date the list is not sung since", () => {
+        expect(filename({ notSince: "2025-10-04" })).toBe("catalog-not-sung-since-2025-10-04-2026-10-04.csv");
+        expect(filename({ notSince: null })).toBe("catalog-2026-10-04.csv");
+    });
+
     test("says search for a search", () => {
         expect(filename({ q: "amazing" })).toBe("catalog-search-2026-10-04.csv");
     });
@@ -209,6 +250,20 @@ describe("catalogCsvFilename", () => {
         expect(filename({ q: "grace", book: "R", linked: "yes", used: "never", mark: "to-learn" })).toBe(
             "catalog-r-linked-unused-to-learn-search-2026-10-04.csv"
         );
+        expect(
+            filename({
+                q: "grace",
+                book: "R",
+                linked: "yes",
+                used: "never",
+                mark: "to-learn",
+                notSince: "2025-10-04",
+            })
+        ).toBe("catalog-r-linked-unused-to-learn-not-sung-since-2025-10-04-search-2026-10-04.csv");
+    });
+
+    test("keeps only digits and dashes of the date", () => {
+        expect(filename({ notSince: "../2025-10-04" })).toBe("catalog-not-sung-since-2025-10-04-2026-10-04.csv");
     });
 
     test("keeps only what a file name can hold of a book code", () => {

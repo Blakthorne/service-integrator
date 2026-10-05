@@ -34,7 +34,7 @@ export default function PcoSongNotice({ pcoSong, error }: PcoSongNoticeProps) {
             <FormNotice tone="warning">
                 <p>
                     The Planning Center song <SongName pcoSong={pcoSong} /> is linked to{" "}
-                    {/* Default prefetch: a song's page reads only the local database. */}
+                    {/* Default prefetch: a song's page reads the local database (convention 13). */}
                     <Link href={routes.catalogSong(pcoSong.linkedTo.songId)} className={LINK_CLASS}>
                         {pcoSong.linkedTo.label}
                     </Link>{" "}

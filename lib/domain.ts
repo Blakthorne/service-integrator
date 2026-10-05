@@ -266,6 +266,14 @@ export interface CatalogSongSummary {
      * when this is set.
      */
     lastScheduledAt: string | null;
+    /**
+     * The date, `YYYY-MM-DD`, of the last past plan its Planning Center
+     * song was in, from the plan history: a plan dated before today, so
+     * unlike `lastScheduledAt` it leaves out upcoming plans. Null when it is
+     * not linked, or its song was never in a past plan (or the history has
+     * not been synced).
+     */
+    lastSungAt: string | null;
     /** Its entries in book order, then by number or position. */
     entries: LabelledEntry[];
     /** Its marks ("to-learn"), in the order `SONG_MARKS` lists them; empty when it has none. */

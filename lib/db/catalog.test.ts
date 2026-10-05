@@ -17,7 +17,9 @@ import {
     openTestDb,
     seedBook,
     seedEntry,
+    seedHistoryPlan,
     seedHymn,
+    seedOccurrence,
     seedPcoSong,
     seedSong,
     seedSongMark,
@@ -237,6 +239,7 @@ describe("listCatalogSongs", () => {
             pcoSongId: "1001",
             linkedBy: "import",
             lastScheduledAt: null,
+            lastSungAt: null,
             marks: [],
             entries: [
                 {
@@ -340,6 +343,68 @@ describe("listCatalogSongs", () => {
             pcoSongId: null,
             linkedBy: null,
             lastScheduledAt: null,
+        });
+    });
+
+    describe("lastSungAt", () => {
+        /** A plan of the history on `date` that holds Planning Center song `pcoSongId`. */
+        function sing(pcoSongId: string, date: string): void {
+            seedOccurrence(db, { planId: seedHistoryPlan(db, { planDate: date }), pcoSongId });
+        }
+
+        const lastSung = (rows: ReturnType<typeof listCatalogSongs>, id: number) =>
+            rows.find((row) => row.id === id)?.lastSungAt;
+
+        test("is the date of the last past plan its Planning Center song was in, upcoming plans left out", () => {
+            const { songs } = seedCatalog();
+            sing("1001", "2026-03-01");
+            sing("1001", "2026-09-27");
+            sing("1001", "2026-09-20");
+            sing("1001", "2026-10-04");
+            sing("1001", "2026-10-11");
+            sing("1016", "2026-10-11");
+            db.prepare("UPDATE songs SET pco_song_id = '1016', linked_by = 'auto' WHERE id = ?").run(songs.doxology);
+
+            const rows = listCatalogSongs(db, "2026-10-04");
+            // The plan dated today is upcoming, not sung.
+            expect(lastSung(rows, songs.amazingGrace)).toBe("2026-09-27");
+            // Linked, but only scheduled.
+            expect(lastSung(rows, songs.doxology)).toBeNull();
+            // Not linked.
+            expect(lastSung(rows, songs.rejoice)).toBeNull();
+        });
+
+        test("moves with today: the same plans, a week later", () => {
+            const { songs } = seedCatalog();
+            sing("1001", "2026-09-27");
+            sing("1001", "2026-10-04");
+            expect(lastSung(listCatalogSongs(db, "2026-10-04"), songs.amazingGrace)).toBe("2026-09-27");
+            expect(lastSung(listCatalogSongs(db, "2026-10-05"), songs.amazingGrace)).toBe("2026-10-04");
+            expect(lastSung(listCatalogSongs(db, "2026-09-27"), songs.amazingGrace)).toBeNull();
+        });
+
+        test("is null for a song linked to a Planning Center song that the history or the mirror lacks, and for a history never synced", () => {
+            const { songs } = seedCatalog();
+            expect(lastSung(listCatalogSongs(db, "2026-10-04"), songs.amazingGrace)).toBeNull();
+            sing("1404", "2026-09-27");
+            expect(lastSung(listCatalogSongs(db, "2026-10-04"), songs.amazingGrace)).toBeNull();
+        });
+
+        test("is on the song page's other tunes too, as of the server's date", () => {
+            const { songs } = seedCatalog();
+            db.prepare("UPDATE songs SET pco_song_id = '1500' WHERE id = ?").run(songs.thankYouLynch);
+            sing("1500", "2000-01-02");
+
+            const detail = findCatalogSong(db, songs.thankYouNoTune);
+            expect(
+                detail?.otherTunes.map(({ id, lastSungAt }) => [id, lastSungAt])
+            ).toEqual([
+                [songs.thankYouLynch, "2000-01-02"],
+                [songs.thankYouOwnTune, null],
+            ]);
+            expect(listCatalogSongs(db).find((row) => row.id === songs.thankYouLynch)?.lastSungAt).toBe(
+                "2000-01-02"
+            );
         });
     });
 

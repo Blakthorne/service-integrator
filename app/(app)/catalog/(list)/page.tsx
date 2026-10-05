@@ -7,6 +7,7 @@ import LoadingState from "@/app/components/ui/LoadingState";
 import PageHeader from "@/app/components/ui/PageHeader";
 import { catalogTagIdsBySong } from "@/lib/catalog/filter";
 import { getActiveCatalogBooks, getCatalogSongs } from "@/lib/queries/catalog";
+import { getLastHistorySync } from "@/lib/queries/system";
 import { getSongTagGroups, getTagIdsBySong } from "@/lib/queries/tags";
 import { routes } from "@/lib/routes";
 
@@ -17,8 +18,10 @@ export const metadata: Metadata = { title: "Catalog" };
  * and pages in the browser. The server reads the local database once; the
  * client gets the list rows; of each book, only what the book filter shows;
  * of Planning Center's song tags, the groups that have tags and the tags of
- * the songs the catalog links to, for the tag filter. Before the seed import
- * the catalog is empty, and the page points at Import. It sits in the
+ * the songs the catalog links to, for the tag filter, and whether the plan
+ * history has been read, for the rows' last sung dates and the not-sung-since
+ * filter. Before the seed import the catalog is empty, and the page points
+ * at Import. It sits in the
  * `(list)` route group so that its `loading.tsx` covers this list and not
  * the song, tune, book and import pages beside it.
  */
@@ -37,6 +40,10 @@ export default function CatalogPage() {
             tags: tags.map((tag) => ({ id: tag.id, name: tag.name })),
         }));
     const tagIdsBySong = catalogTagIdsBySong(songs, getTagIdsBySong());
+    // When the history's state cannot be read the songs list's own read has
+    // failed too; say it is read, and let the rows show what they have.
+    const history = getLastHistorySync();
+    const historyRead = !history.ok || history.counts.plans > 0;
 
     return (
         <div className="w-full max-w-4xl mx-auto">
@@ -65,6 +72,7 @@ export default function CatalogPage() {
                         books={books}
                         tagGroups={tagGroups}
                         tagIdsBySong={tagIdsBySong}
+                        historyRead={historyRead}
                     />
                 </Suspense>
             )}

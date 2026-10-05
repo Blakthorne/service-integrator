@@ -25,6 +25,7 @@ describe("the barrel", () => {
             "createSong",
             "updateSong",
             "createSongItem",
+            "reorderPlanItems",
             "assignSongTags",
         ]) {
             expect(exported).toContain(name);

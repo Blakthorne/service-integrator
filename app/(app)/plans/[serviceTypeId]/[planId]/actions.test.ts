@@ -10,6 +10,7 @@ const {
     syncHymnNotes,
     previewPlanEmail,
     sendPlanEmail,
+    reorderItems,
 } = vi.hoisted(() => ({
     auth: vi.fn(),
     revalidatePath: vi.fn(),
@@ -19,12 +20,14 @@ const {
     syncHymnNotes: vi.fn(),
     previewPlanEmail: vi.fn(),
     sendPlanEmail: vi.fn(),
+    reorderItems: vi.fn(),
 }));
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ linkCatalogSong }));
 vi.mock("@/lib/queries/hymnNotes", () => ({ previewHymnNotes, syncHymnNotes }));
 vi.mock("@/lib/queries/email", () => ({ previewPlanEmail, sendPlanEmail }));
+vi.mock("@/lib/queries/planItems", () => ({ reorderItems }));
 // The real module's messages, with only the write mocked.
 vi.mock("@/lib/queries/selections", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/queries/selections")>()),
@@ -43,6 +46,7 @@ import {
     linkPcoSong,
     previewHymnNotesAction,
     previewPlanEmailAction,
+    reorderItemsAction,
     saveScheduleSelection,
     sendPlanEmailAction,
     syncHymnNotesAction,
@@ -77,6 +81,7 @@ beforeEach(() => {
         syncHymnNotes,
         previewPlanEmail,
         sendPlanEmail,
+        reorderItems,
     ]) {
         mock.mockReset();
     }
@@ -743,6 +748,133 @@ describe("sendPlanEmailAction", () => {
             message: expect.stringContaining("the email was not sent"),
         });
         expect(console.error).toHaveBeenCalledWith(`Failed to email plan ${ST}/${PLAN}:`, cause);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+});
+
+describe("reorderItemsAction", () => {
+    const SHOWN = ["91000001", "91000002", "91000003", "91000004"];
+    const ORDER = ["91000003", "91000001", "91000002", "91000004"];
+    const PREVIEWED = { shown: SHOWN, order: ORDER };
+
+    beforeEach(() => {
+        reorderItems.mockResolvedValue({ ok: true, itemIds: ORDER, moved: 3 });
+    });
+
+    test("throws without a session, before it reads or writes anything", async () => {
+        auth.mockResolvedValue(null);
+
+        await expect(reorderItemsAction(ST, PLAN, PREVIEWED)).rejects.toThrow("Not signed in");
+        expect(reorderItems).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("puts the items in the order sent, held to the order the page showed, and revalidates the plan's pages", async () => {
+        await expect(reorderItemsAction(ST, PLAN, PREVIEWED)).resolves.toEqual({ ok: true, moved: 3 });
+
+        expect(reorderItems).toHaveBeenCalledTimes(1);
+        expect(reorderItems).toHaveBeenCalledWith(ST, PLAN, { shown: SHOWN, order: ORDER });
+        expect(revalidatePath.mock.calls).toEqual([[`/plans/${ST}/${PLAN}`, "layout"]]);
+    });
+
+    test("sends the query only the two lists, rebuilt from their checked ids", async () => {
+        const forged = { shown: SHOWN, order: ORDER, extra: "x", __proto__: { admin: true } };
+        await reorderItemsAction(ST, PLAN, forged);
+
+        expect(reorderItems.mock.calls[0][2]).toStrictEqual({ shown: SHOWN, order: ORDER });
+    });
+
+    test("answers an order that was the order shown as made, and revalidates nothing: nothing was written", async () => {
+        reorderItems.mockResolvedValue({ ok: true, itemIds: SHOWN, moved: 0 });
+
+        await expect(reorderItemsAction(ST, PLAN, { shown: SHOWN, order: SHOWN })).resolves.toEqual({
+            ok: true,
+            moved: 0,
+        });
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("returns a plan that changed as it is, and revalidates, so the page shows what Planning Center has now", async () => {
+        reorderItems.mockResolvedValue({ ok: false, reason: "changed", message: "Items were added." });
+
+        await expect(reorderItemsAction(ST, PLAN, PREVIEWED)).resolves.toEqual({
+            ok: false,
+            reason: "changed",
+            message: "Items were added.",
+        });
+        expect(revalidatePath.mock.calls).toEqual([[`/plans/${ST}/${PLAN}`, "layout"]]);
+    });
+
+    test.each(["busy", "refused"] as const)("returns a %s refusal as it is, and changes no page", async (reason) => {
+        reorderItems.mockResolvedValue({ ok: false, reason, message: "Not now." });
+
+        await expect(reorderItemsAction(ST, PLAN, PREVIEWED)).resolves.toEqual({
+            ok: false,
+            reason,
+            message: "Not now.",
+        });
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test.each(["invalid", "not-found"] as const)(
+        "returns a %s refusal as a failure with its message, and changes no page",
+        async (reason) => {
+            reorderItems.mockResolvedValue({ ok: false, reason, message: "There is no such plan." });
+
+            await expect(reorderItemsAction(ST, PLAN, PREVIEWED)).resolves.toEqual({
+                ok: false,
+                reason: "failed",
+                message: "There is no such plan.",
+            });
+            expect(revalidatePath).not.toHaveBeenCalled();
+        }
+    );
+
+    test("answers ids that are not ids with a message, before it reads anything", async () => {
+        for (const [st, plan] of [
+            ["abc", PLAN],
+            [ST, "../etc"],
+            ["", PLAN],
+        ]) {
+            await expect(reorderItemsAction(st, plan, PREVIEWED)).resolves.toMatchObject({
+                ok: false,
+                reason: "failed",
+                message: expect.stringContaining("plan that cannot be found"),
+            });
+        }
+        expect(reorderItems).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ["no body", undefined],
+        ["not an object", "shown"],
+        ["lists of other items", { shown: SHOWN, order: ["91000001", "91000002", "91000003", "91000009"] }],
+        ["an id that is not an id", { shown: ["a", "b"], order: ["b", "a"] }],
+        ["an item twice", { shown: ["1", "2"], order: ["1", "1"] }],
+        ["no items", { shown: [], order: [] }],
+        ["one list", { shown: SHOWN }],
+    ])("refuses %s before it reads or writes anything", async (_name, previewed) => {
+        await expect(
+            reorderItemsAction(ST, PLAN, previewed as unknown as { shown: string[]; order: string[] })
+        ).resolves.toMatchObject({
+            ok: false,
+            reason: "failed",
+            message: expect.stringContaining("could not check"),
+        });
+        expect(reorderItems).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("returns a message, and logs the cause, when the reorder throws: it may or may not have been written", async () => {
+        const cause = new Error("PCO request failed (status: 500)");
+        reorderItems.mockRejectedValue(cause);
+
+        await expect(reorderItemsAction(ST, PLAN, PREVIEWED)).resolves.toEqual({
+            ok: false,
+            reason: "failed",
+            message: expect.stringContaining("may not have been put in order"),
+        });
+        expect(console.error).toHaveBeenCalledWith(`Failed to reorder the items of plan ${ST}/${PLAN}:`, cause);
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 });

@@ -677,6 +677,82 @@ describe("describeWrite: a song added to a plan", () => {
     });
 });
 
+describe("describeWrite: a plan's items put in order", () => {
+    const REORDER = {
+        action: "reorder",
+        serviceTypeId: "1405391",
+        planId: "81234567",
+        count: 12,
+        moved: 3,
+        from: ["1", "2", "3"],
+        to: ["3", "1", "2"],
+        titles: { "1": "Welcome" },
+    };
+    const reordered = (fields: Partial<WriteLogRow> = {}) =>
+        songRow("item", {
+            target: "plan 81234567",
+            payload: REORDER,
+            result: { itemIds: ["3", "1", "2"] },
+            ...fields,
+        });
+
+    test("says how many items moved, and gives the plan, with no item", () => {
+        expect(describeWrite(reordered())).toEqual({
+            what: "Plan items reordered",
+            detail: "3 of 12 items moved.",
+            place: { serviceTypeId: "1405391", planId: "81234567", itemId: null },
+            target: "plan 81234567",
+            outcome: { ok: true },
+        });
+    });
+
+    test("words a reorder Planning Center refused as one that failed", () => {
+        expect(
+            describeWrite(
+                reordered({
+                    ok: false,
+                    result: { error: "sequence: is invalid", status: 422, details: ["sequence: is invalid"] },
+                })
+            )
+        ).toEqual({
+            what: "Reordering the plan's items failed",
+            detail: "Tried to move 3 of 12 items.",
+            place: { serviceTypeId: "1405391", planId: "81234567", itemId: null },
+            target: "plan 81234567",
+            outcome: { ok: false, message: "sequence: is invalid", status: 422 },
+        });
+    });
+
+    test("uses the singular for a plan of one item", () => {
+        expect(describeWrite(reordered({ payload: { ...REORDER, count: 1, moved: 1 } })).detail).toBe(
+            "1 of 1 item moved."
+        );
+    });
+
+    test("still says what happened when the payload lacks the counts", () => {
+        expect(describeWrite(reordered({ payload: { ...REORDER, moved: undefined } }))).toMatchObject({
+            what: "Plan items reordered",
+            detail: null,
+        });
+        expect(describeWrite(reordered({ payload: { ...REORDER, count: -1 } })).detail).toBeNull();
+        expect(describeWrite(reordered({ payload: { ...REORDER, count: 2.5 } })).detail).toBeNull();
+    });
+
+    test.each([
+        ["no plan", { ...REORDER, planId: undefined }],
+        ["no service type", { ...REORDER, serviceTypeId: undefined }],
+        ["a blank plan", { ...REORDER, planId: " " }],
+    ])("says only the kind and the target for %s", (_name, payload) => {
+        expect(describeWrite(reordered({ payload }))).toEqual({
+            what: "Plan item write",
+            detail: null,
+            place: null,
+            target: "plan 81234567",
+            outcome: { ok: true },
+        });
+    });
+});
+
 describe("describeWrite: a song's tags set", () => {
     const ASSIGN = {
         action: "assign",

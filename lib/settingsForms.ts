@@ -70,6 +70,9 @@ export const CREDIT_ROLES_CONFIRM_FIELD = "creditRolesConfirmed";
 export const EMAIL_RECIPIENTS_FIELD = "emailRecipients" satisfies SettingKey;
 export const EMAIL_SUBJECT_FIELD = "emailSubjectTemplate" satisfies SettingKey;
 
+/** The Repeat warnings form's field, named for the setting it holds. */
+export const REPEAT_WARNING_WEEKS_FIELD = "repeatWarningWeeks" satisfies SettingKey;
+
 /** What a yes-or-no field posts: a checkbox is posted through a hidden field, since an unchecked box posts nothing. */
 export const YES = "yes";
 export const NO = "no";
@@ -141,6 +144,19 @@ export function readCopyrightForm(formData: FormData): SettingsFormRead {
     const posted = readValues(formData, [CCLI_LICENSE_NUMBER_FIELD]);
     const into = emptyCollected();
     take(into, "ccliLicenseNumber", CCLI_LICENSE_NUMBER_FIELD, posted[CCLI_LICENSE_NUMBER_FIELD]);
+    return finish(into, posted);
+}
+
+/**
+ * The Repeat warnings form: how many weeks back a song counts as sung
+ * lately, as typed (digits, with spaces around them allowed). The registry's
+ * parser refuses a blank, a fraction, a negative number and one over 52, and
+ * 0 is a number it takes: no warnings.
+ */
+export function readRepeatWarningsForm(formData: FormData): SettingsFormRead {
+    const posted = readValues(formData, [REPEAT_WARNING_WEEKS_FIELD]);
+    const into = emptyCollected();
+    take(into, "repeatWarningWeeks", REPEAT_WARNING_WEEKS_FIELD, posted[REPEAT_WARNING_WEEKS_FIELD]);
     return finish(into, posted);
 }
 

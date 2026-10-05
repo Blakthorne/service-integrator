@@ -5,6 +5,7 @@ const {
     auth,
     revalidatePath,
     syncPcoSongsNow,
+    syncPlanHistoryNow,
     getSettings,
     saveSettings,
     rederiveAllCredits,
@@ -14,6 +15,7 @@ const {
     auth: vi.fn(),
     revalidatePath: vi.fn(),
     syncPcoSongsNow: vi.fn(),
+    syncPlanHistoryNow: vi.fn(),
     getSettings: vi.fn(),
     saveSettings: vi.fn(),
     rederiveAllCredits: vi.fn(),
@@ -23,6 +25,7 @@ const {
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ syncPcoSongsNow }));
+vi.mock("@/lib/queries/reports", () => ({ syncPlanHistoryNow }));
 vi.mock("@/lib/queries/settings", () => ({ getSettings, saveSettings }));
 vi.mock("@/lib/queries/credits", () => ({ rederiveAllCredits, getCreditLabelSets }));
 vi.mock("@/lib/queries/export", () => ({ exportCatalogJson }));
@@ -36,8 +39,10 @@ import {
     saveCreditsAction,
     saveEmailAction,
     saveHymnalNotesAction,
+    saveRepeatWarningsAction,
     saveScheduleTextAction,
     syncPcoSongsAction,
+    syncPlanHistoryAction,
 } from "./actions";
 
 const SESSION = {
@@ -60,14 +65,24 @@ function run(ok: boolean, message: string | null) {
     };
 }
 
-/** The pages a sync revalidates. */
+/** The pages a song sync revalidates. */
 const SYNC_PAGES = [["/settings"], ["/catalog", "layout"], ["/plans", "layout"]];
+
+/** The pages a history sync revalidates: it also changes Reports and the dashboard. */
+const HISTORY_SYNC_PAGES = [
+    ["/settings"],
+    ["/reports"],
+    ["/catalog", "layout"],
+    ["/plans", "layout"],
+    ["/"],
+];
 
 beforeEach(() => {
     for (const mock of [
         auth,
         revalidatePath,
         syncPcoSongsNow,
+        syncPlanHistoryNow,
         getSettings,
         saveSettings,
         rederiveAllCredits,
@@ -189,11 +204,87 @@ describe("syncPcoSongsAction", () => {
     });
 });
 
+describe("syncPlanHistoryAction", () => {
+    /** The finished run of the history sync that syncPlanHistoryNow started or joined. */
+    function historyRun(ok: boolean, message: string | null) {
+        return { run: { ...run(ok, message).run, kind: "history" } };
+    }
+
+    test("throws without a session, before it syncs", async () => {
+        auth.mockResolvedValue(null);
+
+        await expect(syncPlanHistoryAction()).rejects.toThrow("Not signed in");
+        expect(syncPlanHistoryNow).not.toHaveBeenCalled();
+        expect(syncPcoSongsNow).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("syncs the history, gives the run's message and revalidates every page that shows it", async () => {
+        syncPlanHistoryNow.mockResolvedValue(
+            historyRun(true, "Synced 216 plans (1386 song items): read 21 plans (4 in the weekly pass), 2 added, 1 changed")
+        );
+
+        await expect(syncPlanHistoryAction()).resolves.toEqual({
+            ok: true,
+            message: "Synced 216 plans (1386 song items): read 21 plans (4 in the weekly pass), 2 added, 1 changed",
+        });
+        expect(syncPlanHistoryNow).toHaveBeenCalledTimes(1);
+        expect(syncPcoSongsNow).not.toHaveBeenCalled();
+        expect(revalidatePath.mock.calls).toEqual(HISTORY_SYNC_PAGES);
+    });
+
+    test("says why a sync failed, and still revalidates, since the run is recorded", async () => {
+        syncPlanHistoryNow.mockResolvedValue(historyRun(false, "PCO request failed (status: 500)"));
+
+        await expect(syncPlanHistoryAction()).resolves.toEqual({
+            ok: false,
+            message: "The sync failed: PCO request failed (status: 500).",
+        });
+        expect(revalidatePath.mock.calls).toEqual(HISTORY_SYNC_PAGES);
+    });
+
+    test("words a run without a message", async () => {
+        syncPlanHistoryNow.mockResolvedValue(historyRun(true, null));
+        await expect(syncPlanHistoryAction()).resolves.toEqual({ ok: true, message: "Synced." });
+
+        syncPlanHistoryNow.mockResolvedValue(historyRun(false, null));
+        await expect(syncPlanHistoryAction()).resolves.toEqual({
+            ok: false,
+            message: "The sync failed: no reason was recorded.",
+        });
+    });
+
+    test("returns a message, and logs the cause, when the sync throws all the same", async () => {
+        const cause = new Error("Unexpected");
+        syncPlanHistoryNow.mockRejectedValue(cause);
+
+        await expect(syncPlanHistoryAction()).resolves.toEqual({
+            ok: false,
+            message: FORM_FAILURE_MESSAGE,
+        });
+        expect(console.error).toHaveBeenCalledWith("Failed to sync the plan history:", cause);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("says nothing was changed, and revalidates nothing, when no run could be recorded", async () => {
+        syncPlanHistoryNow.mockResolvedValue({ run: null, error: "database or disk is full" });
+
+        await expect(syncPlanHistoryAction()).resolves.toEqual({
+            ok: false,
+            message: FORM_FAILURE_MESSAGE,
+        });
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+});
+
 /** Every page a saved setting revalidates: Settings, the plan pages and the dashboard. */
 const SETTINGS_PAGES = [["/settings"], ["/plans", "layout"], ["/"]];
 
 /** What saving the credits revalidates: Settings, the plan pages and the catalog's, not the dashboard. */
 const CREDIT_PAGES = [["/settings"], ["/plans", "layout"], ["/catalog", "layout"]];
+
+/** What saving the repeat warning window revalidates: Settings and the plan pages, whose Schedule tabs warn. */
+const REPEAT_WARNING_PAGES = [["/settings"], ["/plans", "layout"]];
 
 /** What saving the email settings revalidates: Settings alone. */
 const EMAIL_PAGES = [["/settings"]];
@@ -243,6 +334,7 @@ const FORM_ACTIONS = [
         { emailRecipients: "pastor@example.org", emailSubjectTemplate: "Songs for {date}" },
         EMAIL_PAGES,
     ],
+    ["saveRepeatWarningsAction", saveRepeatWarningsAction, { repeatWarningWeeks: "6" }, REPEAT_WARNING_PAGES],
 ] as const;
 
 describe.each(FORM_ACTIONS)("%s", (_name, action, fields, pages) => {
@@ -347,6 +439,46 @@ describe("saveCopyrightAction", () => {
         expect(saveSettings).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
+});
+
+describe("saveRepeatWarningsAction", () => {
+    test("saves the weeks as a number, and gives the form what is saved", async () => {
+        const state = await saveRepeatWarningsAction(formWith({ repeatWarningWeeks: " 8 " }));
+
+        expect(saveSettings).toHaveBeenCalledWith({ repeatWarningWeeks: 8 });
+        expect(state).toEqual({
+            status: "success",
+            message: "Saved.",
+            values: { repeatWarningWeeks: "8" },
+        });
+    });
+
+    test("saves 0, which turns the warnings off", async () => {
+        const state = await saveRepeatWarningsAction(formWith({ repeatWarningWeeks: "0" }));
+
+        expect(saveSettings).toHaveBeenCalledWith({ repeatWarningWeeks: 0 });
+        expect(state).toMatchObject({ status: "success", values: { repeatWarningWeeks: "0" } });
+    });
+
+    test.each(["", "  ", "abc", "-1", "1.5", "53", "6 weeks"])(
+        "refuses %j, on its field, and saves nothing",
+        async (posted) => {
+            const state = await saveRepeatWarningsAction(formWith({ repeatWarningWeeks: posted }));
+
+            expect(state).toEqual({
+                status: "error",
+                message: FIX_FIELDS,
+                fieldErrors: {
+                    repeatWarningWeeks: {
+                        message: "Enter a whole number of weeks from 0 to 52; 0 turns the warnings off.",
+                    },
+                },
+                values: { repeatWarningWeeks: posted },
+            });
+            expect(saveSettings).not.toHaveBeenCalled();
+            expect(revalidatePath).not.toHaveBeenCalled();
+        }
+    );
 });
 
 describe("saveScheduleTextAction", () => {

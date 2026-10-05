@@ -267,8 +267,8 @@ export interface SeedImportRunFields {
 /**
  * The rows of a seed run with nothing in it but its two books, Rejoice Hymns
  * (R) and Great Hymns of the Faith (G): what a preview of the seed of an
- * empty hymns.json stored. The seed's planner is gone, but its stored runs
- * are not, so tests build the runs they need from rows like these.
+ * empty hymns.json stored. Tests build the runs they need from rows like
+ * these, so they never depend on planning the real file.
  */
 export function emptySeedRows(): PlannedCatalogRows {
     return {
@@ -651,10 +651,11 @@ export function seedPcoSongCredits(
 
 /**
  * A default id for a new row of `table`: the first of `base + n`,
- * `base + n + 1`, … that no row has, where n is one more than its rows.
+ * `base + n + 1`, … that no row has in `column`, where n is one more than
+ * its rows.
  */
-function firstFreeId(db: DatabaseSync, table: string, base: number): string {
-    const taken = db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`);
+function firstFreeId(db: DatabaseSync, table: string, base: number, column = "id"): string {
+    const taken = db.prepare(`SELECT 1 FROM ${table} WHERE ${column} = ?`);
     let ordinal = nextOrdinal(db, table);
     while (taken.get(String(base + ordinal))) {
         ordinal += 1;
@@ -720,4 +721,91 @@ export function seedPcoSongTag(db: DatabaseSync, pcoSongId: string, tagId: strin
         pcoSongId,
         tagId
     );
+}
+
+/** The fields of a plan of the history; `seedHistoryPlan` fills in the rest. */
+export interface SeedHistoryPlanFields {
+    planId?: string;
+    serviceTypeId?: string;
+    /** `YYYY-MM-DD`. */
+    planDate?: string;
+    updatedAt?: string;
+    /** When its items were read, ISO 8601 UTC; null (not the same as left out) for a plan never read. */
+    itemsSyncedAt?: string | null;
+}
+
+/**
+ * Insert a plan into the history and return its id. By default its id is the
+ * first free one of 7000001, 7000002, …, it is a plan of Sunday Morning
+ * (1405391) dated 2026-09-27, last updated in Planning Center at 2026-09-27
+ * 12:00 UTC, whose items were read at 2026-10-04 12:00 UTC.
+ */
+export function seedHistoryPlan(db: DatabaseSync, fields: SeedHistoryPlanFields = {}): string {
+    const planId = fields.planId ?? firstFreeId(db, "history_plans", 7_000_000, "plan_id");
+    db.prepare(
+        "INSERT INTO history_plans (plan_id, service_type_id, plan_date, updated_at, items_synced_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(
+        planId,
+        fields.serviceTypeId ?? "1405391",
+        fields.planDate ?? "2026-09-27",
+        fields.updatedAt ?? "2026-09-27T12:00:00.000Z",
+        fields.itemsSyncedAt === undefined ? "2026-10-04T12:00:00.000Z" : fields.itemsSyncedAt
+    );
+    return planId;
+}
+
+/** The fields of a song item of a plan of the history; `seedOccurrence` fills in the rest. */
+export interface SeedOccurrenceFields {
+    /** The Planning Center song the item schedules. */
+    pcoSongId: string;
+    /** Its plan, which must be in the history (see `seedHistoryPlan`). */
+    planId: string;
+    itemId?: string;
+    sequence?: number;
+    /** `YYYY-MM-DD`; the plan's date when left out. */
+    planDate?: string;
+    /** The plan's service type when left out. */
+    serviceTypeId?: string;
+    syncedAt?: string;
+}
+
+/**
+ * Insert a song item of a plan of the history and return its plan's and its
+ * own id. By default its item id is the first free one of 1, 2, … in the
+ * plan, its sequence its item id, its date and service type its plan's, and
+ * it was synced at 2026-10-04 12:00 UTC.
+ */
+export function seedOccurrence(
+    db: DatabaseSync,
+    fields: SeedOccurrenceFields
+): { planId: string; itemId: string } {
+    const { planId } = fields;
+    const plan = db
+        .prepare("SELECT plan_date, service_type_id FROM history_plans WHERE plan_id = ?")
+        .get(planId);
+    if (!plan) {
+        throw new Error(`seedOccurrence: plan ${planId} is not in the history; seed it first`);
+    }
+    let itemId = fields.itemId;
+    if (itemId === undefined) {
+        const taken = db.prepare("SELECT 1 FROM plan_occurrences WHERE plan_id = ? AND item_id = ?");
+        let ordinal = 1;
+        while (taken.get(planId, String(ordinal))) {
+            ordinal += 1;
+        }
+        itemId = String(ordinal);
+    }
+    db.prepare(
+        `INSERT INTO plan_occurrences (plan_id, item_id, pco_song_id, sequence, plan_date, service_type_id, synced_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+        planId,
+        itemId,
+        fields.pcoSongId,
+        fields.sequence ?? Number(itemId),
+        fields.planDate ?? String(plan.plan_date),
+        fields.serviceTypeId ?? String(plan.service_type_id),
+        fields.syncedAt ?? "2026-10-04T12:00:00.000Z"
+    );
+    return { planId, itemId };
 }

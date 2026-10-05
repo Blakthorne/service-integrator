@@ -36,6 +36,12 @@ interface CatalogSongsViewProps {
     tagGroups: CatalogTagGroupOption[];
     /** The tag ids of the Planning Center songs the songs are linked to, by song id (`catalogTagIdsBySong`). */
     tagIdsBySong: Record<string, string[]>;
+    /**
+     * Whether the plan history holds any plan. Before its first sync no
+     * song is known to have been sung, so the rows say nothing of it and the
+     * not-sung-since filter says why it would keep every linked song.
+     */
+    historyRead: boolean;
 }
 
 /**
@@ -43,18 +49,21 @@ interface CatalogSongsViewProps {
  * browser, with `lib/catalog/filter.ts`. The search (`?q=`), book (`?book=`),
  * Planning Center link (`?linked=`), usage (`?used=`), mark (`?mark=`, the
  * "to learn" shelf, with how many songs are on it), Planning Center tag
- * (`?tag=`), sort (`?sort=`) and page (`?page=`) live in the URL, so a view
- * can be linked to and survives Back. Filters replace the history entry and
- * send the list back to page 1; pages push one, so Back steps through them.
- * A value at its default (no search, every book, linked or not, used or
- * not, marked or not, any tag, by title, page 1) leaves the URL. "Export
- * CSV" downloads every song the filters leave, not just the page shown.
+ * (`?tag=`), last sung (`?notSince=`, the linked songs last sung before a
+ * date, or never, from the plan history), sort (`?sort=`) and page
+ * (`?page=`) live in the URL, so a view can be linked to and survives Back.
+ * Filters replace the history entry and send the list back to page 1; pages
+ * push one, so Back steps through them. A value at its default (no search,
+ * every book, linked or not, used or not, marked or not, any tag, any date,
+ * by title, page 1) leaves the URL. "Export CSV" downloads every song the
+ * filters leave, not just the page shown.
  */
 export default function CatalogSongsView({
     songs,
     books,
     tagGroups,
     tagIdsBySong,
+    historyRead,
 }: CatalogSongsViewProps) {
     const { searchParams, setSearchParams } = useUrlState();
     const listRef = useRef<HTMLDivElement>(null);
@@ -64,7 +73,7 @@ export default function CatalogSongsView({
         () => tagGroups.flatMap((group) => group.tags.map(({ id }) => id)),
         [tagGroups]
     );
-    const { q, book, linked, used, mark, sort, page } = parseCatalogSongsQuery(
+    const { q, book, linked, used, mark, notSince, sort, page } = parseCatalogSongsQuery(
         searchParams,
         bookCodes
     );
@@ -74,8 +83,13 @@ export default function CatalogSongsView({
         [tagId, tagIdsBySong]
     );
     const shown = useMemo(
-        () => selectCatalogSongs(songs, { q, book, linked, used, mark, tag, sort, page }, bookCodes),
-        [songs, q, book, linked, used, mark, tag, sort, page, bookCodes]
+        () =>
+            selectCatalogSongs(
+                songs,
+                { q, book, linked, used, mark, notSince, tag, sort, page },
+                bookCodes
+            ),
+        [songs, q, book, linked, used, mark, notSince, tag, sort, page, bookCodes]
     );
     const toLearnCount = useMemo(() => countMarked(songs, "to-learn"), [songs]);
 
@@ -118,6 +132,14 @@ export default function CatalogSongsView({
         );
     }
 
+    function handleNotSinceChange(next: string) {
+        // "" is a date emptied or cleared: the filter goes.
+        setSearchParams(
+            { notSince: next === "" ? null : next, page: null },
+            { history: "replace" }
+        );
+    }
+
     function handleSortChange(next: CatalogSort) {
         setSearchParams(
             { sort: next === "title" ? null : next, page: null },
@@ -130,11 +152,11 @@ export default function CatalogSongsView({
         // function as the page: what is exported is what is listed.
         const matching = arrangeCatalogSongs(
             songs,
-            { q, book, linked, used, mark, tag, sort },
+            { q, book, linked, used, mark, notSince, tag, sort },
             bookCodes
         );
         downloadCsv(
-            catalogCsvFilename({ q, book, linked, used, mark }, new Date()),
+            catalogCsvFilename({ q, book, linked, used, mark, notSince }, new Date()),
             catalogSongsCsv(matching, books)
         );
     }
@@ -159,6 +181,8 @@ export default function CatalogSongsView({
                 mark={mark}
                 toLearnCount={toLearnCount}
                 tag={tagId ?? ANY_TAG}
+                notSince={notSince ?? ""}
+                historyRead={historyRead}
                 sort={sort}
                 books={books}
                 tagGroups={tagGroups}
@@ -170,6 +194,7 @@ export default function CatalogSongsView({
                 onUsedChange={handleUsedChange}
                 onMarkChange={handleMarkChange}
                 onTagChange={handleTagChange}
+                onNotSinceChange={handleNotSinceChange}
                 onSortChange={handleSortChange}
                 onExport={handleExport}
             />
@@ -182,6 +207,7 @@ export default function CatalogSongsView({
                     caption="Songs"
                     showTune
                     showLink
+                    historyRead={historyRead}
                     emptyMessage="No songs match."
                 />
                 {shown.totalPages > 1 && (

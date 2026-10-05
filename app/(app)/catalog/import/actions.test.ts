@@ -7,6 +7,7 @@ const {
     auth,
     revalidatePath,
     redirect,
+    previewSeedImport,
     previewBookCsvImport,
     applyCatalogImport,
     discardCatalogImport,
@@ -22,6 +23,7 @@ const {
         auth: vi.fn(),
         revalidatePath: vi.fn(),
         redirect: vi.fn(),
+        previewSeedImport: vi.fn(),
         previewBookCsvImport: vi.fn(),
         applyCatalogImport: vi.fn(),
         discardCatalogImport: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/queries/catalogImport", () => ({
+    previewSeedImport,
     previewBookCsvImport,
     applyCatalogImport,
     discardCatalogImport,
@@ -43,6 +46,7 @@ import {
     applyImportAction,
     discardImportAction,
     previewBookCsvAction,
+    previewSeedImportAction,
 } from "./actions";
 
 const SESSION = {
@@ -78,6 +82,7 @@ beforeEach(() => {
         auth,
         revalidatePath,
         redirect,
+        previewSeedImport,
         previewBookCsvImport,
         applyCatalogImport,
         discardCatalogImport,
@@ -130,6 +135,7 @@ async function redirectedTo(action: Promise<unknown>): Promise<string> {
 
 describe("every import action", () => {
     const actions = [
+        ["previewSeedImportAction", () => previewSeedImportAction()],
         ["previewBookCsvAction", () => previewBookCsvAction(csvForm())],
         ["applyImportAction", () => applyImportAction(null, formWith({ runId: "7" }))],
         ["discardImportAction", () => discardImportAction(null, formWith({ runId: "7" }))],
@@ -141,6 +147,7 @@ describe("every import action", () => {
             auth.mockResolvedValue(null);
 
             await expect(run()).rejects.toThrow("Not signed in");
+            expect(previewSeedImport).not.toHaveBeenCalled();
             expect(previewBookCsvImport).not.toHaveBeenCalled();
             expect(applyCatalogImport).not.toHaveBeenCalled();
             expect(discardCatalogImport).not.toHaveBeenCalled();
@@ -148,6 +155,33 @@ describe("every import action", () => {
             expect(redirect).not.toHaveBeenCalled();
         }
     );
+});
+
+describe("previewSeedImportAction", () => {
+    test("stores a preview, then goes to the run's review page", async () => {
+        previewSeedImport.mockReturnValue(7);
+
+        expect(await redirectedTo(previewSeedImportAction())).toBe("/catalog/import/7");
+        expect(previewSeedImport).toHaveBeenCalledTimes(1);
+        expect(revalidatePath).toHaveBeenCalledWith("/catalog/import", "layout");
+    });
+
+    test("returns a message, and logs the cause, when the preview fails", async () => {
+        const cause = new Error("hymns.json is damaged");
+        previewSeedImport.mockImplementation(() => {
+            throw cause;
+        });
+
+        await expect(previewSeedImportAction()).resolves.toEqual({
+            error: expect.stringContaining("nothing was changed"),
+        });
+        expect(console.error).toHaveBeenCalledWith(
+            "Failed to preview the seed import:",
+            cause
+        );
+        expect(revalidatePath).not.toHaveBeenCalled();
+        expect(redirect).not.toHaveBeenCalled();
+    });
 });
 
 describe("previewBookCsvAction", () => {

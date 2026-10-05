@@ -4,6 +4,7 @@ import pcoSongs from "./0003_pco_songs";
 import selections from "./0004_selections";
 import creditsTags from "./0005_credits_tags";
 import marks from "./0006_marks";
+import history from "./0007_history";
 
 /** A schema change, applied once by `migrate()` and recorded in `schema_migrations`. */
 export interface Migration {
@@ -33,4 +34,5 @@ export const MIGRATIONS: readonly Migration[] = [
     selections,
     creditsTags,
     marks,
+    history,
 ];

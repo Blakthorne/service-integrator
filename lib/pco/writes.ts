@@ -23,7 +23,8 @@ import type {
  * (refresh-before-write) and records a `write_log` row for each write.
  *
  * The writes: item notes (create, update, delete), songs (create, update),
- * song items (create, appended to a plan) and a song's tags (assign).
+ * song items (create, appended to a plan), a plan's items' order (reorder)
+ * and a song's tags (assign).
  */
 
 /** The path of an item's notes. */
@@ -238,6 +239,41 @@ export async function createSongItem(
     }
     const item = toPlanItem(response.data);
     return { ...item, songId: item.songId ?? song };
+}
+
+/** What `reorderPlanItems` put in order. */
+export interface ReorderedPlanItems {
+    planId: string;
+    /** The ids of the plan's items, in the order sent. */
+    itemIds: string[];
+}
+
+/**
+ * Put plan `planId`'s items in the order `orderedIds` (`POST …/item_reorder`
+ * with a `PlanItemReorder` whose `sequence` is the ids): the spike found
+ * that it answers 204 and that a partial list moves just those items to the
+ * front, in the order given, so send **every** item of the plan, each once,
+ * or the items left out are moved after the ones named. The caller reads
+ * the plan's items afresh first and sends all of their ids (see
+ * `reorderItems`, lib/queries/planItems.ts). Throws, sending nothing, for
+ * an empty list or an item named twice. Returns the order sent.
+ */
+export async function reorderPlanItems(
+    serviceTypeId: string,
+    planId: string,
+    orderedIds: readonly string[]
+): Promise<ReorderedPlanItems> {
+    const plan = assertPcoId(planId);
+    const path = `/service_types/${assertPcoId(serviceTypeId)}/plans/${plan}/item_reorder`;
+    const ids = orderedIds.map((id) => assertPcoId(id));
+    if (ids.length === 0) {
+        throw new Error(`No items to put in order (${path})`);
+    }
+    if (new Set(ids).size !== ids.length) {
+        throw new Error(`An item is named twice in the new order (${path})`);
+    }
+    await pcoMutate("POST", path, jsonApi("PlanItemReorder", { sequence: ids }));
+    return { planId: plan, itemIds: ids };
 }
 
 /** What `assignSongTags` gave a song: its whole set of tags now. */

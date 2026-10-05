@@ -87,3 +87,80 @@ export function formatShortDate(ymd: string): string {
     const date = parseYmd(ymd);
     return date === null ? ymd : SHORT_DATE.format(date);
 }
+
+const MONTH_DAY = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+});
+
+/**
+ * A `YYYY-MM-DD` plan date without its year, e.g. "2026-09-20" gives "Sep 20".
+ * The same text in every time zone.
+ *
+ * Input that is not a real calendar date is returned unchanged.
+ */
+export function formatMonthDay(ymd: string): string {
+    const date = parseYmd(ymd);
+    return date === null ? ymd : MONTH_DAY.format(date);
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** `YYYY-MM-DD` of a Date made at midnight UTC. */
+function ymdOf(date: Date): string {
+    return date.toISOString().slice(0, 10);
+}
+
+/** Midnight UTC of a real `YYYY-MM-DD` date. Throws a RangeError for anything else. */
+function requireYmd(ymd: string): Date {
+    const date = parseYmd(ymd);
+    if (date === null) {
+        throw new RangeError(`Not a calendar date: ${JSON.stringify(ymd)}`);
+    }
+    return date;
+}
+
+function requireInteger(value: number, what: string): void {
+    if (!Number.isInteger(value)) {
+        throw new RangeError(`${what} must be a whole number: ${value}`);
+    }
+}
+
+/**
+ * The date `days` days after `ymd` (before it, for a negative number), as
+ * `YYYY-MM-DD`: calendar arithmetic, the same in every time zone. Throws a
+ * RangeError unless `ymd` is a real calendar date and `days` a whole number.
+ */
+export function addDaysToYmd(ymd: string, days: number): string {
+    requireInteger(days, "days");
+    const date = requireYmd(ymd);
+    date.setUTCDate(date.getUTCDate() + days);
+    return ymdOf(date);
+}
+
+/**
+ * The date `months` months after `ymd` (before it, for a negative number),
+ * as `YYYY-MM-DD`, on the same day of the month, or the last day of a month
+ * that is shorter ("2026-03-31" less a month is "2026-02-28"). Throws a
+ * RangeError unless `ymd` is a real calendar date and `months` a whole
+ * number.
+ */
+export function addMonthsToYmd(ymd: string, months: number): string {
+    requireInteger(months, "months");
+    const date = requireYmd(ymd);
+    const day = date.getUTCDate();
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + months);
+    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(Math.min(day, lastDay));
+    return ymdOf(date);
+}
+
+/**
+ * How many days `to` is after `from` (negative when it is before), both
+ * `YYYY-MM-DD`. Throws a RangeError unless both are real calendar dates.
+ */
+export function daysBetweenYmd(from: string, to: string): number {
+    return Math.round((requireYmd(to).getTime() - requireYmd(from).getTime()) / DAY_MS);
+}

@@ -32,7 +32,11 @@ import type {
  * row, for the page's `notFound()`.
  */
 
-/** Every song as a row of the songs list, by title, then tune name. Empty before the seed import. */
+/**
+ * Every song as a row of the songs list, by title, then tune name, each with
+ * the date it was last sung (`lastSungAt`, as of the server's date). Empty
+ * before the seed import.
+ */
 export function getCatalogSongs(): CatalogSongSummary[] {
     return listCatalogSongs(getDb());
 }

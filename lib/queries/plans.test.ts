@@ -4,7 +4,9 @@ import {
     openTestDb,
     seedBook,
     seedEntry,
+    seedHistoryPlan,
     seedHymn,
+    seedOccurrence,
     seedPcoSong,
     seedScheduleSelection,
     seedSetting,
@@ -208,6 +210,136 @@ describe("getPlanDetail", () => {
     });
 });
 
+describe("getPlanDetail's repeat warnings", () => {
+    // Noon by the clock of the machine the tests run on, so the date is the same in every time zone.
+    const TODAY = new Date(2026, 9, 4, 12, 0, 0);
+
+    /** The plan's items: songs 20, 30 and 40 at items 2, 3 and 4, and a header. */
+    const detailRoutes = () => planDetailRoutes();
+
+    /** A past or upcoming plan of the history holding Planning Center songs `songs`. */
+    function plan(planId: string, planDate: string, ...songs: string[]): void {
+        seedHistoryPlan(db, { planId, planDate });
+        for (const pcoSongId of songs) {
+            seedOccurrence(db, { planId, pcoSongId });
+        }
+    }
+
+    beforeEach(() => {
+        // Only the date: the stubbed fetches and the loaded modules need real timers.
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(TODAY);
+    });
+
+    async function warnings() {
+        stubFetchRoutes(detailRoutes());
+        const { getPlanDetail } = await loadQueries();
+        return (await getPlanDetail(MORNING, PLAN)).repeatWarnings;
+    }
+
+    test("warns on each song item whose song was last sung within 6 weeks, with the plan and how long ago", async () => {
+        plan("501", "2026-09-27", "20");
+        plan("502", "2026-09-20", "30", "20");
+        plan("503", "2026-08-23", "40");
+
+        expect(await warnings()).toEqual({
+            // Song 20 was sung on the 27th and the 20th: the last counts.
+            "2": { planId: "501", serviceTypeId: MORNING, planDate: "2026-09-27", daysAgo: 7 },
+            "3": { planId: "502", serviceTypeId: MORNING, planDate: "2026-09-20", daysAgo: 14 },
+            // Exactly 6 weeks ago is within the window.
+            "4": { planId: "503", serviceTypeId: MORNING, planDate: "2026-08-23", daysAgo: 42 },
+        });
+    });
+
+    test("leaves out a song not sung within the window, one only scheduled, and an item that is no song", async () => {
+        plan("501", "2026-08-22", "20");
+        plan("502", "2026-10-04", "30");
+        plan("503", "2026-10-11", "40");
+        plan("504", "2026-09-27", "99");
+        expect(await warnings()).toEqual({});
+    });
+
+    test("leaves out this plan itself, and gives the plan before it", async () => {
+        // The plan being looked at is in the history too, as a past plan.
+        plan(PLAN, "2026-09-27", "20");
+        plan("502", "2026-09-13", "20");
+        const result = await warnings();
+        expect(result["2"]).toMatchObject({ planId: "502", planDate: "2026-09-13", daysAgo: 21 });
+    });
+
+    test("gives nothing for a history never synced", async () => {
+        expect(await warnings()).toEqual({});
+    });
+
+    test("follows the setting's weeks: a narrower window leaves out older plans, a wider one takes them in", async () => {
+        plan("501", "2026-09-27", "20");
+        plan("502", "2026-09-06", "30");
+        plan("503", "2026-06-07", "40");
+
+        seedSetting(db, "repeatWarningWeeks", 2);
+        expect(Object.keys(await warnings())).toEqual(["2"]);
+
+        db.prepare("UPDATE settings SET value = '4' WHERE key = 'repeatWarningWeeks'").run();
+        expect(Object.keys(await warnings()).sort()).toEqual(["2", "3"]);
+
+        db.prepare("UPDATE settings SET value = '52' WHERE key = 'repeatWarningWeeks'").run();
+        expect(Object.keys(await warnings()).sort()).toEqual(["2", "3", "4"]);
+    });
+
+    test("is off at 0 weeks, and asks the database nothing", async () => {
+        plan("501", "2026-09-27", "20", "30", "40");
+        seedSetting(db, "repeatWarningWeeks", 0);
+        stubFetchRoutes(detailRoutes());
+        const { getPlanDetail } = await loadQueries();
+        const prepare = vi.spyOn(db, "prepare");
+
+        const detail = await getPlanDetail(MORNING, PLAN);
+
+        expect(detail.repeatWarnings).toEqual({});
+        // The catalog's own read mentions the history (each song's last sung date); the warnings' does not run.
+        expect(
+            prepare.mock.calls.some(([sql]) => String(sql).includes("plan_occurrences") && String(sql).includes("json_each"))
+        ).toBe(false);
+    });
+
+    test("warns by default, as the setting's default is 6 weeks", async () => {
+        plan("501", "2026-08-30", "20");
+        expect(Object.keys(await warnings())).toEqual(["2"]);
+        expect(DEFAULT_SETTINGS.repeatWarningWeeks).toBe(6);
+    });
+
+    test("keeps the plan when the history cannot be read: no warnings, and why in the log", async () => {
+        plan("501", "2026-09-27", "20");
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+        const prepare = db.prepare.bind(db);
+        vi.spyOn(db, "prepare").mockImplementation((sql: string) => {
+            if (sql.includes("json_each") && sql.includes("plan_occurrences")) {
+                throw new Error("no such table: plan_occurrences");
+            }
+            return prepare(sql);
+        });
+        stubFetchRoutes(detailRoutes());
+        const { getPlanDetail } = await loadQueries();
+
+        const detail = await getPlanDetail(MORNING, PLAN);
+
+        expect(detail.repeatWarnings).toEqual({});
+        expect(detail.items).toHaveLength(4);
+        expect(consoleError).toHaveBeenCalledWith(
+            `Failed to read the repeat warnings of plan ${PLAN}:`,
+            expect.objectContaining({ message: "no such table: plan_occurrences" })
+        );
+    });
+
+    test("is as of the day it is read on", async () => {
+        plan("501", "2026-09-27", "20");
+        expect((await warnings())["2"]).toMatchObject({ daysAgo: 7 });
+        vi.setSystemTime(new Date(2026, 10, 10, 12, 0, 0));
+        // 44 days on: out of the window.
+        expect(await warnings()).toEqual({});
+    });
+});
+
 describe("getPlanDetail's catalog links", () => {
     /** Plan routes whose items are these, with these songs included. */
     function routesWith(
@@ -396,8 +528,9 @@ describe("getPlanDetail's catalog links", () => {
         );
         await getPlanDetail(MORNING, PLAN);
         const fewSongs = prepare.mock.calls.length;
-        // Seven for the catalog links, one for the saved choices, one for the settings.
-        expect(fewSongs).toBe(9);
+        // Seven for the catalog links, one for the saved choices, one for the
+        // settings, one for the songs sung lately.
+        expect(fewSongs).toBe(10);
 
         prepare.mockClear();
         stubFetchRoutes(
@@ -415,9 +548,9 @@ describe("getPlanDetail's catalog links", () => {
         prepare.mockClear();
         stubFetchRoutes(routesWith([songItem("1", "30", "Abide with Me")], []));
         await getPlanDetail(MORNING, PLAN);
-        expect(prepare.mock.calls.length).toBe(4);
+        expect(prepare.mock.calls.length).toBe(5);
 
-        // No song items: no catalog to ask; the saved choices and the settings still are.
+        // No song items: no catalog and no history to ask; the saved choices and the settings still are.
         prepare.mockClear();
         stubFetchRoutes(
             routesWith([itemResource("1", { title: "Welcome", item_type: "header" })], [])

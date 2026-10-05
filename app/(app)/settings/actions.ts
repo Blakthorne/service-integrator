@@ -20,6 +20,7 @@ import { parsePcoId } from "@/lib/pco";
 import { getCreditLabelSets, rederiveAllCredits } from "@/lib/queries/credits";
 import { exportCatalogJson } from "@/lib/queries/export";
 import { syncPcoSongsNow, type RunJobResult } from "@/lib/queries/reconcile";
+import { syncPlanHistoryNow } from "@/lib/queries/reports";
 import { getSettings, saveSettings, type SaveSettingsResult } from "@/lib/queries/settings";
 import { routes } from "@/lib/routes";
 import {
@@ -30,6 +31,7 @@ import {
     readCreditsForm,
     readEmailForm,
     readHymnalNotesForm,
+    readRepeatWarningsForm,
     readScheduleTextForm,
     type SettingsFormRead,
 } from "@/lib/settingsForms";
@@ -39,6 +41,37 @@ import { CREDITS_NOT_REREAD_MESSAGE, describeRederivedCredits } from "@/lib/sett
 export interface SyncNowResult {
     ok: boolean;
     message: string;
+}
+
+/**
+ * Run a sync through `sync` (which joins a run already in progress rather
+ * than start another) and say how that run went; then call `revalidate`,
+ * whether the run succeeded or not, since its run is recorded either way.
+ * When no run could be recorded at all (the database could not be opened or
+ * written), nothing changed: it says so, and revalidates nothing. A sync that
+ * throws all the same is logged under `what` and comes back as a message.
+ */
+async function runSyncNow(
+    what: string,
+    sync: () => Promise<RunJobResult>,
+    revalidate: () => void
+): Promise<SyncNowResult> {
+    let result: RunJobResult;
+    try {
+        result = await sync();
+    } catch (error) {
+        console.error(`Failed to sync ${what}:`, error);
+        return { ok: false, message: FORM_FAILURE_MESSAGE };
+    }
+    if (result.run === null) {
+        // runJob logged why: the run could not even be recorded.
+        return { ok: false, message: FORM_FAILURE_MESSAGE };
+    }
+    revalidate();
+    const { run } = result;
+    return run.ok
+        ? { ok: true, message: run.message ?? "Synced." }
+        : { ok: false, message: `The sync failed: ${run.message ?? "no reason was recorded"}.` };
 }
 
 /**
@@ -58,28 +91,37 @@ export interface SyncNowResult {
  * (convention 15). It checks the session first and throws without one.
  */
 export async function syncPcoSongsAction(): Promise<SyncNowResult> {
-    const session = await auth();
-    if (!session) {
-        throw new Error("Not signed in");
-    }
-    let result: RunJobResult;
-    try {
-        result = await syncPcoSongsNow();
-    } catch (error) {
-        console.error("Failed to sync the Planning Center songs:", error);
-        return { ok: false, message: FORM_FAILURE_MESSAGE };
-    }
-    if (result.run === null) {
-        // runJob logged why: the run could not even be recorded.
-        return { ok: false, message: FORM_FAILURE_MESSAGE };
-    }
-    revalidatePath(routes.settings());
-    revalidatePath(routes.catalog(), "layout");
-    revalidatePath(routes.plans(), "layout");
-    const { run } = result;
-    return run.ok
-        ? { ok: true, message: run.message ?? "Synced." }
-        : { ok: false, message: `The sync failed: ${run.message ?? "no reason was recorded"}.` };
+    await requireSession();
+    return runSyncNow("the Planning Center songs", syncPcoSongsNow, () => {
+        revalidatePath(routes.settings());
+        revalidatePath(routes.catalog(), "layout");
+        revalidatePath(routes.plans(), "layout");
+    });
+}
+
+/**
+ * "Sync history now", on Settings and Reports: run the plan history sync
+ * (`syncPlanHistoryNow`, which joins a run already in progress, the hourly
+ * job's included) and say how that run went, as `syncPcoSongsAction` does.
+ * Then every page that shows the history is revalidated: Settings, Reports,
+ * the catalog's pages (the songs list's last sung dates, a song's history),
+ * the plans' (the repeat warnings) and the dashboard (the figures of the
+ * history).
+ *
+ * The first sync reads about 220 plans, paced, and takes a minute or two, so
+ * the button calls this from its click, with its pending state in
+ * `useState` (convention 15). It checks the session first and throws without
+ * one.
+ */
+export async function syncPlanHistoryAction(): Promise<SyncNowResult> {
+    await requireSession();
+    return runSyncNow("the plan history", syncPlanHistoryNow, () => {
+        revalidatePath(routes.settings());
+        revalidatePath(routes.reports());
+        revalidatePath(routes.catalog(), "layout");
+        revalidatePath(routes.plans(), "layout");
+        revalidatePath(routes.home());
+    });
 }
 
 /** What exporting the catalog tells its button: the JSON to download, or why there is none. */
@@ -190,6 +232,16 @@ function revalidateEmailPages(): void {
     revalidatePath(routes.settings());
 }
 
+/**
+ * The pages that show the repeat warning window: Settings itself and the
+ * plan pages, whose Schedule tabs carry the warnings (they are worked out
+ * when a plan page is rendered). Not the dashboard, which shows none.
+ */
+function revalidateRepeatWarningPages(): void {
+    revalidatePath(routes.settings());
+    revalidatePath(routes.plans(), "layout");
+}
+
 /** What follows a save that went through: more to say beside "Saved.", or a problem the save itself did not have. */
 type AfterSave = { ok: true; message: string } | { ok: false; message: string };
 
@@ -283,6 +335,16 @@ export async function saveScheduleTextAction(formData: FormData): Promise<Settin
         return formError(FORM_FAILURE_MESSAGE);
     }
     return saveRead(readScheduleTextForm(formData, settings.scheduleHeaderLabels, parsePcoId));
+}
+
+/**
+ * The Repeat warnings card's action: save how many weeks back a song counts
+ * as sung lately, from 0 (no warnings) to 52. It reads nothing from Planning
+ * Center: the warnings come from the plan history in the local database.
+ */
+export async function saveRepeatWarningsAction(formData: FormData): Promise<SettingsFormState> {
+    await requireSession();
+    return saveRead(readRepeatWarningsForm(formData), { revalidate: revalidateRepeatWarningPages });
 }
 
 /** The Hymnal notes card's action: save the item note category's name and whether a note names the tune. */

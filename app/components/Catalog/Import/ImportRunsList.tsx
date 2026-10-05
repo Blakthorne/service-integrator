@@ -26,7 +26,8 @@ export default function ImportRunsList({ runs }: ImportRunsListProps) {
                     No import runs yet
                 </h3>
                 <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    Preview a CSV file to create the first one.
+                    Preview a CSV file, or the seed while the catalog is empty, to
+                    create the first one.
                 </p>
             </div>
         );

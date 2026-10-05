@@ -17,6 +17,7 @@ import {
     EMAIL_SUBJECT_FIELD,
     INCLUDES_TUNE_FIELD,
     NUMBER_SEPARATOR_FIELD,
+    REPEAT_WARNING_WEEKS_FIELD,
     creditRolesOf,
     headerLabelField,
     isSaved,
@@ -25,6 +26,7 @@ import {
     readCreditsForm,
     readEmailForm,
     readHymnalNotesForm,
+    readRepeatWarningsForm,
     readScheduleTextForm,
     sameValues,
     splitRecipients,
@@ -129,6 +131,55 @@ describe("readCopyrightForm", () => {
         };
         expect(readCopyrightForm(formWith())).toEqual(blank);
         expect(readCopyrightForm(formWith({ ccliLicenseNumber: new File(["1"], "1.txt") }))).toEqual(
+            blank
+        );
+    });
+});
+
+describe("readRepeatWarningsForm", () => {
+    const MESSAGE = "Enter a whole number of weeks from 0 to 52; 0 turns the warnings off.";
+
+    test("is named for its setting", () => {
+        expect(REPEAT_WARNING_WEEKS_FIELD).toBe("repeatWarningWeeks");
+    });
+
+    test("reads the weeks as a number, and shows them trimmed", () => {
+        expect(readRepeatWarningsForm(formWith({ repeatWarningWeeks: " 8 " }))).toEqual({
+            ok: true,
+            values: { repeatWarningWeeks: 8 },
+            shown: { repeatWarningWeeks: "8" },
+            posted: { repeatWarningWeeks: " 8 " },
+        });
+    });
+
+    test("takes 0, which turns the warnings off, and 52, a year", () => {
+        for (const weeks of ["0", "52"]) {
+            expect(readRepeatWarningsForm(formWith({ repeatWarningWeeks: weeks }))).toMatchObject({
+                ok: true,
+                values: { repeatWarningWeeks: Number(weeks) },
+            });
+        }
+    });
+
+    test.each(["", "   ", "six", "1.5", "-1", "53", "1e1", "99999999999999999999"])(
+        "refuses %j, with what was posted",
+        (posted) => {
+            expect(readRepeatWarningsForm(formWith({ repeatWarningWeeks: posted }))).toEqual({
+                ok: false,
+                fieldErrors: { repeatWarningWeeks: { message: MESSAGE } },
+                posted: { repeatWarningWeeks: posted },
+            });
+        }
+    );
+
+    test("takes a field that is missing, or a file, as blank", () => {
+        const blank = {
+            ok: false,
+            fieldErrors: { repeatWarningWeeks: { message: MESSAGE } },
+            posted: { repeatWarningWeeks: "" },
+        };
+        expect(readRepeatWarningsForm(formWith())).toEqual(blank);
+        expect(readRepeatWarningsForm(formWith({ repeatWarningWeeks: new File(["6"], "6.txt") }))).toEqual(
             blank
         );
     });

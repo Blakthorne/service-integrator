@@ -1,5 +1,6 @@
 import { NO_SERVICE_TYPES_TEXT, databaseNotice, serviceTypesNotice } from "@/lib/dashboard";
 import type { Dashboard } from "@/lib/queries/dashboard";
+import HistoryStats from "./HistoryStats";
 import NextPlanCard from "./NextPlanCard";
 import TodoList from "./TodoList";
 import { NOTICE_CLASS, SECTION_HEADING_CLASS } from "./styles";
@@ -11,10 +12,12 @@ interface DashboardViewProps {
 /**
  * The dashboard below its header: a warning when the database cannot be
  * read, each service type's next plan as a card (side by side from `lg`
- * when there are two or more), then the to-dos. What could not be read is
- * said where it is missing, and the rest is still shown: without the
- * database the plans come without numbers or notes; without Planning
- * Center's service types, a warning stands in place of the cards.
+ * when there are two or more), then the to-dos, then the song history's
+ * figures (the year's songs, each active book's coverage, the last history
+ * sync). What could not be read is said where it is missing, and the rest is
+ * still shown: without the database the plans come without numbers or notes,
+ * and there are no history figures; without Planning Center's service types,
+ * a warning stands in place of the cards.
  */
 export default function DashboardView({ dashboard }: DashboardViewProps) {
     const { serviceTypes } = dashboard;
@@ -45,6 +48,7 @@ export default function DashboardView({ dashboard }: DashboardViewProps) {
                 )}
             </section>
             <TodoList dashboard={dashboard} />
+            {dashboard.history && <HistoryStats history={dashboard.history} />}
         </div>
     );
 }

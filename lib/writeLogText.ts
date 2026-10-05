@@ -354,15 +354,54 @@ function describeSong(ok: boolean, payload: unknown): Described | null {
     }
 }
 
+/** `value` when it is a whole number that is not negative, else null. */
+function asCount(value: unknown): number | null {
+    return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 /**
- * What a song added to a plan says, from its payload and result: the song's
- * title and the plan's date, with the arrangement it was added with, and the
- * plan and the item made (a refused write made none) to link to. Null when
- * the payload is not an add or lacks the title or the date.
+ * What a plan's items being put in order says, from its payload: how many
+ * of its items changed place, and the plan to link to. Null when the payload
+ * does not name the plan.
+ */
+function describeReorder(ok: boolean, record: Record<string, unknown>): Described | null {
+    const serviceTypeId = asText(record.serviceTypeId);
+    const planId = asText(record.planId);
+    if (serviceTypeId === null || planId === null) {
+        return null;
+    }
+    const moved = asCount(record.moved);
+    const count = asCount(record.count);
+    const items = count === 1 ? "item" : "items";
+    return {
+        what: headline(ok, "Plan items reordered", "Reordering the plan's items failed"),
+        detail:
+            moved === null || count === null
+                ? null
+                : ok
+                  ? `${moved} of ${count} ${items} moved.`
+                  : `Tried to move ${moved} of ${count} ${items}.`,
+        place: { serviceTypeId, planId, itemId: null },
+    };
+}
+
+/**
+ * What a write to a plan's items says, from its payload and result. A song
+ * added to a plan: the song's title and the plan's date, with the
+ * arrangement it was added with, and the plan and the item made (a refused
+ * write made none) to link to; null when the payload lacks the title or the
+ * date. Items put in order: see `describeReorder`. Null for any other
+ * action.
  */
 function describeItem(ok: boolean, payload: unknown, result: unknown): Described | null {
     const record = asRecord(payload);
-    if (record === null || record.action !== "add-song") {
+    if (record === null) {
+        return null;
+    }
+    if (record.action === "reorder") {
+        return describeReorder(ok, record);
+    }
+    if (record.action !== "add-song") {
         return null;
     }
     const title = asText(record.title);

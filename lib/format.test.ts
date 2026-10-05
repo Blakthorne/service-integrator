@@ -1,5 +1,9 @@
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
 import {
+    addDaysToYmd,
+    addMonthsToYmd,
+    daysBetweenYmd,
+    formatMonthDay,
     formatPlanDateHeading,
     formatShortDate,
     planDateFromSortDate,
@@ -189,6 +193,93 @@ describe("formatShortDate", () => {
         for (const value of ["", "garbage", "2025-02-30", "2025-6-15"]) {
             expect(formatShortDate(value)).toBe(value);
         }
+    });
+});
+
+describe("formatMonthDay", () => {
+    test.each([
+        ["2026-09-20", "Sep 20"],
+        ["2026-10-04", "Oct 4"],
+        ["2024-02-29", "Feb 29"],
+        ["2025-12-31", "Dec 31"],
+    ])("%s is %s", (ymd, expected) => {
+        expect(formatMonthDay(ymd)).toBe(expected);
+    });
+
+    test("returns input that is not a real calendar date unchanged", () => {
+        for (const value of ["", "garbage", "2025-02-30", "2025-6-15"]) {
+            expect(formatMonthDay(value)).toBe(value);
+        }
+    });
+});
+
+describe("addDaysToYmd", () => {
+    test.each([
+        ["2026-10-04", 0, "2026-10-04"],
+        ["2026-10-04", 1, "2026-10-05"],
+        ["2026-10-04", -56, "2026-08-09"],
+        ["2026-10-04", 7 * 52, "2027-10-03"],
+        ["2026-12-31", 1, "2027-01-01"],
+        ["2027-01-01", -1, "2026-12-31"],
+        ["2024-02-28", 1, "2024-02-29"],
+        ["2025-02-28", 1, "2025-03-01"],
+        ["2000-03-01", -1, "2000-02-29"],
+        ["1900-03-01", -1, "1900-02-28"],
+        ["2026-11-01", 1, "2026-11-02"],
+    ])("%s plus %i days is %s", (ymd, days, expected) => {
+        expect(addDaysToYmd(ymd, days)).toBe(expected);
+    });
+
+    test("throws for a date that does not exist, and for a fraction of a day", () => {
+        for (const value of ["", "garbage", "2025-02-30", "2025-6-15"]) {
+            expect(() => addDaysToYmd(value, 1)).toThrow(RangeError);
+        }
+        expect(() => addDaysToYmd("2026-10-04", 1.5)).toThrow(RangeError);
+        expect(() => addDaysToYmd("2026-10-04", Number.NaN)).toThrow(RangeError);
+    });
+});
+
+describe("addMonthsToYmd", () => {
+    test.each([
+        ["2026-10-04", -12, "2025-10-04"],
+        ["2026-10-04", -60, "2021-10-04"],
+        ["2026-10-04", 1, "2026-11-04"],
+        ["2026-10-04", 3, "2027-01-04"],
+        ["2026-01-15", -1, "2025-12-15"],
+        ["2026-03-31", -1, "2026-02-28"],
+        ["2024-03-31", -1, "2024-02-29"],
+        ["2024-02-29", -12, "2023-02-28"],
+        ["2024-02-29", 48, "2028-02-29"],
+        ["2026-08-31", 1, "2026-09-30"],
+        ["2026-10-31", -1, "2026-09-30"],
+        ["2026-10-04", 0, "2026-10-04"],
+    ])("%s plus %i months is %s", (ymd, months, expected) => {
+        expect(addMonthsToYmd(ymd, months)).toBe(expected);
+    });
+
+    test("throws for a date that does not exist, and for a fraction of a month", () => {
+        expect(() => addMonthsToYmd("2025-02-30", 1)).toThrow(RangeError);
+        expect(() => addMonthsToYmd("2026-10-04", 0.5)).toThrow(RangeError);
+    });
+});
+
+describe("daysBetweenYmd", () => {
+    test.each([
+        ["2026-09-20", "2026-10-04", 14],
+        ["2026-10-04", "2026-10-04", 0],
+        ["2026-10-04", "2026-09-20", -14],
+        ["2025-12-31", "2026-01-01", 1],
+        ["2024-02-28", "2024-03-01", 2],
+        ["2025-02-28", "2025-03-01", 1],
+        ["2025-10-04", "2026-10-04", 365],
+        ["2025-03-08", "2025-03-10", 2],
+    ])("from %s to %s is %i days", (from, to, expected) => {
+        expect(daysBetweenYmd(from, to)).toBe(expected);
+    });
+
+    test("throws unless both are real calendar dates", () => {
+        expect(() => daysBetweenYmd("2026-02-30", "2026-10-04")).toThrow(RangeError);
+        expect(() => daysBetweenYmd("2026-10-04", "")).toThrow(RangeError);
     });
 });
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogMatch, PlanItemWithSong, ScheduleSelection } from "@/lib/domain";
 import type { CardNoteBadge, HymnNoteShownState } from "@/lib/hymnNoteText";
+import { describeRepeatWarning, type RepeatWarning } from "@/lib/repeatWarnings";
 import { routes } from "@/lib/routes";
 import {
     SAVED_AFTER_FAILURE_NOTICE,
@@ -60,6 +61,46 @@ function NoteBadge({ badge }: { badge: CardNoteBadge }) {
 }
 
 /**
+ * A card's warning that its song was sung lately: "Sung Sep 20 (2 weeks
+ * ago)", a link to that plan. The words, not the colour, say it is a warning
+ * (a screen reader hears "Repeat:" first), and the link is underlined since
+ * its colour alone is under 3:1 against the line's. It does not prefetch
+ * (convention 13): a plan's page reads the plan from Planning Center.
+ */
+function RepeatWarningLine({ warning }: { warning: RepeatWarning }) {
+    return (
+        <p className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200">
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+                className="mt-0.5 h-4 w-4 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+            >
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v4m0 4h.01M10.3 3.9L2.4 17.6A2 2 0 004.1 20.5h15.8a2 2 0 001.7-2.9L13.7 3.9a2 2 0 00-3.4 0z"
+                />
+            </svg>
+            <span>
+                <span className="sr-only">Repeat: </span>
+                <Link
+                    prefetch={false}
+                    href={routes.plan(warning.serviceTypeId, warning.planId)}
+                    className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100"
+                >
+                    {describeRepeatWarning(warning)}
+                    <span className="sr-only">, open that plan</span>
+                </Link>
+            </span>
+        </p>
+    );
+}
+
+/**
  * The catalog song a linked song is: its hymn's title (a link to the song's
  * page) and its tune, then where it is in the books.
  */
@@ -67,7 +108,7 @@ function LinkedSong({ match }: { match: CatalogMatch }) {
     return (
         <div className="space-y-1">
             <p className="text-sm text-gray-700 dark:text-gray-300">
-                {/* Default prefetch: a catalog song's page reads only the local database. */}
+                {/* Default prefetch: a catalog song's page reads the local database (convention 13). */}
                 <Link
                     href={routes.catalogSong(match.songId)}
                     className="font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"
@@ -130,6 +171,8 @@ interface ScheduleSongCardProps {
     noteBadge: CardNoteBadge | null;
     /** How the save of its choice stands; null when it is saved, or was never changed. */
     saveState: SelectionSaveState | null;
+    /** The plan its song was last sung in, when that was lately; null for no warning. */
+    repeatWarning: RepeatWarning | null;
     /** What goes between a song's numbers, from the settings, for what a Link says. */
     numberSeparator: string;
     /** This Schedule tab's address, where the new-song form comes back to. */
@@ -141,10 +184,11 @@ interface ScheduleSongCardProps {
 }
 
 /**
- * A song item on the Schedule tab: its title and its hymnal note's status
- * (in sync, needs sync, missing, or left alone: a note the app did not write),
- * then what the catalog knows of it, then the choices for its line in the
- * schedule text.
+ * A song item on the Schedule tab: its title, a warning when its song was
+ * sung lately ("Sung Sep 20 (2 weeks ago)", linking to that plan), its
+ * hymnal note's status (in sync, needs sync, missing, or left alone: a note
+ * the app did not write), then what the catalog knows of it, then the
+ * choices for its line in the schedule text.
  *
  * - Linked: the catalog song's title and tune and its numbers
  *   (`EntryNumbers`); Numbers, Leave blank or Custom.
@@ -176,6 +220,7 @@ export default function ScheduleSongCard({
     view,
     noteBadge,
     saveState,
+    repeatWarning,
     numberSeparator,
     scheduleHref,
     onChooseOption,
@@ -231,6 +276,7 @@ export default function ScheduleSongCard({
             >
                 {item.title}
             </h3>
+            {repeatWarning !== null && <RepeatWarningLine warning={repeatWarning} />}
             {noteBadge !== null && <NoteBadge badge={noteBadge} />}
             {view.kind === "linked" ? (
                 <LinkedSong match={view.match} />

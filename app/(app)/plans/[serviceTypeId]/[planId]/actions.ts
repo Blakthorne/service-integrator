@@ -5,8 +5,10 @@ import { auth } from "@/auth";
 import { parseCatalogId } from "@/lib/catalog/ids";
 import type { ScheduleSelection } from "@/lib/domain";
 import type { HymnNoteStatus, PreviewedHymnNote } from "@/lib/hymnNotes";
+import type { ReorderOutcome } from "@/lib/planItemOrderText";
 import { parsePcoId } from "@/lib/pco";
 import { parsePreviewedHymnNotes } from "@/lib/previewedHymnNotes";
+import { parsePreviewedItemOrder } from "@/lib/previewedItemOrder";
 import { readPreviewedPlanEmail } from "@/lib/previewedPlanEmail";
 import {
     previewPlanEmail,
@@ -20,6 +22,7 @@ import {
     syncHymnNotes,
     type HymnNotesSyncResult,
 } from "@/lib/queries/hymnNotes";
+import { reorderItems, type ReorderItemsResult } from "@/lib/queries/planItems";
 import { linkCatalogSong, type LinkResult } from "@/lib/queries/reconcile";
 import {
     SELECTION_NOT_SAVED_MESSAGE,
@@ -380,4 +383,101 @@ export async function sendPlanEmailAction(
         console.error(`Failed to email plan ${st}/${plan}:`, error);
         return { ok: false, kind: "failed", message: EMAIL_SEND_FAILURE_MESSAGE };
     }
+}
+
+/**
+ * What a confirmed reorder tells the dialog (see `ReorderOutcome`): the
+ * order was written, or how many items moved (0 when the order was the order
+ * shown, which writes nothing); or why it was not: the plan changed since
+ * the page showed it ("changed"), another reorder of it is under way
+ * ("busy"), Planning Center refused the order ("refused"), or something else
+ * stopped it ("failed"). The action never answers "unknown": that is the
+ * browser's, for an action that did not answer.
+ */
+export type ReorderItemsState = Exclude<ReorderOutcome, { ok: false; reason: "unknown" }>;
+
+/** Shown when the order sent back is not one the reorder could check: a stale or tampered page. */
+const REORDER_NOT_USABLE_MESSAGE =
+    "This page sent an order the reorder could not check, so nothing was written. Reload the page and choose the order again.";
+
+/**
+ * Shown when the reorder threw: Planning Center or the database could not be
+ * reached, or Planning Center failed the write. The write may or may not
+ * have been made, so it says to look. Sending the same order again is safe:
+ * it is held to the order the page showed, so it is refused as changed when
+ * the first was made.
+ */
+const REORDER_FAILURE_MESSAGE =
+    "Planning Center or the database failed, so the items may not have been put in order. Look at the plan to see how they stand, then try again. The server log has the details.";
+
+/** A reorder's result as the dialog tells it: only a few refusals are the dialog's to word, and any other is a failure. */
+function reorderOutcome(result: ReorderItemsResult): ReorderItemsState {
+    if (result.ok) {
+        return { ok: true, moved: result.moved };
+    }
+    switch (result.reason) {
+        case "changed":
+        case "busy":
+        case "refused":
+            return { ok: false, reason: result.reason, message: result.message };
+        default:
+            // "invalid", "not-found": the plan or the order is not one.
+            return { ok: false, reason: "failed", message: result.message };
+    }
+}
+
+/**
+ * Put plan `planId`'s items in the order the person chose on the plan page
+ * ("Reorder items": up and down, a preview, then Confirm), and say what came
+ * of it (`reorderItems`: it reads the plan's items again first, refuses,
+ * writing nothing, when they are not what the page showed, sends every id in
+ * the new order and logs it).
+ *
+ * `previewed` is `{ shown, order }`: the ids of every item of the plan (the
+ * headers and plain items too: a partial list would move only the items it
+ * names) in the order the page showed them, and in the order the person
+ * made. It comes from a browser, so it is parsed first
+ * (`parsePreviewedItemOrder`: every id, the lists' lengths, and that the
+ * lists are of the same items); one that does not parse is refused before
+ * Planning Center is read.
+ *
+ * After an order was written, or refused because the plan had changed, the
+ * plan's pages are revalidated, so the page shows the order Planning Center
+ * has now. It waits on Planning Center, so the dialog calls it from a click,
+ * with its pending state in `useState` (convention 15). It checks the
+ * session first and throws without one, then parses both ids; a failure is
+ * logged and comes back as a message ("failed").
+ */
+export async function reorderItemsAction(
+    serviceTypeId: string,
+    planId: string,
+    previewed: { shown: string[]; order: string[] }
+): Promise<ReorderItemsState> {
+    const session = await auth();
+    if (!session) {
+        throw new Error("Not signed in");
+    }
+    const st = parsePcoId(serviceTypeId);
+    const plan = parsePcoId(planId);
+    if (st === null || plan === null) {
+        return { ok: false, reason: "failed", message: NOT_A_PLAN_MESSAGE };
+    }
+    const order = parsePreviewedItemOrder(previewed);
+    if (order === null) {
+        return { ok: false, reason: "failed", message: REORDER_NOT_USABLE_MESSAGE };
+    }
+    let result: ReorderItemsResult;
+    try {
+        result = await reorderItems(st, plan, order);
+    } catch (error) {
+        console.error(`Failed to reorder the items of plan ${st}/${plan}:`, error);
+        return { ok: false, reason: "failed", message: REORDER_FAILURE_MESSAGE };
+    }
+    const outcome = reorderOutcome(result);
+    const written = outcome.ok && outcome.moved > 0;
+    const planChanged = !outcome.ok && outcome.reason === "changed";
+    if (written || planChanged) {
+        revalidatePath(routes.plan(st, plan), "layout");
+    }
+    return outcome;
 }

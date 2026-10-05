@@ -1,17 +1,23 @@
 import { describe, expect, test } from "vitest";
 import type { SyncRun } from "@/lib/db/syncRuns";
+import type { BookCoverage } from "@/lib/db/history";
 import {
+    HISTORY_STATS_TEXT,
     HYMN_NOTE_BADGE_LABELS,
+    coverageRows,
+    coverageYears,
     databaseNotice,
     emptyTodosText,
+    historyStats,
     hymnNoteBadge,
     planNotesSummary,
     serviceTypesNotice,
+    shareView,
     songNumbersView,
     todoView,
 } from "./dashboard";
 import type { HymnNoteAction, HymnNoteStatus } from "./hymnNotes";
-import type { DashboardTodo } from "./queries/dashboard";
+import type { DashboardHistory, DashboardTodo } from "./queries/dashboard";
 
 const MORNING = { id: "1405391", name: "Sunday Morning" };
 const AM_PLAN = { id: "81234567", dates: "October 4, 2026", shortDates: "Oct 4" };
@@ -348,5 +354,145 @@ describe("emptyTodosText", () => {
         ["a database that cannot be read", { ...fine, databaseError: "x", serviceTypes: [] }],
     ])("hedged after %s", (_, dashboard) => {
         expect(emptyTodosText(dashboard)).toBe("Nothing to do among what could be checked.");
+    });
+});
+
+describe("shareView", () => {
+    test("is the share as a whole percent, with the counts in words", () => {
+        expect(shareView(123, 400)).toEqual({ count: 123, total: 400, percent: 31, text: "123 of 400" });
+        expect(shareView(200, 400)).toMatchObject({ percent: 50 });
+        expect(shareView(1, 3)).toMatchObject({ percent: 33 });
+        expect(shareView(2, 3)).toMatchObject({ percent: 67 });
+    });
+
+    test("groups thousands the way the catalog's counts do", () => {
+        expect(shareView(1234, 12345).text).toBe("1,234 of 12,345");
+    });
+
+    test("never reads 0% for some, or 100% for less than all", () => {
+        expect(shareView(1, 1000)).toMatchObject({ percent: 1 });
+        expect(shareView(999, 1000)).toMatchObject({ percent: 99 });
+        expect(shareView(0, 1000)).toMatchObject({ percent: 0 });
+        expect(shareView(1000, 1000)).toMatchObject({ percent: 100 });
+    });
+
+    test("takes no share of nothing, and says so", () => {
+        expect(shareView(0, 0)).toEqual({ count: 0, total: 0, percent: null, text: "No entries" });
+    });
+});
+
+describe("coverageRows", () => {
+    const book = (overrides: Partial<BookCoverage>): BookCoverage => ({
+        bookId: 1,
+        code: "R",
+        name: "Rejoice Hymns",
+        shortName: "Rejoice",
+        entries: 400,
+        sungRecently: 120,
+        sungEver: 300,
+        ...overrides,
+    });
+
+    test("gives each book's two shares, in the order given, named by its short name", () => {
+        expect(
+            coverageRows([
+                book({}),
+                book({ bookId: 2, code: "CB", name: "Chorus Book", shortName: "Chorus Book", entries: 1, sungRecently: 0, sungEver: 1 }),
+            ])
+        ).toEqual([
+            {
+                bookId: 1,
+                label: "Rejoice",
+                name: "Rejoice Hymns",
+                entries: "400 entries",
+                recently: { count: 120, total: 400, percent: 30, text: "120 of 400" },
+                ever: { count: 300, total: 400, percent: 75, text: "300 of 400" },
+            },
+            {
+                bookId: 2,
+                label: "Chorus Book",
+                name: "Chorus Book",
+                entries: "1 entry",
+                recently: { count: 0, total: 1, percent: 0, text: "0 of 1" },
+                ever: { count: 1, total: 1, percent: 100, text: "1 of 1" },
+            },
+        ]);
+    });
+
+    test("says a book with no entries has none, rather than 0%", () => {
+        const [row] = coverageRows([book({ entries: 0, sungRecently: 0, sungEver: 0 })]);
+        expect(row.entries).toBe("0 entries");
+        expect(row.recently.percent).toBeNull();
+        expect(row.ever.percent).toBeNull();
+    });
+
+    test("has no rows with no books", () => {
+        expect(coverageRows([])).toEqual([]);
+    });
+});
+
+describe("historyStats", () => {
+    const run = syncRun({ kind: "history", message: "Synced 216 plans" });
+    const history = (overrides: Partial<DashboardHistory> = {}): DashboardHistory => ({
+        today: "2026-10-04",
+        since: "2021-10-04",
+        coverage: [
+            { bookId: 1, code: "R", name: "Rejoice Hymns", shortName: "Rejoice", entries: 400, sungRecently: 120, sungEver: 300 },
+        ],
+        songsSungThisYear: 87,
+        lastSync: run,
+        ...overrides,
+    });
+
+    test("has the year's count and each book's coverage, with what the first column covers", () => {
+        expect(historyStats(history())).toEqual({
+            kind: "figures",
+            year: "2026",
+            songsSungThisYear: 87,
+            recentlyLabel: "Last 5 years",
+            coverage: coverageRows(history().coverage),
+        });
+    });
+
+    test("says there are no figures before the history is first synced, whatever the figures say", () => {
+        expect(historyStats(history({ lastSync: null }))).toEqual({ kind: "unread" });
+    });
+
+    test("says nothing was sung when the history is read but no song was, instead of 0% of everything", () => {
+        expect(
+            historyStats(
+                history({
+                    songsSungThisYear: 0,
+                    coverage: [{ bookId: 1, code: "R", name: "Rejoice Hymns", shortName: "Rejoice", entries: 400, sungRecently: 0, sungEver: 0 }],
+                })
+            )
+        ).toEqual({ kind: "empty" });
+    });
+
+    test("shows the figures when a failed sync follows an earlier one that stored the history", () => {
+        expect(historyStats(history({ lastSync: syncRun({ kind: "history", ok: false, message: "Timed out" }) })).kind).toBe(
+            "figures"
+        );
+    });
+
+    test("shows the year's count when only this year was sung, and no book is active", () => {
+        expect(historyStats(history({ coverage: [], songsSungThisYear: 3 }))).toMatchObject({
+            kind: "figures",
+            songsSungThisYear: 3,
+            coverage: [],
+        });
+    });
+
+    test("words the words for the cards without figures", () => {
+        expect(HISTORY_STATS_TEXT.unread).toMatch(/not been read/);
+        expect(HISTORY_STATS_TEXT.empty).toMatch(/^No song/);
+    });
+});
+
+describe("coverageYears", () => {
+    test("counts the years between the date the figures are as of and where lately starts", () => {
+        expect(coverageYears({ today: "2026-10-04", since: "2021-10-04" })).toBe(5);
+        expect(coverageYears({ today: "2024-02-29", since: "2019-02-28" })).toBe(5);
+        expect(coverageYears({ today: "2026-01-01", since: "2025-01-01" })).toBe(1);
     });
 });

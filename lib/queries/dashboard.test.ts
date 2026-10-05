@@ -5,7 +5,9 @@ import {
     openTestDb,
     seedBook,
     seedEntry,
+    seedHistoryPlan,
     seedHymn,
+    seedOccurrence,
     seedPcoSong,
     seedSetting,
     seedSong,
@@ -361,14 +363,93 @@ describe("getDashboard", () => {
         expect(dashboard.todos).toEqual([{ kind: "empty-catalog" }]);
     });
 
-    test("asks the database eleven queries at most, however many plans and songs", async () => {
+    test("asks the database fourteen queries at most, however many plans and songs", async () => {
         stubFetchRoutes(routes());
         const prepare = vi.spyOn(db, "prepare");
         await getDashboard(NOW);
         // Seven for the links of both plans' songs (suggestions included),
-        // one for which of their notes the app wrote, and one each for the
-        // settings, the song sync and the catalog's size.
-        expect(prepare).toHaveBeenCalledTimes(11);
+        // one for which of their notes the app wrote, one each for the
+        // settings, the song sync and the catalog's size, and three for the
+        // plan history's figures.
+        expect(prepare).toHaveBeenCalledTimes(14);
+    });
+});
+
+describe("getDashboard's history figures", () => {
+    /** Noon on 2026-10-04 by the clock of the machine the tests run on, so that its date is that date in every time zone. */
+    const TODAY = new Date(2026, 9, 4, 12, 0, 0);
+
+    /** A plan of the history on `date` holding Planning Center songs `songs`. */
+    function plan(date: string, ...songs: string[]): void {
+        const planId = seedHistoryPlan(db, { planDate: date });
+        for (const pcoSongId of songs) {
+            seedOccurrence(db, { planId, pcoSongId });
+        }
+    }
+
+    test("is empty, with no run, before the first history sync", async () => {
+        stubFetchRoutes(routes());
+        const { history } = await getDashboard(TODAY);
+        expect(history).toEqual({
+            today: "2026-10-04",
+            since: "2021-10-04",
+            coverage: [
+                expect.objectContaining({ code: "R", entries: 2, sungRecently: 0, sungEver: 0 }),
+                expect.objectContaining({ code: "G", entries: 1, sungRecently: 0, sungEver: 0 }),
+            ],
+            songsSungThisYear: 0,
+            lastSync: null,
+        });
+    });
+
+    test("counts each active book's entries sung in the last 5 years and ever, the songs sung this year, and the last history sync", async () => {
+        // O God, Our Help (77) lately, Amazing Grace (88) only long ago, a
+        // song not in the catalog (99) this year; today's plan is upcoming.
+        plan("2026-09-27", "77");
+        plan("2019-01-06", "88");
+        plan("2026-01-11", "99");
+        plan("2026-10-04", "88");
+        const run = startSyncRun(db, "history", NOW);
+        finishSyncRun(db, run, { ok: true, message: "Synced 4 plans" }, NOW);
+        stubFetchRoutes(routes());
+
+        const { history } = await getDashboard(TODAY);
+
+        expect(history?.coverage.map(({ code, name, entries, sungRecently, sungEver }) => [code, name, entries, sungRecently, sungEver])).toEqual([
+            ["R", "Rejoice Hymns", 2, 1, 2],
+            ["G", "Great Hymns of the Faith", 1, 1, 1],
+        ]);
+        expect(history?.songsSungThisYear).toBe(2);
+        expect(history?.lastSync).toMatchObject({ id: run, kind: "history", ok: true, message: "Synced 4 plans" });
+    });
+
+    test("is as of the day it is asked on: a song in a plan 5 years and a day ago is not sung lately", async () => {
+        plan("2021-10-04", "77");
+        plan("2021-10-03", "88");
+        stubFetchRoutes(routes());
+        const coverage = (await getDashboard(TODAY)).history?.coverage;
+        expect(coverage?.[0]).toMatchObject({ code: "R", sungRecently: 1, sungEver: 2 });
+    });
+
+    test("never throws when the history cannot be read: it is null, and logged", async () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        db.exec("DROP TABLE plan_occurrences");
+        stubFetchRoutes(routes());
+
+        const dashboard = await getDashboard(TODAY);
+
+        expect(dashboard.history).toBeNull();
+        expect(error).toHaveBeenCalledWith("Failed to read the plan history for the dashboard:", expect.any(Error));
+        expect(planEntry(dashboard, MORNING).songs).toHaveLength(6);
+    });
+
+    test("is null without a database", async () => {
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        getDb.mockImplementation(() => {
+            throw new Error("Could not open the database at /srv/data/x: denied");
+        });
+        stubFetchRoutes(routes());
+        expect((await getDashboard(TODAY)).history).toBeNull();
     });
 });
 

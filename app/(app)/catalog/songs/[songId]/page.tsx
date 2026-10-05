@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import SongDetailView from "@/app/components/Catalog/Song/SongDetailView";
 import PageHeader from "@/app/components/ui/PageHeader";
 import { parseCatalogId } from "@/lib/catalog/ids";
+import { withDeadline } from "@/lib/deadline";
 import {
     getCatalogBooks,
     getCatalogSong,
@@ -10,11 +11,25 @@ import {
 } from "@/lib/queries/catalog";
 import { getMirroredPcoSong } from "@/lib/queries/catalogEdit";
 import { pcoSongTitleFor } from "@/lib/queries/pcoSongs";
+import { getServiceTypeNames, getSongHistory } from "@/lib/queries/reports";
 import { getSettings } from "@/lib/queries/settings";
+import { getLastHistorySync } from "@/lib/queries/system";
 import { getPcoSongTags, getSongTagGroups } from "@/lib/queries/tags";
 import { routes } from "@/lib/routes";
+import { PCO_WAIT_MS } from "@/lib/settingsText";
 
 type CatalogSongPageProps = PageProps<"/catalog/songs/[songId]">;
+
+/**
+ * Whether the plan history holds any plan, for the History card to tell a
+ * song never sung from a history not read yet. When the history's state
+ * cannot be read it says it has been, and the card lists what the song's
+ * own read found.
+ */
+function historyRead(): boolean {
+    const status = getLastHistorySync();
+    return !status.ok || status.counts.plans > 0;
+}
 
 /**
  * The tab title, "Amazing Grace (NEW BRITAIN)". `getCatalogSongLabel` never
@@ -36,8 +51,13 @@ export async function generateMetadata({
  *
  * The page reads only the local database (the settings never throw), so it
  * has no `loading.tsx`: a link to it keeps the previous page on screen until
- * it is ready, and a prefetch of it costs no Planning Center request. What
- * reads Planning Center (the upcoming plans) or writes to it is a server
+ * it is ready. The one thing it takes from Planning Center is the names of
+ * the service types, for a linked song's History card: that read is started
+ * before the page renders, streams in under its own Suspense boundary and
+ * has a deadline, so it never holds the page back, and it is cached for five
+ * minutes and shared by every song page, so a prefetch of the rows of a list
+ * costs at most one Planning Center request in that time. What reads
+ * Planning Center otherwise (the upcoming plans) or writes to it is a server
  * action, called from a click; so are the edits of the song's entries,
  * hymn and mark (`editActions.ts`). The books go to the Books card with
  * their entry counts, an unnumbered book's last position.
@@ -63,6 +83,15 @@ export default async function CatalogSongPage({ params }: CatalogSongPageProps) 
     const tagGroups = linked ? getSongTagGroups() : [];
     const songTags = linked && song.pcoSongId !== null ? getPcoSongTags(song.pcoSongId) : [];
     const tune = song.tune;
+    const history =
+        song.pcoSongId === null
+            ? null
+            : {
+                  history: getSongHistory(song.pcoSongId),
+                  historyRead: historyRead(),
+                  // Started now, so Planning Center answers while the page renders.
+                  serviceTypeNames: withDeadline(getServiceTypeNames(), PCO_WAIT_MS, () => ({})),
+              };
 
     return (
         <div className="w-full max-w-4xl mx-auto">
@@ -91,6 +120,7 @@ export default async function CatalogSongPage({ params }: CatalogSongPageProps) 
                 )}
                 tagGroups={tagGroups}
                 songTags={songTags}
+                history={history}
             />
         </div>
     );

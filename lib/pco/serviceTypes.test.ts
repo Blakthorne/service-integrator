@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PcoError } from "./client";
 import { InvalidPcoIdError } from "./ids";
-import { getServiceType, getServiceTypes } from "./serviceTypes";
+import { fetchServiceTypes, getServiceType, getServiceTypes } from "./serviceTypes";
 import {
     PCO_AUTH,
     PCO_BASE,
@@ -10,6 +10,7 @@ import {
     serviceTypeResource,
     stubFetchRoutes,
     stubPcoCredentials,
+    stubPcoPacer,
 } from "./testing";
 
 beforeEach(stubPcoCredentials);
@@ -25,6 +26,38 @@ const archived = serviceTypeResource(
     { name: "Old Midweek", sequence: 3, archived_at: "2023-01-01T00:00:00Z" },
     "999"
 );
+
+describe("fetchServiceTypes", () => {
+    const FIRST_PAGE = `${PCO_BASE}/service_types?per_page=100`;
+
+    test("reads every service type afresh, archived ones too, unpaced by default", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        const fetchMock = stubFetchRoutes({ [FIRST_PAGE]: listPage([morning, archived]) });
+
+        const serviceTypes = await fetchServiceTypes();
+
+        expect(serviceTypes.map(({ id, archived }) => [id, archived])).toEqual([
+            ["1405391", false],
+            ["999", true],
+        ]);
+        expect(calledUrls(fetchMock)).toEqual([FIRST_PAGE]);
+        expect(acquire).not.toHaveBeenCalled();
+    });
+
+    test("waits for its turn at the pacer for every page when paced", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        const second = `${PCO_BASE}/service_types?offset=1&per_page=100`;
+        stubFetchRoutes({
+            [FIRST_PAGE]: listPage([morning], { next: second, total: 2 }),
+            [second]: listPage([evening], { total: 2 }),
+        });
+
+        const serviceTypes = await fetchServiceTypes({ paced: true });
+
+        expect(serviceTypes.map(({ id }) => id)).toEqual(["1405391", "1486055"]);
+        expect(acquire).toHaveBeenCalledTimes(2);
+    });
+});
 
 describe("getServiceTypes", () => {
     test("requests 100 per page with auth and no-store, and maps every type", async () => {

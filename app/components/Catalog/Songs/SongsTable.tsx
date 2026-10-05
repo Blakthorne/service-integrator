@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { formatLastScheduled } from "@/lib/catalog/lastScheduled";
 import { SONG_MARK_LABELS } from "@/lib/catalog/marks";
+import { songUseLines } from "@/lib/catalog/songUse";
 import type { CatalogSongSummary } from "@/lib/domain";
 import { routes } from "@/lib/routes";
 import EntryLabels from "../EntryLabels";
@@ -19,6 +19,13 @@ interface SongsTableProps {
      * scheduled: the songs list does. Off by default.
      */
     showLink?: boolean;
+    /**
+     * Whether the plan history has been read, so that a linked song's row can
+     * say when it was last sung (or that it never was). Off by default and
+     * before the history's first sync, when the rows say only when the song
+     * was last scheduled.
+     */
+    historyRead?: boolean;
     /** What the table says when there are no rows. */
     emptyMessage: string;
 }
@@ -48,10 +55,11 @@ function TuneName({ song }: { song: CatalogSongSummary }) {
 
 /**
  * A song's link to Planning Center: a "PCO" badge, with "auto" beside it when
- * the sync made the link, and under it the date the song was last scheduled
- * (or that it never was). A song that is not linked shows a dash.
+ * the sync made the link, and under it when the song was last sung (once the
+ * history is read) and last scheduled, or that it never was (`songUseLines`).
+ * A song that is not linked shows a dash.
  */
-function PcoLink({ song }: { song: CatalogSongSummary }) {
+function PcoLink({ song, historyRead }: { song: CatalogSongSummary; historyRead: boolean }) {
     if (song.pcoSongId === null) {
         return (
             <>
@@ -62,7 +70,6 @@ function PcoLink({ song }: { song: CatalogSongSummary }) {
             </>
         );
     }
-    const scheduled = formatLastScheduled(song.lastScheduledAt);
     return (
         <>
             <span className="inline-flex items-center gap-1.5">
@@ -81,9 +88,11 @@ function PcoLink({ song }: { song: CatalogSongSummary }) {
                     </span>
                 )}
             </span>
-            <span className="block mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                {scheduled === null ? "Never scheduled" : `Last scheduled ${scheduled}`}
-            </span>
+            {songUseLines(song, historyRead).map((line) => (
+                <span key={line} className="block mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {line}
+                </span>
+            ))}
         </>
     );
 }
@@ -95,15 +104,18 @@ function PcoLink({ song }: { song: CatalogSongSummary }) {
  * row; the tune is its own link above it. On phones the tune and the link
  * move under the title instead of taking columns.
  *
- * Links keep the default prefetch: song and tune pages read only the local
- * database, so prefetching the rows on screen costs no Planning Center
- * requests (the budget convention 13 protects).
+ * Links keep the default prefetch: song and tune pages read the local
+ * database, and a song's page asks Planning Center for nothing but the
+ * service types' names (one request, cached for five minutes), so prefetching
+ * the rows on screen costs at most that one (the budget convention 13
+ * protects).
  */
 export default function SongsTable({
     rows,
     caption,
     showTune,
     showLink = false,
+    historyRead = false,
     emptyMessage,
 }: SongsTableProps) {
     return (
@@ -171,7 +183,7 @@ export default function SongsTable({
                                 )}
                                 {showLink && (
                                     <span className="block sm:hidden mt-1">
-                                        <PcoLink song={song} />
+                                        <PcoLink song={song} historyRead={historyRead} />
                                     </span>
                                 )}
                             </td>
@@ -185,7 +197,7 @@ export default function SongsTable({
                             </td>
                             {showLink && (
                                 <td className="hidden sm:table-cell px-6 py-3 text-sm align-top">
-                                    <PcoLink song={song} />
+                                    <PcoLink song={song} historyRead={historyRead} />
                                 </td>
                             )}
                         </tr>
