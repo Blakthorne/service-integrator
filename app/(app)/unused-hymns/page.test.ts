@@ -31,6 +31,7 @@ describe("the old Unused Hymns page", () => {
             linked: "all",
             used: "never",
             mark: "all",
+            notSince: null,
             sort: "title",
             page: 1,
         });

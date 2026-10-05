@@ -7,6 +7,7 @@ import {
     catalogTagIdsBySong,
     countMarked,
     filterCatalogSongs,
+    isNotSungSince,
     foldForSearch,
     isUsed,
     pageCatalogSongs,
@@ -53,6 +54,7 @@ function row(
         pcoSongId: null,
         linkedBy: null,
         lastScheduledAt: null,
+        lastSungAt: null,
         entries: entries.map(
             (spec, index): LabelledEntry => ({
                 id: id * 100 + index,
@@ -158,27 +160,38 @@ describe("parseCatalogSongsQuery", () => {
         linked: "all",
         used: "all",
         mark: "all",
+        notSince: null,
         sort: "title",
         page: 1,
     };
 
-    test("falls back to no search, every book, linked or not, used or not, marked or not, by title, page 1", () => {
+    test("falls back to no search, every book, linked or not, used or not, marked or not, sung or not, by title, page 1", () => {
         expect(parse("")).toEqual(DEFAULTS);
-        expect(parse("q=&book=&linked=&used=&mark=&sort=&page=")).toEqual(DEFAULTS);
+        expect(parse("q=&book=&linked=&used=&mark=&notSince=&sort=&page=")).toEqual(DEFAULTS);
     });
 
     test("reads the search, trimmed, the book, the filters, the sort and the page", () => {
         expect(
-            parse("q=+amazing+grace+&book=G&linked=yes&used=never&mark=to-learn&sort=number&page=3")
+            parse(
+                "q=+amazing+grace+&book=G&linked=yes&used=never&mark=to-learn&notSince=2026-06-01&sort=number&page=3"
+            )
         ).toEqual({
             q: "amazing grace",
             book: "G",
             linked: "yes",
             used: "never",
             mark: "to-learn",
+            notSince: "2026-06-01",
             sort: "number",
             page: 3,
         });
+    });
+
+    test("reads the not-sung-since date only when it is a real date written YYYY-MM-DD", () => {
+        expect(parse("notSince=2024-02-29").notSince).toBe("2024-02-29");
+        for (const value of ["yesterday", "2026-6-1", "2026-02-30", "2026-06-01T08:00:00Z", "06/01/2026", "+2026-06-01"]) {
+            expect(parse(`notSince=${encodeURIComponent(value)}`).notSince).toBeNull();
+        }
     });
 
     test("reads each value of the link and usage filters", () => {
@@ -195,7 +208,7 @@ describe("parseCatalogSongsQuery", () => {
     });
 
     test("ignores a book, filter, sort or page it does not know", () => {
-        expect(parse("book=Q&linked=maybe&used=always&mark=later&sort=tune&page=0")).toEqual(DEFAULTS);
+        expect(parse("book=Q&linked=maybe&used=always&mark=later&notSince=soon&sort=tune&page=0")).toEqual(DEFAULTS);
         expect(parse("sort=Number&page=-2").sort).toBe("title");
     });
 
@@ -410,6 +423,87 @@ describe("the mark filter", () => {
     });
 });
 
+describe("isNotSungSince", () => {
+    const linked = (lastSungAt: string | null) => ({ pcoSongId: "1001", lastSungAt });
+
+    test("is true for a linked song last sung before the date, or never", () => {
+        expect(isNotSungSince(linked("2026-05-31"), "2026-06-01")).toBe(true);
+        expect(isNotSungSince(linked("2019-01-06"), "2026-06-01")).toBe(true);
+        expect(isNotSungSince(linked(null), "2026-06-01")).toBe(true);
+    });
+
+    test("is false for a song sung on the date or after it", () => {
+        expect(isNotSungSince(linked("2026-06-01"), "2026-06-01")).toBe(false);
+        expect(isNotSungSince(linked("2026-09-27"), "2026-06-01")).toBe(false);
+    });
+
+    test("is false for a song that is not linked: it has no history to say so", () => {
+        expect(isNotSungSince({ pcoSongId: null, lastSungAt: null }, "2026-06-01")).toBe(false);
+    });
+});
+
+describe("the not-sung-since filter", () => {
+    const sungLately = row("Sung Lately", "TUNE A", [["R", 1]], {
+        pcoSongId: "1001",
+        linkedBy: "auto",
+        lastSungAt: "2026-09-27",
+    });
+    const sungInMarch = row("Sung In March", "TUNE B", [["G", 2]], {
+        pcoSongId: "1002",
+        linkedBy: "auto",
+        lastSungAt: "2026-03-01",
+    });
+    const sungOnTheDate = row("Sung On The Date", "TUNE C", [["R", 3]], {
+        pcoSongId: "1003",
+        linkedBy: "manual",
+        lastSungAt: "2026-06-01",
+    });
+    const neverSung = row("Never Sung", "TUNE D", [["R", 4]], {
+        pcoSongId: "1004",
+        linkedBy: "manual",
+    });
+    const notLinked = row("Not Linked", "TUNE E", [["R", 5]]);
+    const LIST = [sungLately, sungInMarch, sungOnTheDate, neverSung, notLinked];
+
+    function filter(fields: Partial<CatalogSongsQuery>): CatalogSongSummary[] {
+        return filterCatalogSongs(LIST, { q: "", book: null, linked: "all", used: "all", ...fields });
+    }
+
+    test("keeps every song with the date left out, or null", () => {
+        expect(filter({})).toEqual(LIST);
+        expect(filter({ notSince: null })).toEqual(LIST);
+    });
+
+    test("keeps the linked songs last sung before the date and those never sung, not the ones not linked", () => {
+        expect(filter({ notSince: "2026-06-01" })).toEqual([sungInMarch, neverSung]);
+        expect(filter({ notSince: "2026-06-02" })).toEqual([sungInMarch, sungOnTheDate, neverSung]);
+        expect(filter({ notSince: "2026-03-01" })).toEqual([neverSung]);
+        expect(filter({ notSince: "2030-01-01" })).toEqual([sungLately, sungInMarch, sungOnTheDate, neverSung]);
+    });
+
+    test("combines with the other filters and the search", () => {
+        expect(filter({ notSince: "2026-06-02", book: "R" })).toEqual([sungOnTheDate, neverSung]);
+        expect(filter({ notSince: "2026-06-02", q: "march" })).toEqual([sungInMarch]);
+        expect(filter({ notSince: "2026-06-02", linked: "no" })).toEqual([]);
+    });
+
+    test("applies before the list sorts and pages it, and to the export", () => {
+        const query = { q: "", book: null, linked: "all", used: "all", sort: "title", page: 1 } as const;
+        expect(arrangeCatalogSongs(LIST, { ...query, notSince: "2026-06-02" }, BOOK_CODES)).toEqual([
+            neverSung,
+            sungInMarch,
+            sungOnTheDate,
+        ]);
+        expect(selectCatalogSongs(LIST, { ...query, notSince: "2026-06-02" }, BOOK_CODES, 2)).toEqual({
+            rows: [neverSung, sungInMarch],
+            page: 1,
+            totalPages: 2,
+            total: 3,
+        });
+        expect(arrangeCatalogSongs(LIST, query, BOOK_CODES)).toHaveLength(5);
+    });
+});
+
 describe("sortCatalogSongs", () => {
     test("sorts by title without regard to case, accents and punctuation, then by tune", () => {
         expect(titles(sortCatalogSongs(ROWS, "title", null, BOOK_CODES))).toEqual([
@@ -522,6 +616,7 @@ describe("arrangeCatalogSongs", () => {
         linked: "all",
         used: "all",
         mark: "all",
+        notSince: null,
         sort: "title",
         ...fields,
     });
@@ -579,6 +674,7 @@ describe("selectCatalogSongs", () => {
         linked: "all",
         used: "all",
         mark: "all",
+        notSince: null,
         sort: "title",
         page: 1,
         ...fields,
@@ -679,6 +775,7 @@ describe("the tag filter", () => {
             linked: "yes",
             used: "all",
             mark: "all",
+            notSince: null,
             sort: "title",
             page: 1,
         });
@@ -728,6 +825,7 @@ describe("the tag filter", () => {
             linked: "all",
             used: "all",
             mark: "all",
+            notSince: null,
             sort: "title",
             page: 1,
         };

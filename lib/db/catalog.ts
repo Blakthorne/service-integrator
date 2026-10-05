@@ -18,6 +18,7 @@ import type {
     TuneDetail,
     TuneSummary,
 } from "@/lib/domain";
+import { localYmd } from "@/lib/plansByDate";
 import { SONG_MARKS_JSON, songMarksFromJson } from "./marks";
 
 /**
@@ -153,15 +154,18 @@ function aliasesByOwner(rows: Row[]): Map<number, string[]> {
 
 /**
  * Songs as list rows, in `orderBy` order, each with its hymn's and tune's
- * aliases, its link and when its Planning Center song was last scheduled,
- * its labelled entries in book order and its marks. Four queries, whatever
- * the number of songs: the songs (with their links and marks), their
- * entries, and the two kinds of alias.
+ * aliases, its link, when its Planning Center song was last scheduled and
+ * the date of the last past plan it was in (before `today`, the church's
+ * date: the server's by default), its labelled entries in book order and
+ * its marks. Four queries, whatever the number of songs: the songs (with
+ * their links, last sung dates and marks), their entries, and the two kinds
+ * of alias.
  */
 function songSummaries(
     db: DatabaseSync,
     filter: SongFilter | null,
-    orderBy: string
+    orderBy: string,
+    today: string = localYmd(new Date())
 ): CatalogSongSummary[] {
     const where = filter ? `WHERE ${filter.where}` : "";
     const params = filter?.params ?? [];
@@ -173,6 +177,8 @@ function songSummaries(
         .prepare(
             `SELECT s.id, s.hymn_id, h.title, s.tune_id, t.name AS tune_name, s.pco_song_id,
                     s.linked_by, p.last_scheduled_at,
+                    (SELECT max(o.plan_date) FROM plan_occurrences o
+                     WHERE o.pco_song_id = s.pco_song_id AND o.plan_date < ?) AS last_sung_at,
                     (SELECT json_group_array(m.mark) FROM song_marks m WHERE m.song_id = s.id) AS marks
              FROM songs s
              JOIN hymns h ON h.id = s.hymn_id
@@ -181,7 +187,7 @@ function songSummaries(
              ${where}
              ORDER BY ${orderBy}`
         )
-        .all(...params);
+        .all(today, ...params);
     const entries = groupBy(
         db
             .prepare(
@@ -229,6 +235,7 @@ function songSummaries(
             pcoSongId: nullableText(row.pco_song_id),
             linkedBy: linkSource(row.linked_by),
             lastScheduledAt: nullableText(row.last_scheduled_at),
+            lastSungAt: nullableText(row.last_sung_at),
             entries: entries.get(id) ?? [],
             marks: markKinds(row.marks),
         };
@@ -243,9 +250,16 @@ const BY_TITLE =
 const BY_TUNE =
     "t.name IS NULL, t.name COLLATE NOCASE, t.id, h.title COLLATE NOCASE, h.id, s.id";
 
-/** Every song as a row of the songs list, by title, then tune name. */
-export function listCatalogSongs(db: DatabaseSync): CatalogSongSummary[] {
-    return songSummaries(db, null, BY_TITLE);
+/**
+ * Every song as a row of the songs list, by title, then tune name. A row's
+ * `lastSungAt` is the last past plan before `today` (`YYYY-MM-DD`: the
+ * server's date by default).
+ */
+export function listCatalogSongs(
+    db: DatabaseSync,
+    today: string = localYmd(new Date())
+): CatalogSongSummary[] {
+    return songSummaries(db, null, BY_TITLE, today);
 }
 
 /** A song's label, "Amazing Grace (NEW BRITAIN)", or the title alone when the tune is unknown. */
