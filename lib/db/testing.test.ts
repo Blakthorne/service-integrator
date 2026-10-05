@@ -7,8 +7,10 @@ import {
     openTestDb,
     seedBook,
     seedEntry,
+    seedHistoryPlan,
     seedHymn,
     seedImportRun,
+    seedOccurrence,
     seedPcoSong,
     seedPcoSongCredits,
     seedPcoSongTag,
@@ -429,6 +431,92 @@ describe("seedPcoTagGroup, seedPcoTag and seedPcoSongTag", () => {
         expect(db.prepare("SELECT * FROM pco_song_tags").all().map((row) => ({ ...row }))).toEqual([
             { pco_song_id: songId, tag_id: "42" },
         ]);
+    });
+});
+
+describe("seedHistoryPlan and seedOccurrence", () => {
+    const plan = (planId: string) =>
+        db.prepare("SELECT * FROM history_plans WHERE plan_id = ?").get(planId);
+    const occurrence = (planId: string, itemId: string) =>
+        db
+            .prepare("SELECT * FROM plan_occurrences WHERE plan_id = ? AND item_id = ?")
+            .get(planId, itemId);
+
+    test("a plan has an id of 7000001, 7000002, …, and is a read plan of Sunday Morning by default", () => {
+        expect(seedHistoryPlan(db)).toBe("7000001");
+        expect(seedHistoryPlan(db)).toBe("7000002");
+        expect(plan("7000001")).toEqual({
+            plan_id: "7000001",
+            service_type_id: "1405391",
+            plan_date: "2026-09-27",
+            updated_at: "2026-09-27T12:00:00.000Z",
+            items_synced_at: "2026-10-04T12:00:00.000Z",
+        });
+    });
+
+    test("a plan skips a default id that is taken, and takes every field, an unread plan included", () => {
+        seedHistoryPlan(db, { planId: "7000002" });
+        expect(seedHistoryPlan(db)).toBe("7000003");
+        seedHistoryPlan(db, {
+            planId: "55",
+            serviceTypeId: "1486055",
+            planDate: "2026-10-04",
+            updatedAt: "2026-10-03T08:00:00.000Z",
+            itemsSyncedAt: null,
+        });
+        expect(plan("55")).toEqual({
+            plan_id: "55",
+            service_type_id: "1486055",
+            plan_date: "2026-10-04",
+            updated_at: "2026-10-03T08:00:00.000Z",
+            items_synced_at: null,
+        });
+    });
+
+    test("an occurrence takes its plan's date and service type, and items 1, 2, … by default", () => {
+        const planId = seedHistoryPlan(db, { serviceTypeId: "1486055", planDate: "2026-10-04" });
+        expect(seedOccurrence(db, { planId, pcoSongId: "5001" })).toEqual({ planId, itemId: "1" });
+        expect(seedOccurrence(db, { planId, pcoSongId: "5002" }).itemId).toBe("2");
+        expect(occurrence(planId, "2")).toEqual({
+            plan_id: planId,
+            item_id: "2",
+            pco_song_id: "5002",
+            sequence: 2,
+            plan_date: "2026-10-04",
+            service_type_id: "1486055",
+            synced_at: "2026-10-04T12:00:00.000Z",
+        });
+    });
+
+    test("an occurrence skips an item id that is taken, and takes every field", () => {
+        const planId = seedHistoryPlan(db);
+        seedOccurrence(db, { planId, pcoSongId: "5001", itemId: "2" });
+        expect(seedOccurrence(db, { planId, pcoSongId: "5001" }).itemId).toBe("1");
+        expect(seedOccurrence(db, { planId, pcoSongId: "5001" }).itemId).toBe("3");
+        seedOccurrence(db, {
+            planId,
+            pcoSongId: "5009",
+            itemId: "40",
+            sequence: 7,
+            planDate: "2026-01-01",
+            serviceTypeId: "9",
+            syncedAt: "2026-10-05T00:00:00.000Z",
+        });
+        expect(occurrence(planId, "40")).toEqual({
+            plan_id: planId,
+            item_id: "40",
+            pco_song_id: "5009",
+            sequence: 7,
+            plan_date: "2026-01-01",
+            service_type_id: "9",
+            synced_at: "2026-10-05T00:00:00.000Z",
+        });
+    });
+
+    test("an occurrence needs its plan to be in the history", () => {
+        expect(() => seedOccurrence(db, { planId: "123", pcoSongId: "5001" })).toThrow(
+            "plan 123 is not in the history"
+        );
     });
 });
 
