@@ -114,8 +114,11 @@ function compareIds(a: string, b: string): number {
     return a.length - b.length || compareBy(a, b);
 }
 
+/** What orders songs in a report: the title, the tune and the id. */
+export type ReportSongKey = Pick<ReportSong, "id" | "title" | "tuneName">;
+
 /** Songs by title, then tune name (an unknown tune first), then id. */
-function compareSongs(a: ReportSong, b: ReportSong): number {
+function compareSongs(a: ReportSongKey, b: ReportSongKey): number {
     return (
         compareTitles(a.title, b.title) ||
         compareTitles(a.tuneName ?? "", b.tuneName ?? "") ||
@@ -214,9 +217,14 @@ export function buildLastSung(
  * The linked songs not sung since `since` (`YYYY-MM-DD`): those whose last
  * past plan is before it, and those never sung in a past plan, longest
  * unsung first (never sung first, then the oldest last date), then by
- * title. A song sung on `since` itself counts as sung since.
+ * title. A song sung on `since` itself counts as sung since. It takes any
+ * rows of a song and its use, so a page can pass the rows it was sent, with
+ * the little of each song it shows.
  */
-export function notSungSince(lastSung: readonly LastSungRow[], since: string): LastSungRow[] {
+export function notSungSince<T extends SongUse & { song: ReportSongKey }>(
+    lastSung: readonly T[],
+    since: string
+): T[] {
     return lastSung
         .filter(({ lastSungOn }) => lastSungOn === null || lastSungOn < since)
         .sort(

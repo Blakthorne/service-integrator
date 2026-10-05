@@ -25,7 +25,7 @@ export default function NavHomeLink() {
                 aria-label={NAV_HOME_ITEM.label}
                 title={NAV_HOME_ITEM.label}
                 aria-current={ariaCurrent}
-                className={`md:hidden flex-shrink-0 mr-1 sm:mr-2 ${navIconLinkClassName(
+                className={`md:hidden flex-shrink-0 mr-0.5 min-[360px]:mr-1 sm:mr-2 ${navIconLinkClassName(
                     ariaCurrent !== undefined
                 )}`}
             >

@@ -333,6 +333,18 @@ describe("notSungSince", () => {
         notSungSince(lastSung, "2026-06-01");
         expect(lastSung).toEqual(before);
     });
+
+    test("takes rows that hold only what a page shows of each song, and gives those rows back", () => {
+        const lean = lastSung.map((row) => ({
+            ...row,
+            song: { id: row.song.id, title: row.song.title, tuneName: row.song.tuneName, numbers: "R-1" },
+        }));
+        const kept = notSungSince(lean, "2026-06-01");
+        expect(kept.map(({ song }) => song.id)).toEqual(
+            notSungSince(lastSung, "2026-06-01").map(({ song }) => song.id)
+        );
+        expect(kept[0].song.numbers).toBe("R-1");
+    });
 });
 
 describe("parseReportDate", () => {

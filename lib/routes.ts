@@ -31,6 +31,7 @@ export const routes = {
     planItem: (serviceTypeId: string, planId: string, itemId: string) =>
         `/plans/${serviceTypeId}/${planId}/items/${itemId}` as const,
     settings: () => "/settings" as const,
+    reports: () => "/reports" as const,
     catalog: () => "/catalog" as const,
     catalogSong: (songId: number) => `/catalog/songs/${songId}` as const,
     catalogTunes: () => "/catalog/tunes" as const,
@@ -107,6 +108,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
         href: routes.catalog(),
         label: "Catalog",
         isActive: (pathname) => isAtOrBelow(pathname, routes.catalog()),
+    },
+    {
+        href: routes.reports(),
+        label: "Reports",
+        isActive: (pathname) => isAtOrBelow(pathname, routes.reports()),
     },
 ];
 

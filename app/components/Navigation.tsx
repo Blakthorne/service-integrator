@@ -10,8 +10,10 @@ export default function Navigation() {
             aria-label="Main"
             className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700"
         >
-            {/* At 320 px the house, the two section links, the gear and
-                Sign Out need the narrow gutter phones use for <main> too. */}
+            {/* At 320 px the house, the three section links, the gear and
+                Sign Out need the narrow gutter phones use for <main> too,
+                and, below 360 px, the closer spacing the links, the house
+                and the right-hand group take (see NavLinks). */}
             <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
                 <div className="flex justify-between h-16">
                     <div className="flex items-center">
@@ -21,7 +23,7 @@ export default function Navigation() {
                         <NavHomeLink />
                         <NavLinks />
                     </div>
-                    <div className="flex items-center gap-1 sm:gap-2">
+                    <div className="flex items-center gap-0.5 min-[360px]:gap-1 sm:gap-2">
                         <NavUtilityLinks />
                         <form
                             action={async () => {
