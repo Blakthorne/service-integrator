@@ -267,8 +267,8 @@ export interface SeedImportRunFields {
 /**
  * The rows of a seed run with nothing in it but its two books, Rejoice Hymns
  * (R) and Great Hymns of the Faith (G): what a preview of the seed of an
- * empty hymns.json stored. The seed's planner is gone, but its stored runs
- * are not, so tests build the runs they need from rows like these.
+ * empty hymns.json stored. Tests build the runs they need from rows like
+ * these, so they never depend on planning the real file.
  */
 export function emptySeedRows(): PlannedCatalogRows {
     return {
