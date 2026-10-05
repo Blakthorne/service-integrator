@@ -195,6 +195,59 @@ export function replacePlanOccurrences(
     });
 }
 
+/** A song item of a plan, as the reports read it. */
+export interface HistoryOccurrence {
+    planId: string;
+    itemId: string;
+    /** The Planning Center song the item schedules. */
+    pcoSongId: string;
+    /** The item's place in the plan. */
+    sequence: number;
+    /** The plan's date, `YYYY-MM-DD`. */
+    planDate: string;
+    serviceTypeId: string;
+}
+
+const OCCURRENCE_COLUMNS = "plan_id, item_id, pco_song_id, sequence, plan_date, service_type_id";
+
+/** The latest plan first; within a plan, in the order of its items. */
+const OCCURRENCE_ORDER = "plan_date DESC, plan_id DESC, sequence, item_id";
+
+function toOccurrence(row: Row): HistoryOccurrence {
+    return {
+        planId: String(row.plan_id),
+        itemId: String(row.item_id),
+        pcoSongId: String(row.pco_song_id),
+        sequence: Number(row.sequence),
+        planDate: String(row.plan_date),
+        serviceTypeId: String(row.service_type_id),
+    };
+}
+
+/**
+ * Every song item of every plan, the latest plan first, upcoming plans
+ * included (the reports tell them apart by date). One query; about as many
+ * rows as the church has sung songs, a few thousand.
+ */
+export function listOccurrences(db: DatabaseSync): HistoryOccurrence[] {
+    return db
+        .prepare(`SELECT ${OCCURRENCE_COLUMNS} FROM plan_occurrences ORDER BY ${OCCURRENCE_ORDER}`)
+        .all()
+        .map(toOccurrence);
+}
+
+/** Every plan Planning Center song `pcoSongId` is in, the latest plan first, upcoming plans included. */
+export function listSongOccurrences(db: DatabaseSync, pcoSongId: string): HistoryOccurrence[] {
+    return db
+        .prepare(
+            `SELECT ${OCCURRENCE_COLUMNS} FROM plan_occurrences
+             WHERE pco_song_id = ?
+             ORDER BY ${OCCURRENCE_ORDER}`
+        )
+        .all(pcoSongId)
+        .map(toOccurrence);
+}
+
 /** How much the history holds. */
 export interface HistoryCounts {
     /** Plans listed. */

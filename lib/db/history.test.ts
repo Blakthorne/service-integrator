@@ -5,6 +5,8 @@ import {
     deleteHistoryPlan,
     deleteUnlistedPlans,
     listHistoryPlans,
+    listOccurrences,
+    listSongOccurrences,
     replacePlanOccurrences,
     upsertListedPlans,
     type ListedPlan,
@@ -320,5 +322,40 @@ describe("countHistory", () => {
             firstPlanDate: "2025-01-05",
             lastPlanDate: "2026-10-11",
         });
+    });
+});
+
+describe("listOccurrences", () => {
+    test("is empty for a new history", () => {
+        expect(listOccurrences(db)).toEqual([]);
+        expect(listSongOccurrences(db, "5001")).toEqual([]);
+    });
+
+    test("lists every song item, the latest plan first, then in the order of the plan's items", () => {
+        const older = seedHistoryPlan(db, { planId: "101", planDate: "2026-09-20" });
+        const newer = seedHistoryPlan(db, { planId: "102", planDate: "2026-09-27", serviceTypeId: EVENING });
+        seedOccurrence(db, { planId: older, pcoSongId: "5001", itemId: "9", sequence: 1 });
+        seedOccurrence(db, { planId: newer, pcoSongId: "5002", itemId: "4", sequence: 2 });
+        seedOccurrence(db, { planId: newer, pcoSongId: "5001", itemId: "3", sequence: 1 });
+
+        expect(listOccurrences(db)).toEqual([
+            { planId: "102", itemId: "3", pcoSongId: "5001", sequence: 1, planDate: "2026-09-27", serviceTypeId: EVENING },
+            { planId: "102", itemId: "4", pcoSongId: "5002", sequence: 2, planDate: "2026-09-27", serviceTypeId: EVENING },
+            { planId: "101", itemId: "9", pcoSongId: "5001", sequence: 1, planDate: "2026-09-20", serviceTypeId: MORNING },
+        ]);
+    });
+
+    test("lists one song's items only, upcoming plans too", () => {
+        const sung = seedHistoryPlan(db, { planDate: "2026-09-27" });
+        const scheduled = seedHistoryPlan(db, { planDate: "2026-10-11" });
+        seedOccurrence(db, { planId: sung, pcoSongId: "5001" });
+        seedOccurrence(db, { planId: sung, pcoSongId: "5002" });
+        seedOccurrence(db, { planId: scheduled, pcoSongId: "5001" });
+
+        expect(listSongOccurrences(db, "5001").map(({ planId, planDate }) => [planId, planDate])).toEqual([
+            [scheduled, "2026-10-11"],
+            [sung, "2026-09-27"],
+        ]);
+        expect(listSongOccurrences(db, "5003")).toEqual([]);
     });
 });
