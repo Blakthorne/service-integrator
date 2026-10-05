@@ -67,7 +67,7 @@ function AutoLinkRow({ link, onUndone }: AutoLinkRowProps) {
                             →{" "}
                         </span>
                         <span className="sr-only"> is linked to </span>
-                        {/* Default prefetch: a song's page reads only the local database. */}
+                        {/* Default prefetch: a song's page reads the local database (convention 13). */}
                         <Link href={routes.catalogSong(link.songId)} className={LINK_CLASS}>
                             {label}
                         </Link>

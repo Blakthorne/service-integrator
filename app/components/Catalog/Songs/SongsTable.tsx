@@ -104,9 +104,11 @@ function PcoLink({ song, historyRead }: { song: CatalogSongSummary; historyRead:
  * row; the tune is its own link above it. On phones the tune and the link
  * move under the title instead of taking columns.
  *
- * Links keep the default prefetch: song and tune pages read only the local
- * database, so prefetching the rows on screen costs no Planning Center
- * requests (the budget convention 13 protects).
+ * Links keep the default prefetch: song and tune pages read the local
+ * database, and a song's page asks Planning Center for nothing but the
+ * service types' names (one request, cached for five minutes), so prefetching
+ * the rows on screen costs at most that one (the budget convention 13
+ * protects).
  */
 export default function SongsTable({
     rows,

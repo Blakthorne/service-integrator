@@ -108,7 +108,7 @@ function LinkedSong({ match }: { match: CatalogMatch }) {
     return (
         <div className="space-y-1">
             <p className="text-sm text-gray-700 dark:text-gray-300">
-                {/* Default prefetch: a catalog song's page reads only the local database. */}
+                {/* Default prefetch: a catalog song's page reads the local database (convention 13). */}
                 <Link
                     href={routes.catalogSong(match.songId)}
                     className="font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline"

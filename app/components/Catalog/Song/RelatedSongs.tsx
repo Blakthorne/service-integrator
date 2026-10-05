@@ -24,9 +24,10 @@ export default function RelatedSongs({ songs, by, empty }: RelatedSongsProps) {
         <ul className="space-y-2">
             {songs.map((song) => (
                 <li key={song.id}>
-                    {/* Default prefetch: a song's page reads only the local
-                        database, so prefetching costs no Planning Center
-                        requests (convention 13 guards those). */}
+                    {/* Default prefetch: a song's page reads the local database
+                        and, cached for five minutes, the service types' names,
+                        so prefetching costs at most one Planning Center request
+                        (convention 13 guards those). */}
                     <Link href={routes.catalogSong(song.id)} className={LINK_CLASS}>
                         {by === "tune" ? (song.tuneName ?? "Tune unknown") : song.title}
                     </Link>

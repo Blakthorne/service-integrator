@@ -142,7 +142,7 @@ export default function UnlinkedSongRow({
                                 >
                                     <div className="min-w-0 space-y-0.5">
                                         <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                            {/* Default prefetch: a song's page reads only the local database. */}
+                                            {/* Default prefetch: a song's page reads the local database (convention 13). */}
                                             <Link
                                                 href={routes.catalogSong(suggestion.songId)}
                                                 className={`font-medium ${LINK_CLASS}`}
