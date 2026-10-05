@@ -248,6 +248,74 @@ export function listSongOccurrences(db: DatabaseSync, pcoSongId: string): Histor
         .map(toOccurrence);
 }
 
+/** How many of an active book's entries have a song that was sung. */
+export interface BookCoverage {
+    bookId: number;
+    code: string;
+    name: string;
+    shortName: string;
+    /** How many entries the book has, a song's variants counted each. */
+    entries: number;
+    /** Of them, those whose song was sung in a past plan within the period asked for. */
+    sungRecently: number;
+    /** Of them, those whose song was ever sung in a past plan. */
+    sungEver: number;
+}
+
+/**
+ * The coverage of every active book, in book order: how many of its entries
+ * have a catalog song linked to a Planning Center song that was sung in a
+ * past plan, dated from `since` (inclusive) to before `today` (`sungRecently`),
+ * and in any plan before `today` (`sungEver`). Entries whose song is not
+ * linked, or was never sung, count in `entries` only. A book with no
+ * entries has none of any. One query.
+ */
+export function bookCoverage(db: DatabaseSync, since: string, today: string): BookCoverage[] {
+    return db
+        .prepare(
+            `SELECT b.id, b.code, b.name, b.short_name, count(e.id) AS entries,
+                    coalesce(sum(EXISTS (
+                        SELECT 1 FROM plan_occurrences o
+                        WHERE o.pco_song_id = s.pco_song_id AND o.plan_date >= ?1 AND o.plan_date < ?2
+                    )), 0) AS recently,
+                    coalesce(sum(EXISTS (
+                        SELECT 1 FROM plan_occurrences o
+                        WHERE o.pco_song_id = s.pco_song_id AND o.plan_date < ?2
+                    )), 0) AS ever
+             FROM books b
+             LEFT JOIN entries e ON e.book_id = b.id
+             LEFT JOIN songs s ON s.id = e.song_id
+             WHERE b.active = 1
+             GROUP BY b.id
+             ORDER BY b.sort_order, b.code, b.id`
+        )
+        .all(since, today)
+        .map((row) => ({
+            bookId: Number(row.id),
+            code: String(row.code),
+            name: String(row.name),
+            shortName: String(row.short_name),
+            entries: Number(row.entries),
+            sungRecently: Number(row.recently),
+            sungEver: Number(row.ever),
+        }));
+}
+
+/**
+ * How many different Planning Center songs were sung in past plans dated
+ * from `from` (inclusive) to before `today`, `YYYY-MM-DD`: in the catalog or
+ * not. One query.
+ */
+export function countSongsSung(db: DatabaseSync, from: string, today: string): number {
+    const row = db
+        .prepare(
+            `SELECT count(DISTINCT pco_song_id) AS n FROM plan_occurrences
+             WHERE plan_date >= ? AND plan_date < ?`
+        )
+        .get(from, today);
+    return Number(row?.n);
+}
+
 /** How much the history holds. */
 export interface HistoryCounts {
     /** Plans listed. */

@@ -2,6 +2,7 @@ import "server-only";
 import { getDb } from "@/lib/db";
 import { countCatalog } from "@/lib/db/catalog";
 import { errorMessage } from "@/lib/db/errors";
+import { bookCoverage, countSongsSung, type BookCoverage } from "@/lib/db/history";
 import { latestSyncRun, type SyncRun } from "@/lib/db/syncRuns";
 import type { Plan, PlanItemWithSong, ServiceType } from "@/lib/domain";
 import {
@@ -12,7 +13,9 @@ import {
     type HymnNoteStatus,
     type ItemNoteCategoriesRead,
 } from "@/lib/hymnNotes";
+import { addMonthsToYmd } from "@/lib/format";
 import { getNextPlan, getPlanItems, getServiceTypes } from "@/lib/pco";
+import { localYmd } from "@/lib/plansByDate";
 import { scheduleSongView, type ScheduleCatalogState, type ScheduleSongView } from "@/lib/scheduleCards";
 import { formatScheduleNumbers } from "@/lib/serviceSchedule";
 import type { AppSettings } from "@/lib/settings";
@@ -28,14 +31,37 @@ import { getSettings } from "./settings";
  * each one that is not archived, in parallel, one for its next plan and,
  * when it has one, its items with their notes (one request per 100 items)
  * and its item note categories, in parallel: seven for the church's two
- * service types. The database: at most eleven queries, however many plans:
+ * service types. The database: at most fourteen queries, however many plans:
  * seven for every plan's catalog links at once (`planCatalogLinks`), one for
- * which of all their notes the app wrote, and one each for the settings, the
- * song sync's latest run and the catalog's size.
+ * which of all their notes the app wrote, one each for the settings, the
+ * song sync's latest run and the catalog's size, and three for the history's
+ * figures (the books' coverage, the songs sung this year and the history
+ * sync's latest run).
  */
 
 /** A song sync whose latest success is older than this is stale: it runs hourly. */
 export const PCO_SONGS_SYNC_STALE_MS = 3 * 60 * 60 * 1000;
+
+/** How many years back the coverage of a book counts a song as sung lately. */
+export const COVERAGE_YEARS = 5;
+
+/** What the dashboard shows of the plan history. */
+export interface DashboardHistory {
+    /** The date the figures are as of, `YYYY-MM-DD` (the server's): a plan before it is past, so its songs were sung. */
+    today: string;
+    /** The first day of the last `COVERAGE_YEARS` years, `YYYY-MM-DD`: where "sung lately" starts. */
+    since: string;
+    /**
+     * Each active book, in book order: how many of its entries there are, how
+     * many have a song that was sung in a past plan since `since`, and how
+     * many have one that was ever sung.
+     */
+    coverage: BookCoverage[];
+    /** How many different songs were sung in past plans this year, in the catalog or not. */
+    songsSungThisYear: number;
+    /** The history sync's latest run, finished or not; null before the first (so the figures are empty). */
+    lastSync: SyncRun | null;
+}
 
 /** A song item of a next plan. */
 export interface DashboardSong {
@@ -130,6 +156,8 @@ export interface Dashboard {
     databaseError: string | null;
     /** The song sync's latest run, finished or not; null before the first, or when it cannot be read. */
     lastSync: SyncRun | null;
+    /** What the plan history says of the books and the year; null when the database cannot be read. */
+    history: DashboardHistory | null;
     /** What needs doing, the catalog's and the sync's first, then each plan's. */
     todos: DashboardTodo[];
 }
@@ -189,6 +217,29 @@ function readCatalogState():
     } catch (error) {
         console.error("Failed to read the song sync and the catalog's size:", error);
         return { ok: false, error: errorMessage(error) };
+    }
+}
+
+/**
+ * The plan history's figures at `now`: each active book's coverage, the songs
+ * sung this year and the history sync's latest run. Three queries. Never
+ * throws: a failure is logged and gives null.
+ */
+function readHistory(now: Date): DashboardHistory | null {
+    try {
+        const db = getDb();
+        const today = localYmd(now);
+        const since = addMonthsToYmd(today, -12 * COVERAGE_YEARS);
+        return {
+            today,
+            since,
+            coverage: bookCoverage(db, since, today),
+            songsSungThisYear: countSongsSung(db, `${today.slice(0, 4)}-01-01`, today),
+            lastSync: latestSyncRun(db, "history"),
+        };
+    } catch (error) {
+        console.error("Failed to read the plan history for the dashboard:", error);
+        return null;
     }
 }
 
@@ -325,6 +376,7 @@ export async function getDashboard(now: Date = new Date()): Promise<Dashboard> {
         serviceTypesError,
         databaseError: links.catalogError ?? settingsError ?? (state.ok ? null : state.error),
         lastSync: state.ok ? state.lastSync : null,
+        history: readHistory(now),
         todos: [
             ...(state.ok ? catalogTodos(state, now) : []),
             ...entries.flatMap((entry) => (entry.status === "plan" ? planTodos(entry) : [])),

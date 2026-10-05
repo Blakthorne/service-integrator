@@ -1,7 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {
+    bookCoverage,
     countHistory,
+    countSongsSung,
     deleteHistoryPlan,
     deleteUnlistedPlans,
     listHistoryPlans,
@@ -11,7 +13,15 @@ import {
     upsertListedPlans,
     type ListedPlan,
 } from "./history";
-import { openTestDb, seedHistoryPlan, seedOccurrence } from "./testing";
+import {
+    openTestDb,
+    seedBook,
+    seedEntry,
+    seedHistoryPlan,
+    seedHymn,
+    seedOccurrence,
+    seedSong,
+} from "./testing";
 
 let db: DatabaseSync;
 
@@ -357,5 +367,103 @@ describe("listOccurrences", () => {
             [sung, "2026-09-27"],
         ]);
         expect(listSongOccurrences(db, "5003")).toEqual([]);
+    });
+});
+
+describe("bookCoverage", () => {
+    const TODAY = "2026-10-04";
+    const SINCE = "2021-10-04";
+
+    /** A catalog song linked to Planning Center song `pcoSongId` (or none), sung on each of `dates`. */
+    function song(pcoSongId: string | null, dates: string[] = []): number {
+        for (const date of dates) {
+            seedOccurrence(db, { planId: seedHistoryPlan(db, { planDate: date }), pcoSongId: pcoSongId! });
+        }
+        return seedSong(db, { hymnId: seedHymn(db), pcoSongId });
+    }
+
+    test("is empty without books, and zero for a book with no entries", () => {
+        expect(bookCoverage(db, SINCE, TODAY)).toEqual([]);
+        const book = seedBook(db, { code: "R", name: "Rejoice Hymns", shortName: "Rejoice" });
+        expect(bookCoverage(db, SINCE, TODAY)).toEqual([
+            { bookId: book, code: "R", name: "Rejoice Hymns", shortName: "Rejoice", entries: 0, sungRecently: 0, sungEver: 0 },
+        ]);
+    });
+
+    test("counts the entries whose song was sung in the period, and ever, in each active book in book order", () => {
+        const great = seedBook(db, { code: "G", name: "Great Hymns", sortOrder: 2 });
+        const rejoice = seedBook(db, { code: "R", name: "Rejoice Hymns", sortOrder: 1 });
+        const inactive = seedBook(db, { code: "X", name: "Old Book", sortOrder: 3, active: false });
+        const sungLately = song("1001", ["2026-09-27", "2025-01-05"]);
+        const sungLongAgo = song("1002", ["2019-01-06"]);
+        const onlyScheduled = song("1003", ["2026-10-04", "2026-10-11"]);
+        const neverSung = song("1004");
+        const notLinked = song(null);
+        for (const songId of [sungLately, sungLongAgo, onlyScheduled, neverSung, notLinked]) {
+            seedEntry(db, { bookId: rejoice, songId });
+        }
+        seedEntry(db, { bookId: great, songId: sungLately });
+        seedEntry(db, { bookId: inactive, songId: sungLately });
+
+        expect(bookCoverage(db, SINCE, TODAY).map(({ code, entries, sungRecently, sungEver }) => [code, entries, sungRecently, sungEver])).toEqual([
+            ["R", 5, 1, 2],
+            ["G", 1, 1, 1],
+        ]);
+    });
+
+    test("counts a song's entries in a book each, its variants included", () => {
+        const book = seedBook(db, { code: "R" });
+        const songId = song("1001", ["2026-09-27"]);
+        seedEntry(db, { bookId: book, songId, number: 108 });
+        seedEntry(db, { bookId: book, songId, number: 109, variantNote: "Descant" });
+        expect(bookCoverage(db, SINCE, TODAY)[0]).toMatchObject({ entries: 2, sungRecently: 2, sungEver: 2 });
+    });
+
+    test("starts the period on the day given, and counts only plans before today", () => {
+        const book = seedBook(db, { code: "R" });
+        seedEntry(db, { bookId: book, songId: song("1001", ["2021-10-04"]) });
+        seedEntry(db, { bookId: book, songId: song("1002", ["2021-10-03"]) });
+        seedEntry(db, { bookId: book, songId: song("1003", ["2026-10-03"]) });
+        seedEntry(db, { bookId: book, songId: song("1004", ["2026-10-04"]) });
+
+        expect(bookCoverage(db, SINCE, TODAY)[0]).toMatchObject({ entries: 4, sungRecently: 2, sungEver: 3 });
+        // A day later, today's plan has been sung.
+        expect(bookCoverage(db, SINCE, "2026-10-05")[0]).toMatchObject({ sungRecently: 3, sungEver: 4 });
+    });
+
+    test("counts an entry once however often its song was sung", () => {
+        const book = seedBook(db, { code: "R" });
+        seedEntry(db, { bookId: book, songId: song("1001", ["2026-09-27", "2026-09-20", "2026-09-13"]) });
+        expect(bookCoverage(db, SINCE, TODAY)[0]).toMatchObject({ entries: 1, sungRecently: 1, sungEver: 1 });
+    });
+
+    test("counts the entry of a linked song that is in no plan as never sung", () => {
+        const book = seedBook(db, { code: "R" });
+        seedEntry(db, { bookId: book, songId: song("1001") });
+        expect(bookCoverage(db, SINCE, TODAY)[0]).toMatchObject({ entries: 1, sungRecently: 0, sungEver: 0 });
+    });
+});
+
+describe("countSongsSung", () => {
+    test("counts the different songs sung in past plans from the date, up to yesterday", () => {
+        const sing = (pcoSongId: string, planDate: string) =>
+            seedOccurrence(db, { planId: seedHistoryPlan(db, { planDate }), pcoSongId });
+        sing("1001", "2026-01-01");
+        sing("1001", "2026-09-27");
+        sing("1002", "2026-09-27");
+        sing("1003", "2025-12-31");
+        sing("1004", "2026-10-04");
+        sing("1005", "2026-10-11");
+        sing("1006", "2026-10-03");
+
+        expect(countSongsSung(db, "2026-01-01", "2026-10-04")).toBe(3);
+        expect(countSongsSung(db, "2026-01-02", "2026-10-04")).toBe(3);
+        expect(countSongsSung(db, "2026-09-28", "2026-10-04")).toBe(1);
+        expect(countSongsSung(db, "2026-01-01", "2026-10-05")).toBe(4);
+        expect(countSongsSung(db, "2020-01-01", "2026-10-04")).toBe(4);
+    });
+
+    test("is zero for a history never synced", () => {
+        expect(countSongsSung(db, "2026-01-01", "2026-10-04")).toBe(0);
     });
 });
