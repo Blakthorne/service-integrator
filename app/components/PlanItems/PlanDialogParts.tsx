@@ -1,0 +1,66 @@
+/**
+ * What the plan header's dialogs (Sync hymn notes, Email this plan) share:
+ * the look of their links, the button that opens each, the row of buttons
+ * along the bottom, and the line that takes focus when an action answers.
+ * Their buttons take their look from `ui/buttonClasses`, as every solid
+ * button does.
+ */
+
+/** A link in running text: underlined, since its colour alone is under 3:1 against the text's. */
+export const LINK_CLASS =
+    "text-blue-600 underline hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300";
+
+/**
+ * The plan header's button that opens a dialog: `buttonClasses`' primary
+ * colours (white on blue-600 is 5.3:1, and the ring outside it 3:1 on the
+ * page), but sized like "View in Planning Center" below it, which no
+ * variant is.
+ */
+export const HEADER_BUTTON_CLASS =
+    "px-4 py-2 text-white text-center bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors whitespace-nowrap cursor-pointer";
+
+/** The buttons along the bottom of a dialog. */
+export function DialogButtons({ children }: { children: React.ReactNode }) {
+    return <div className="mt-5 flex flex-wrap justify-end gap-3">{children}</div>;
+}
+
+interface DialogAnswerProps {
+    /** The ref the dialog focuses when an action answers, so the answer is read out. */
+    answerRef: React.RefObject<HTMLParagraphElement | null>;
+    /** A failure: an alert, red unless `quiet`. */
+    alert?: boolean;
+    /**
+     * The answer is an alert but not red: the results' summary, which says
+     * what was done as well as what failed.
+     */
+    quiet?: boolean;
+    /** Counts the actions run, to key each alert, so the same words are announced again. */
+    attempt?: number;
+    children: React.ReactNode;
+}
+
+/**
+ * A message that takes focus when it arrives. A failure is an alert, keyed
+ * per attempt, and red unless `quiet`.
+ */
+export function DialogAnswer({
+    answerRef,
+    alert,
+    quiet = false,
+    attempt,
+    children,
+}: DialogAnswerProps) {
+    return (
+        <p
+            key={alert ? attempt : undefined}
+            ref={answerRef}
+            tabIndex={-1}
+            role={alert ? "alert" : undefined}
+            className={`text-sm focus:outline-none ${
+                alert && !quiet ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"
+            }`}
+        >
+            {children}
+        </p>
+    );
+}

@@ -5,7 +5,9 @@ import CatalogSongsView from "@/app/components/Catalog/Songs/CatalogSongsView";
 import EmptyState from "@/app/components/ui/EmptyState";
 import LoadingState from "@/app/components/ui/LoadingState";
 import PageHeader from "@/app/components/ui/PageHeader";
+import { catalogTagIdsBySong } from "@/lib/catalog/filter";
 import { getCatalogBooks, getCatalogSongs } from "@/lib/queries/catalog";
+import { getSongTagGroups, getTagIdsBySong } from "@/lib/queries/tags";
 import { routes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Catalog" };
@@ -13,10 +15,12 @@ export const metadata: Metadata = { title: "Catalog" };
 /**
  * The catalog's home: every song, which the view searches, filters, sorts
  * and pages in the browser. The server reads the local database once; the
- * client gets the list rows and, of each book, only what the book filter
- * shows. Before the seed import the catalog is empty, and the page points
- * at Import. It sits in the `(list)` route group so that its `loading.tsx`
- * covers this list and not the song, tune, book and import pages beside it.
+ * client gets the list rows; of each book, only what the book filter shows;
+ * of Planning Center's song tags, the groups that have tags and the tags of
+ * the songs the catalog links to, for the tag filter. Before the seed import
+ * the catalog is empty, and the page points at Import. It sits in the
+ * `(list)` route group so that its `loading.tsx` covers this list and not
+ * the song, tune, book and import pages beside it.
  */
 export default function CatalogPage() {
     const songs = getCatalogSongs();
@@ -25,6 +29,14 @@ export default function CatalogPage() {
         name,
         shortName,
     }));
+    const tagGroups = getSongTagGroups()
+        .filter((group) => group.tags.length > 0)
+        .map(({ id, name, tags }) => ({
+            id,
+            name,
+            tags: tags.map((tag) => ({ id: tag.id, name: tag.name })),
+        }));
+    const tagIdsBySong = catalogTagIdsBySong(songs, getTagIdsBySong());
 
     return (
         <div className="w-full max-w-4xl mx-auto">
@@ -48,7 +60,12 @@ export default function CatalogPage() {
             ) : (
                 // The view reads the query string, which needs a Suspense boundary.
                 <Suspense fallback={<LoadingState label="Loading songs…" />}>
-                    <CatalogSongsView songs={songs} books={books} />
+                    <CatalogSongsView
+                        songs={songs}
+                        books={books}
+                        tagGroups={tagGroups}
+                        tagIdsBySong={tagIdsBySong}
+                    />
                 </Suspense>
             )}
         </div>

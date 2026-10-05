@@ -1,11 +1,14 @@
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { deriveSongCredits, findSongCredits } from "@/lib/db/credits";
 import { linkSong, unlinkSong } from "@/lib/db/links";
 import { findPcoSong, listPcoSongs, upsertPcoSongs } from "@/lib/db/pcoSongs";
 import {
     openTestDb,
     seedHymn,
     seedPcoSong,
+    seedPcoSongCredits,
+    seedSetting,
     seedSong,
     seedTune,
 } from "@/lib/db/testing";
@@ -19,6 +22,7 @@ import {
     stubPcoCredentials,
     stubPcoPacer,
 } from "@/lib/pco/testing";
+import { toPcoLibrarySong } from "@/lib/pco/mappers";
 import { describePcoSongsSync, syncPcoSongs } from "./sync";
 
 let db: DatabaseSync;
@@ -198,6 +202,53 @@ describe("syncPcoSongs", () => {
         expect(linkSong(db, vision, "1200", "manual", T3)).toEqual({ ok: true, changed: true });
     });
 
+    test("never puts back a song a page saved while the listing was read, nor its credits", async () => {
+        stubPcoPacer();
+        stubLibrary(LIBRARY);
+        await syncPcoSongs(db, () => T1);
+
+        // The next listing starts at T2 and is written at T3. Meanwhile the
+        // credit editor saves Amazing Grace's credits, mirroring the song as
+        // Planning Center answered, with its credits.
+        const saved = {
+            ...toPcoLibrarySong(songResource("1001", { title: "Amazing Grace" })),
+            author: "Words: John Newton; Music: Trad.",
+        };
+        const savedAt = new Date("2026-10-04T13:00:01.000Z");
+        const clock = vi.fn<() => Date>().mockReturnValueOnce(T2).mockReturnValue(T3);
+        stubFetchRoutes({
+            [FIRST_PAGE]: () => {
+                upsertPcoSongs(db, [saved], savedAt);
+                deriveSongCredits(db, [saved], ["Words", "Music"]);
+                // The listing was read before the save reached Planning Center.
+                return json(listPage(LIBRARY));
+            },
+        });
+
+        await expect(syncPcoSongs(db, clock)).resolves.toMatchObject({ updated: 0 });
+        expect(findPcoSong(db, "1001")).toMatchObject({
+            author: "Words: John Newton; Music: Trad.",
+            syncedAt: savedAt.toISOString(),
+        });
+        expect(findSongCredits(db, "1001")).toEqual({
+            status: "ok",
+            credits: [
+                { role: "Words", names: ["John Newton"] },
+                { role: "Music", names: ["Trad."] },
+            ],
+        });
+        // The other songs are synced as usual.
+        expect(findPcoSong(db, "1002")?.syncedAt).toBe(T3.toISOString());
+
+        // The next sync brings it up to date with Planning Center.
+        stubLibrary([
+            songResource("1001", { title: "Amazing Grace", author: "Words: John Newton; Music: Trad." }),
+            ...LIBRARY.slice(1),
+        ]);
+        await syncPcoSongs(db, () => new Date("2026-10-04T15:00:00.000Z"));
+        expect(findPcoSong(db, "1001")?.syncedAt).toBe("2026-10-04T15:00:00.000Z");
+    });
+
     test("links a catalog song added since the last sync", async () => {
         stubPcoPacer();
         stubLibrary(LIBRARY);
@@ -283,6 +334,107 @@ describe("syncPcoSongs", () => {
         seedPcoSong(db, { id: "1001", removedAt: T1.toISOString() });
         stubLibrary([]);
         await expect(syncPcoSongs(db, () => T2)).resolves.toMatchObject({ removed: 0 });
+    });
+});
+
+describe("syncPcoSongs: credits", () => {
+    /** The library with an author of each kind. */
+    const AUTHORS = [
+        songResource("1001", { title: "Amazing Grace", author: "John Newton" }),
+        songResource("1002", {
+            title: "O God, Our Help",
+            author: "Words: Isaac Watts; Music: William Croft",
+        }),
+        songResource("1003", { title: "Shout to the Lord", author: "Composer: Darlene Zschech" }),
+        songResource("1004", { title: "Untitled", author: null }),
+    ];
+
+    test("derives every listed song's credits from its author, with how it read", async () => {
+        stubPcoPacer();
+        stubLibrary(AUTHORS);
+        await syncPcoSongs(db, () => T1);
+
+        expect(findSongCredits(db, "1001")).toEqual({
+            status: "legacy",
+            credits: [
+                { role: "Words", names: ["John Newton"] },
+                { role: "Music", names: ["John Newton"] },
+            ],
+        });
+        expect(findSongCredits(db, "1002")).toEqual({
+            status: "ok",
+            credits: [
+                { role: "Words", names: ["Isaac Watts"] },
+                { role: "Music", names: ["William Croft"] },
+            ],
+        });
+        expect(findSongCredits(db, "1003")).toEqual({ status: "unparsed", credits: [] });
+        expect(findSongCredits(db, "1004")).toEqual({ status: "legacy", credits: [] });
+    });
+
+    test("derives them afresh on every sync, so an author changed in Planning Center is read again", async () => {
+        stubPcoPacer();
+        stubLibrary(AUTHORS);
+        await syncPcoSongs(db, () => T1);
+
+        stubLibrary([
+            songResource("1001", { title: "Amazing Grace", author: "Words: John Newton; Music: Trad." }),
+            ...AUTHORS.slice(1),
+        ]);
+        await syncPcoSongs(db, () => T2);
+        expect(findSongCredits(db, "1001")).toEqual({
+            status: "ok",
+            credits: [
+                { role: "Words", names: ["John Newton"] },
+                { role: "Music", names: ["Trad."] },
+            ],
+        });
+    });
+
+    test("reads the authors with the stored roles, or the default ones when those do not parse", async () => {
+        stubPcoPacer();
+        seedSetting(db, "creditRoles", ["Text", "Tune"]);
+        stubLibrary([songResource("1001", { author: "Text: Isaac Watts; Tune: William Croft" })]);
+        await syncPcoSongs(db, () => T1);
+        expect(findSongCredits(db, "1001")).toMatchObject({
+            status: "ok",
+            credits: [
+                { role: "Text", names: ["Isaac Watts"] },
+                { role: "Tune", names: ["William Croft"] },
+            ],
+        });
+
+        db.prepare("UPDATE settings SET value = '[\"Text\"]' WHERE key = 'creditRoles'").run();
+        stubLibrary([songResource("1001", { author: "Text: Isaac Watts; Tune: William Croft" })]);
+        await syncPcoSongs(db, () => T2);
+        expect(findSongCredits(db, "1001")).toEqual({ status: "unparsed", credits: [] });
+    });
+
+    test("leaves the credits of a song the listing lacks as they were", async () => {
+        stubPcoPacer();
+        stubLibrary(AUTHORS);
+        await syncPcoSongs(db, () => T1);
+
+        stubLibrary(AUTHORS.slice(1));
+        await syncPcoSongs(db, () => T2);
+        expect(findSongCredits(db, "1001")).toMatchObject({ status: "legacy" });
+    });
+
+    test("writes no credits when a page fails", async () => {
+        stubPcoPacer();
+        seedPcoSong(db, { id: "1001", author: "John Newton" });
+        seedPcoSongCredits(db, "1001", [{ role: "Words", names: ["Someone"] }]);
+        stubFetchRoutes({
+            [FIRST_PAGE]: listPage(AUTHORS.slice(0, 2), { next: SECOND_PAGE, total: 4 }),
+            [SECOND_PAGE]: () => json({ errors: [] }, { status: 500 }),
+        });
+
+        await expect(syncPcoSongs(db, () => T1)).rejects.toMatchObject({ status: 500 });
+        expect(findSongCredits(db, "1001")).toEqual({
+            status: "ok",
+            credits: [{ role: "Words", names: ["Someone"] }],
+        });
+        expect(findSongCredits(db, "1002")).toBeNull();
     });
 });
 

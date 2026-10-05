@@ -1,9 +1,14 @@
+import { creditLineOf, parseCredits, type CreditsParse } from "./credits";
 import type { PlanItemWithSong, Song } from "./domain";
 import { DEFAULT_SETTINGS, type CopyrightSettings } from "./settings";
 
-/** The song fields the copyright text is built from. */
+/**
+ * The song fields the copyright text is built from. Its credits are
+ * `credits` when the caller has parsed them (`parseCredits`), else what
+ * `author` reads as with the settings' roles.
+ */
 export type CopyrightSong = Pick<Song, "title" | "author" | "copyright"> &
-    Partial<Pick<Song, "admin">>;
+    Partial<Pick<Song, "admin">> & { credits?: CreditsParse };
 
 /**
  * The plan-item fields the copyright views read: its type, its position and
@@ -15,43 +20,33 @@ export type CopyrightItem = Pick<PlanItemWithSong, "itemType" | "sequence"> & {
 
 /**
  * Build the attribution block shown (and copied) for a song:
- * `"<title>" <author line>.`, the copyright line, then the CCLI footer,
+ * `"<title>" <credit line>`, the copyright line, then the CCLI footer,
  * which names the church's license from the settings
  * (`ccliLicenseNumber`; the default is the number it always printed).
  *
+ * The credit line is the song's credits (`credits`, or else what its
+ * author reads as with the settings' `creditRoles`), printed with the
+ * settings' `creditPhrases` by `creditLineOf`: "Words by Isaac Watts.
+ * Music by William Croft." for an author in the labelled convention, and,
+ * for any other (an author with no labels, or labels that do not parse),
+ * the line the copyright text always printed, followed by a period.
+ *
  * Moved verbatim from SongCopyright.tsx; copyright.test.ts pins its behavior,
- * quirks included (for example ".." after an author that already ends in a
- * period). A missing, empty or whitespace-only copyright is "Public Domain.".
+ * quirks included, and credits.test.ts the line it always printed for an
+ * author (for example ".." after an author that already ends in a period).
+ * A missing, empty or whitespace-only copyright is "Public Domain.".
  */
 export function formatCopyrightText(
     song: CopyrightSong,
-    { ccliLicenseNumber }: CopyrightSettings = DEFAULT_SETTINGS
+    {
+        ccliLicenseNumber,
+        creditRoles = DEFAULT_SETTINGS.creditRoles,
+        creditPhrases = DEFAULT_SETTINGS.creditPhrases,
+    }: CopyrightSettings = DEFAULT_SETTINGS
 ): string {
-    // PCO can send a null author; treat it like an empty one ("Unknown").
-    const author = song.author ?? "";
-
-    // First split by comma to check if there are three authors
-    const commaAuthors = author.split(",").map((a) => a.trim());
-    let authorLine: string;
-
-    if (commaAuthors.length >= 3) {
-        // If there are three or more authors separated by commas
-        const wordsAuthors = commaAuthors.slice(0, 2).join(" and ");
-        const musicAuthor = commaAuthors[2];
-        authorLine = `Words by ${wordsAuthors}. Music by ${musicAuthor}`;
-    } else {
-        // If not three authors, split by "and"
-        const authors = author.split(" and ").map((a) => a.trim());
-        if (authors.length === 1) {
-            // Single author case
-            authorLine = `Words and Music by ${authors[0] || "Unknown"}`;
-        } else {
-            // Two authors case
-            const wordsAuthor = authors[0] || "Unknown";
-            const musicAuthor = authors[1] || wordsAuthor;
-            authorLine = `Words by ${wordsAuthor}. Music by ${musicAuthor}`;
-        }
-    }
+    // PCO can send a null author; it reads like an empty one ("Unknown").
+    const credits = song.credits ?? parseCredits(song.author, creditRoles);
+    const creditLine = creditLineOf(credits, { creditRoles, creditPhrases });
 
     // Format copyright line with conditional © symbol. A missing, empty or
     // whitespace-only copyright counts as public domain.
@@ -78,14 +73,15 @@ export function formatCopyrightText(
         }
     }
 
-    return `"${song.title}" ${authorLine}.\n${copyrightLine}\nUsed by permission. CCLI Streaming License ${ccliLicenseNumber}.`;
+    return `"${song.title}" ${creditLine}\n${copyrightLine}\nUsed by permission. CCLI Streaming License ${ccliLicenseNumber}.`;
 }
 
 /**
  * The song behind a plan item for the copyright views: the song it was joined
  * to by PCO ID (see joinItemsToSongs), so an item renamed in the plan still
  * gets its song's copyright. Only "song" items qualify. Returns null for other
- * item types and for items without a song.
+ * item types and for items without a song. Its credits come along when the
+ * song carries them parsed.
  */
 export function getItemCopyrightInfo(
     item: CopyrightItem
@@ -93,15 +89,17 @@ export function getItemCopyrightInfo(
     if (item.itemType !== "song" || item.song === null) {
         return null;
     }
-    const { title, author, copyright, admin } = item.song;
-    return { title, author, copyright, admin };
+    const { title, author, copyright, admin, credits } = item.song;
+    return { title, author, copyright, admin, ...(credits ? { credits } : {}) };
 }
 
 /**
  * The text the "Copy All" button on the Copyright Information tab copies: the
  * formatted copyright block of every song item, in sequence order, separated
- * by a blank line, each following `settings` (see formatCopyrightText).
- * Items without a song are skipped (see getItemCopyrightInfo).
+ * by a blank line, each following `settings` (see formatCopyrightText: the
+ * CCLI number, and the credit roles and phrases) and taking the song's
+ * parsed credits when it carries them. Items without a song are skipped (see
+ * getItemCopyrightInfo).
  */
 export function buildCopyrightCopyAllText(
     items: CopyrightItem[],

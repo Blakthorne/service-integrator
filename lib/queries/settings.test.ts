@@ -81,7 +81,7 @@ describe("getSettingsIssues", () => {
     test("lists the stored values that no longer parse", () => {
         seedSetting(db, "ccliLicenseNumber", "CCLI 1");
         seedSetting(db, "numberSeparator", ", ");
-        seedSetting(db, "creditRoles", 1);
+        seedSetting(db, "reportPeriod", 1);
         expect(getSettingsIssues()).toEqual([
             {
                 key: "ccliLicenseNumber",
@@ -127,8 +127,33 @@ describe("saveSettings", () => {
             scheduleHeaderLabels: { "1405391": "Morning Worship", "1486055": "" },
             hymnNoteCategoryName: "Hymn Numbers",
             hymnNoteIncludesTune: true,
+            creditRoles: DEFAULT_SETTINGS.creditRoles,
+            creditPhrases: DEFAULT_SETTINGS.creditPhrases,
+            emailRecipients: DEFAULT_SETTINGS.emailRecipients,
+            emailSubjectTemplate: DEFAULT_SETTINGS.emailSubjectTemplate,
         });
         expect(listStoredSettings(db)[0]).toMatchObject({ updatedAt: T0.toISOString() });
+    });
+
+    test("saves the credit and email settings, lists and phrases included, as they parse", () => {
+        expect(
+            saveSettings({
+                creditRoles: ["Words", "Music", " Descant "],
+                creditPhrases: { Words: "Text by", "Words&Music": "Text and tune by" },
+                emailRecipients: [" pastor@example.org "],
+                emailSubjectTemplate: " {service}: {date} ",
+            })
+        ).toEqual({
+            ok: true,
+            saved: ["creditRoles", "creditPhrases", "emailRecipients", "emailSubjectTemplate"],
+        });
+        expect(getSettings().settings).toMatchObject({
+            creditRoles: ["Words", "Music", "Descant"],
+            creditPhrases: { Words: "Text by", "Words & Music": "Text and tune by" },
+            emailRecipients: ["pastor@example.org"],
+            emailSubjectTemplate: "{service}: {date}",
+        });
+        expect(getSettingsIssues()).toEqual([]);
     });
 
     test("refuses every invalid value at once, each by its key, and saves nothing", () => {
@@ -146,9 +171,9 @@ describe("saveSettings", () => {
     });
 
     test("refuses a key that is not a setting, and saves nothing", () => {
-        expect(saveSettings({ numberSeparator: ", ", creditRoles: ["Words"] })).toEqual({
+        expect(saveSettings({ numberSeparator: ", ", reportPeriod: "weekly" })).toEqual({
             ok: false,
-            message: 'There is no setting named "creditRoles", so nothing was saved.',
+            message: 'There is no setting named "reportPeriod", so nothing was saved.',
             fieldErrors: {},
         });
         expect(listStoredSettings(db)).toEqual([]);

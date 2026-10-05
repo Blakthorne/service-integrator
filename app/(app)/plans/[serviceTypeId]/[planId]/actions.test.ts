@@ -1,19 +1,30 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // vi.hoisted is required: vi.mock is hoisted above const declarations.
-const { auth, revalidatePath, linkCatalogSong, saveSelection, previewHymnNotes, syncHymnNotes } =
-    vi.hoisted(() => ({
-        auth: vi.fn(),
-        revalidatePath: vi.fn(),
-        linkCatalogSong: vi.fn(),
-        saveSelection: vi.fn(),
-        previewHymnNotes: vi.fn(),
-        syncHymnNotes: vi.fn(),
-    }));
+const {
+    auth,
+    revalidatePath,
+    linkCatalogSong,
+    saveSelection,
+    previewHymnNotes,
+    syncHymnNotes,
+    previewPlanEmail,
+    sendPlanEmail,
+} = vi.hoisted(() => ({
+    auth: vi.fn(),
+    revalidatePath: vi.fn(),
+    linkCatalogSong: vi.fn(),
+    saveSelection: vi.fn(),
+    previewHymnNotes: vi.fn(),
+    syncHymnNotes: vi.fn(),
+    previewPlanEmail: vi.fn(),
+    sendPlanEmail: vi.fn(),
+}));
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ linkCatalogSong }));
 vi.mock("@/lib/queries/hymnNotes", () => ({ previewHymnNotes, syncHymnNotes }));
+vi.mock("@/lib/queries/email", () => ({ previewPlanEmail, sendPlanEmail }));
 // The real module's messages, with only the write mocked.
 vi.mock("@/lib/queries/selections", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/queries/selections")>()),
@@ -21,12 +32,19 @@ vi.mock("@/lib/queries/selections", async (importOriginal) => ({
 }));
 
 import type { HymnNoteStatus } from "@/lib/hymnNotes";
+import type {
+    ExpectedPlanEmail,
+    PlanEmailPreview,
+    SendPlanEmailResult,
+} from "@/lib/queries/email";
 import type { HymnNotesSyncResult } from "@/lib/queries/hymnNotes";
 import { SELECTION_NOT_SAVED_MESSAGE } from "@/lib/queries/selections";
 import {
     linkPcoSong,
     previewHymnNotesAction,
+    previewPlanEmailAction,
     saveScheduleSelection,
+    sendPlanEmailAction,
     syncHymnNotesAction,
 } from "./actions";
 
@@ -57,6 +75,8 @@ beforeEach(() => {
         saveSelection,
         previewHymnNotes,
         syncHymnNotes,
+        previewPlanEmail,
+        sendPlanEmail,
     ]) {
         mock.mockReset();
     }
@@ -480,6 +500,249 @@ describe("syncHymnNotesAction", () => {
             `Failed to sync the hymnal notes of plan ${ST}/${PLAN}:`,
             cause
         );
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+});
+
+/** A plan's email as the preview gives it: set up, with recipients. */
+const EMAIL_PREVIEW: PlanEmailPreview = {
+    configured: true,
+    to: ["pastor@example.org", "music@example.org"],
+    subject: "Songs for 10/4/26 \u00b7 Sunday Morning",
+    text: "October 4, 2026 \u00b7 Sunday Morning\n",
+};
+
+/** What a send that the mail server took for both recipients, as previewed, returns. */
+const EMAIL_SENT: SendPlanEmailResult = {
+    ok: true,
+    to: EMAIL_PREVIEW.to,
+    subject: EMAIL_PREVIEW.subject,
+    accepted: EMAIL_PREVIEW.to,
+    rejected: [],
+    textChanged: false,
+};
+
+/** What the dialog sends back with Send: the email its preview showed. */
+const EMAIL_PREVIEWED: ExpectedPlanEmail = {
+    to: EMAIL_PREVIEW.to,
+    subject: EMAIL_PREVIEW.subject,
+    text: EMAIL_PREVIEW.text,
+};
+
+describe("previewPlanEmailAction", () => {
+    function preview(overrides: Partial<Record<"serviceTypeId" | "planId", unknown>> = {}) {
+        const ids = { serviceTypeId: ST, planId: PLAN, ...overrides };
+        return previewPlanEmailAction(ids.serviceTypeId as string, ids.planId as string);
+    }
+
+    test("throws without a session, before it reads anything", async () => {
+        auth.mockResolvedValue(null);
+
+        await expect(preview()).rejects.toThrow("Not signed in");
+        expect(previewPlanEmail).not.toHaveBeenCalled();
+    });
+
+    test("returns the email as it would be sent, and changes no page", async () => {
+        previewPlanEmail.mockResolvedValue(EMAIL_PREVIEW);
+
+        await expect(preview()).resolves.toEqual({ ok: true, preview: EMAIL_PREVIEW });
+        expect(auth).toHaveBeenCalledTimes(1);
+        expect(previewPlanEmail).toHaveBeenCalledWith(ST, PLAN);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("returns a preview that cannot be sent as it is: it says why itself", async () => {
+        const notSetUp: PlanEmailPreview = {
+            ...EMAIL_PREVIEW,
+            configured: false,
+            missing: ["SMTP_URL", "EMAIL_FROM"],
+            to: [],
+        };
+        previewPlanEmail.mockResolvedValue(notSetUp);
+
+        await expect(preview()).resolves.toEqual({ ok: true, preview: notSetUp });
+    });
+
+    test.each([
+        ["service type", "serviceTypeId"],
+        ["plan", "planId"],
+    ] as const)("refuses a %s id that is not one, without reading anything", async (_name, field) => {
+        for (const value of NOT_IDS) {
+            await expect(preview({ [field]: value })).resolves.toEqual({
+                ok: false,
+                message: expect.stringContaining("Reload"),
+            });
+        }
+        expect(previewPlanEmail).not.toHaveBeenCalled();
+    });
+
+    test("returns a message, and logs the cause, when the plan cannot be read", async () => {
+        const cause = new Error("Planning Center API responded with status: 500");
+        previewPlanEmail.mockRejectedValue(cause);
+
+        await expect(preview()).resolves.toEqual({
+            ok: false,
+            message: expect.stringContaining("could not be prepared"),
+        });
+        expect(console.error).toHaveBeenCalledWith(
+            `Failed to preview the email of plan ${ST}/${PLAN}:`,
+            cause
+        );
+    });
+});
+
+describe("sendPlanEmailAction", () => {
+    function send(
+        overrides: Partial<Record<"serviceTypeId" | "planId", unknown>> = {},
+        previewed: unknown = EMAIL_PREVIEWED
+    ) {
+        const ids = { serviceTypeId: ST, planId: PLAN, ...overrides };
+        // An action's arguments come from the network, so they may be anything.
+        return sendPlanEmailAction(
+            ids.serviceTypeId as string,
+            ids.planId as string,
+            previewed as ExpectedPlanEmail
+        );
+    }
+
+    test("throws without a session, before it sends anything", async () => {
+        auth.mockResolvedValue(null);
+
+        await expect(send()).rejects.toThrow("Not signed in");
+        expect(sendPlanEmail).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("sends the plan's email as previewed and returns who got it, revalidating nothing", async () => {
+        sendPlanEmail.mockResolvedValue(EMAIL_SENT);
+
+        await expect(send()).resolves.toEqual(EMAIL_SENT);
+        expect(auth).toHaveBeenCalledTimes(1);
+        expect(sendPlanEmail).toHaveBeenCalledTimes(1);
+        expect(sendPlanEmail).toHaveBeenCalledWith(ST, PLAN, EMAIL_PREVIEWED);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("holds the send to the preview it was sent, read down to its recipients, subject and text", async () => {
+        sendPlanEmail.mockResolvedValue(EMAIL_SENT);
+
+        // The dialog has the whole preview; whatever else comes with it is dropped.
+        await send({}, { ...EMAIL_PREVIEW, missing: ["SMTP_URL"], to: [...EMAIL_PREVIEW.to] });
+        expect(sendPlanEmail.mock.calls[0][2]).toStrictEqual(EMAIL_PREVIEWED);
+    });
+
+    test("returns a send whose text changed since the preview as it is: it says so itself", async () => {
+        const rebuilt: SendPlanEmailResult = { ...EMAIL_SENT, textChanged: true };
+        sendPlanEmail.mockResolvedValue(rebuilt);
+
+        await expect(send()).resolves.toEqual(rebuilt);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("refuses a preview that is not one, before it reads or sends anything", async () => {
+        for (const previewed of [
+            undefined,
+            null,
+            JSON.stringify(EMAIL_PREVIEWED),
+            [EMAIL_PREVIEWED],
+            { ...EMAIL_PREVIEWED, to: "pastor@example.org" },
+            { ...EMAIL_PREVIEWED, to: [42] },
+            { ...EMAIL_PREVIEWED, to: Array.from({ length: 26 }, (_, i) => `staff${i}@example.org`) },
+            { ...EMAIL_PREVIEWED, subject: undefined },
+            { ...EMAIL_PREVIEWED, text: null },
+        ]) {
+            // Called directly: the helper's default would stand in for undefined.
+            await expect(
+                sendPlanEmailAction(ST, PLAN, previewed as ExpectedPlanEmail)
+            ).resolves.toEqual({
+                ok: false,
+                kind: "failed",
+                message: expect.stringContaining("Preview again"),
+            });
+        }
+        expect(sendPlanEmail).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        [
+            "email that is not set up",
+            {
+                ok: false,
+                kind: "not-configured",
+                missing: ["SMTP_URL"],
+                message: "Email is not set up: set SMTP_URL on the server.",
+            },
+        ],
+        [
+            "no recipients",
+            {
+                ok: false,
+                kind: "no-recipients",
+                message: "No one would get this email: add its recipients in Settings first.",
+            },
+        ],
+        [
+            "settings that cannot be read",
+            {
+                ok: false,
+                kind: "unavailable",
+                message: "The settings could not be read, so the email was not sent: denied",
+            },
+        ],
+        [
+            "a send of the plan's email already under way",
+            {
+                ok: false,
+                kind: "busy",
+                message:
+                    "This plan's email is being sent already, so it was not sent again. Look at the recent writes in Settings to see how that send went.",
+            },
+        ],
+        [
+            "recipients that are not the preview's",
+            {
+                ok: false,
+                kind: "changed",
+                message:
+                    "The recipients have changed since the preview, so the email was not sent. Preview it again to see who it would go to now.",
+            },
+        ],
+        [
+            "a failed send",
+            { ok: false, kind: "failed", message: "Could not send the email: Invalid login." },
+        ],
+    ])("returns the refusal of %s as it is", async (_name, refusal) => {
+        sendPlanEmail.mockResolvedValue(refusal);
+
+        await expect(send()).resolves.toEqual(refusal);
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ["service type", "serviceTypeId"],
+        ["plan", "planId"],
+    ] as const)("refuses a %s id that is not one, without sending", async (_name, field) => {
+        for (const value of NOT_IDS) {
+            await expect(send({ [field]: value })).resolves.toEqual({
+                ok: false,
+                kind: "failed",
+                message: expect.stringContaining("Reload"),
+            });
+        }
+        expect(sendPlanEmail).not.toHaveBeenCalled();
+    });
+
+    test("returns a message, and logs the cause, when the plan cannot be read: nothing was sent", async () => {
+        const cause = new Error("Planning Center API responded with status: 500");
+        sendPlanEmail.mockRejectedValue(cause);
+
+        await expect(send()).resolves.toEqual({
+            ok: false,
+            kind: "failed",
+            message: expect.stringContaining("the email was not sent"),
+        });
+        expect(console.error).toHaveBeenCalledWith(`Failed to email plan ${ST}/${PLAN}:`, cause);
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 });

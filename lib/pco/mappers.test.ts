@@ -8,8 +8,11 @@ import {
     toPcoLibrarySong,
     toPlan,
     toPlanItem,
+    toPcoTag,
+    toPcoTagGroups,
     toServiceType,
     toSong,
+    toSongArrangement,
 } from "./mappers";
 import type { PcoItemNoteResource, PcoSongResource } from "./resources";
 import {
@@ -18,8 +21,11 @@ import {
     itemResource,
     noteLinks,
     planResource,
+    arrangementResource,
     serviceTypeResource,
     songResource,
+    tagGroupResource,
+    tagResource,
 } from "./testing";
 
 function planItem(overrides: Partial<PlanItem>): PlanItem {
@@ -440,5 +446,109 @@ describe("itemNotesByItem", () => {
     test("ignores included resources that are not item notes", () => {
         const song = { ...songResource("9001"), type: "Song" as const };
         expect(itemNotesByItem([itemResource("1", {}, noteLinks("9001"))], [song]).get("1")).toEqual([]);
+    });
+});
+
+describe("toPcoTag", () => {
+    test("maps the id and name, in the group given", () => {
+        expect(toPcoTag(tagResource("71", { name: "Hymn" }), "7")).toStrictEqual({
+            id: "71",
+            groupId: "7",
+            name: "Hymn",
+        });
+    });
+});
+
+describe("toPcoTagGroups", () => {
+    test("gives each group the included tags its relationship names, by name", () => {
+        const groups = toPcoTagGroups(
+            [tagGroupResource("7", { name: "Type" }, ["72", "71", "73"])],
+            [
+                tagResource("71", { name: "hymn" }),
+                tagResource("72", { name: "Chorus" }),
+                tagResource("73", { name: "Special" }),
+                serviceTypeResource(),
+            ]
+        );
+        expect(groups).toStrictEqual([
+            {
+                id: "7",
+                name: "Type",
+                tagsFor: "song",
+                allowMultiple: true,
+                tags: [
+                    { id: "72", groupId: "7", name: "Chorus" },
+                    { id: "71", groupId: "7", name: "hymn" },
+                    { id: "73", groupId: "7", name: "Special" },
+                ],
+            },
+        ]);
+    });
+
+    test("also takes a tag whose own relationship names the group, each once", () => {
+        const [group] = toPcoTagGroups(
+            [tagGroupResource("7", {}, ["71"])],
+            [tagResource("71", { name: "Hymn" }, "7"), tagResource("72", { name: "Chorus" }, "7")]
+        );
+        expect(group.tags.map(({ id }) => id)).toEqual(["72", "71"]);
+    });
+
+    test("leaves out a tag that was not included, and one no group claims", () => {
+        const [group] = toPcoTagGroups(
+            [tagGroupResource("7", {}, ["71", "99"])],
+            [tagResource("71"), tagResource("72", {}, "8"), tagResource("73")]
+        );
+        expect(group.tags.map(({ id }) => id)).toEqual(["71"]);
+    });
+
+    test("keeps the groups' order; one with no tags relationship has none", () => {
+        const bare = { ...tagGroupResource("9", { name: "Bare" }), relationships: undefined };
+        expect(
+            toPcoTagGroups([tagGroupResource("8", { name: "Z" }), bare], []).map(({ id, tags }) => [id, tags])
+        ).toEqual([
+            ["8", []],
+            ["9", []],
+        ]);
+    });
+
+    test("only allow_multiple_selections: false stops several tags being chosen", () => {
+        const allowed = (value: boolean | null | undefined) =>
+            toPcoTagGroups([tagGroupResource("7", { allow_multiple_selections: value })], [])[0].allowMultiple;
+        expect(allowed(false)).toBe(false);
+        expect(allowed(true)).toBe(true);
+        expect(allowed(null)).toBe(true);
+        expect(allowed(undefined)).toBe(true);
+    });
+
+    test("ties between names go by id", () => {
+        const [group] = toPcoTagGroups(
+            [tagGroupResource("7", {}, ["72", "71"])],
+            [tagResource("72", { name: "Hymn" }), tagResource("71", { name: "HYMN" })]
+        );
+        expect(group.tags.map(({ id }) => id)).toEqual(["71", "72"]);
+    });
+});
+
+describe("toSongArrangement", () => {
+    test("maps the id, name and creation time; archived when archived_at is set", () => {
+        expect(toSongArrangement(arrangementResource("5001"))).toStrictEqual({
+            id: "5001",
+            name: "Default Arrangement",
+            archived: false,
+            createdAt: "2019-01-01T00:00:00Z",
+        });
+        expect(
+            toSongArrangement(arrangementResource("5002", { archived_at: "2024-01-01T00:00:00Z" })).archived
+        ).toBe(true);
+    });
+
+    test("turns attributes missing from the JSON into an empty name, not archived and no time", () => {
+        const bare = { type: "Arrangement" as const, id: "5003", attributes: {} as never };
+        expect(toSongArrangement(bare)).toStrictEqual({
+            id: "5003",
+            name: "",
+            archived: false,
+            createdAt: null,
+        });
     });
 });

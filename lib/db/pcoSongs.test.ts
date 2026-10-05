@@ -11,6 +11,7 @@ import {
     markMissingPcoSongsRemoved,
     markPcoSongAutoLinkBlocked,
     markPcoSongIgnored,
+    upsertListedPcoSongs,
     upsertPcoSongs,
 } from "./pcoSongs";
 import { openTestDb, seedPcoSong, seedSong } from "./testing";
@@ -145,6 +146,55 @@ describe("upsertPcoSongs", () => {
             upsertPcoSongs(db, [librarySong("101"), librarySong("not an id")], T1)
         ).toThrow(/CHECK constraint failed/);
         expect(listPcoSongs(db)).toEqual([]);
+    });
+});
+
+describe("upsertListedPcoSongs", () => {
+    test("leaves as it was a song the mirror wrote at or after the listing began, and stores the rest", () => {
+        upsertPcoSongs(db, [librarySong("101"), librarySong("102"), librarySong("103")], T1);
+        // While the listing that began at T2 was read, a page saved 102's
+        // credits; 103 was written at T2 itself.
+        upsertPcoSongs(db, [librarySong("102", { author: "Words: John Newton" })], new Date("2026-10-04T13:00:01.000Z"));
+        upsertPcoSongs(db, [librarySong("103", { author: "Words: Saved" })], T2);
+
+        expect(
+            upsertListedPcoSongs(
+                db,
+                [
+                    librarySong("101", { author: "Listed" }),
+                    librarySong("102", { author: "Listed" }),
+                    librarySong("103", { author: "Listed" }),
+                    librarySong("104"),
+                ],
+                T2,
+                T3
+            )
+        ).toEqual({ added: 1, updated: 1, newer: ["102", "103"] });
+        expect(findPcoSong(db, "101")).toMatchObject({ author: "Listed", syncedAt: T3.toISOString() });
+        expect(findPcoSong(db, "102")).toMatchObject({
+            author: "Words: John Newton",
+            syncedAt: "2026-10-04T13:00:01.000Z",
+        });
+        expect(findPcoSong(db, "103")).toMatchObject({ author: "Words: Saved", syncedAt: T2.toISOString() });
+        expect(findPcoSong(db, "104")?.syncedAt).toBe(T3.toISOString());
+    });
+
+    test("is upsertPcoSongs when nothing was written since the listing began", () => {
+        upsertPcoSongs(db, [librarySong("101")], T1);
+        expect(upsertListedPcoSongs(db, [librarySong("101", { title: "Changed" })], T2, T3)).toEqual({
+            added: 0,
+            updated: 1,
+            newer: [],
+        });
+        expect(findPcoSong(db, "101")).toMatchObject({ title: "Changed", syncedAt: T3.toISOString() });
+    });
+
+    test("leaves a newer song's removed mark and every other mark alone", () => {
+        upsertPcoSongs(db, [librarySong("101")], T1);
+        markPcoSongIgnored(db, "101", T1);
+        upsertPcoSongs(db, [librarySong("101", { author: "Saved" })], T3);
+        upsertListedPcoSongs(db, [librarySong("101")], T2, T3);
+        expect(findPcoSong(db, "101")).toMatchObject({ author: "Saved", ignoredAt: T1.toISOString(), removedAt: null });
     });
 });
 

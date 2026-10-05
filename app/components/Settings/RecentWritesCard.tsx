@@ -34,11 +34,12 @@ function Outcome({ outcome }: { outcome: WriteOutcome }) {
 /**
  * Where a write was made: a link to the plan when the log's ids are ones
  * `parsePcoId` accepts (they come from the database, but every id is checked
- * before it reaches a route builder, convention 19), else the log's own
- * words for it. Plan pages are data-heavy, so these links do not prefetch
- * (convention 13). The link sits in a line of text, where blue against the
- * grey around it is under the 3:1 a link needs (1.4:1 in light mode, 1.0:1
- * in dark) to be told apart by colour alone, so it is underlined.
+ * before it reaches a route builder, convention 19), and the item in it when
+ * the write made or changed one, else the log's own words for it. Plan pages
+ * are data-heavy, so these links do not prefetch (convention 13). A link sits
+ * in a line of text, where blue against the grey around it is under the 3:1
+ * a link needs (1.4:1 in light mode, 1.0:1 in dark) to be told apart by
+ * colour alone, so it is underlined.
  */
 function Place({ place, target }: Pick<WriteDescription, "place" | "target">) {
     if (place === null) {
@@ -59,7 +60,7 @@ function Place({ place, target }: Pick<WriteDescription, "place" | "target">) {
             ) : (
                 <>Plan {place.planId}</>
             )}
-            , item {place.itemId}
+            {place.itemId !== null && <>, item {place.itemId}</>}
         </>
     );
 }
@@ -92,18 +93,20 @@ function WriteRow({ entry }: { entry: WriteLogEntry }) {
 }
 
 /**
- * The "Recent writes to Planning Center" card of the Settings page: the
- * latest rows of the write log, newest first, each with when (in the
- * viewer's time zone), what was done and to which plan and item, and whether
- * Planning Center made the change or why it did not. It reads only the local
- * database; when the log cannot be read it says so.
+ * The "Recent writes" card of the Settings page: the latest rows of the
+ * write log, newest first, each with when (in the viewer's time zone), what
+ * was done and to which plan and item, and whether Planning Center made the
+ * change or why it did not. The log holds the emails the app sent too (to
+ * whom and with what subject, never the text), so a plan's email can be
+ * checked here. It reads only the local database; when the log cannot be
+ * read it says so.
  */
 export default function RecentWritesCard({ recent }: RecentWritesCardProps) {
     return (
         <SettingsCard
-            title="Recent writes to Planning Center"
+            title="Recent writes"
             headingId="recent-writes-heading"
-            description={`The last ${RECENT_WRITES_LIMIT} changes this app made in Planning Center, newest first.`}
+            description={`The last ${RECENT_WRITES_LIMIT} changes this app made in Planning Center and emails it sent, newest first.`}
         >
             {!recent.ok ? (
                 <p className="text-sm text-gray-700 dark:text-gray-300 break-words">
@@ -111,7 +114,7 @@ export default function RecentWritesCard({ recent }: RecentWritesCardProps) {
                 </p>
             ) : recent.writes.length === 0 ? (
                 <p className="text-sm text-gray-700 dark:text-gray-300">
-                    The app has not written to Planning Center yet.
+                    The app has not written to Planning Center or sent an email yet.
                 </p>
             ) : (
                 <ol role="list" className="divide-y divide-gray-200 dark:divide-gray-700">

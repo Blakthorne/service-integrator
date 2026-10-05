@@ -1,22 +1,36 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // vi.hoisted is required: vi.mock is hoisted above const declarations.
-const { auth, revalidatePath, syncPcoSongsNow, getSettings, saveSettings } = vi.hoisted(() => ({
+const {
+    auth,
+    revalidatePath,
+    syncPcoSongsNow,
+    getSettings,
+    saveSettings,
+    rederiveAllCredits,
+    getCreditLabelSets,
+} = vi.hoisted(() => ({
     auth: vi.fn(),
     revalidatePath: vi.fn(),
     syncPcoSongsNow: vi.fn(),
     getSettings: vi.fn(),
     saveSettings: vi.fn(),
+    rederiveAllCredits: vi.fn(),
+    getCreditLabelSets: vi.fn(),
 }));
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/queries/reconcile", () => ({ syncPcoSongsNow }));
 vi.mock("@/lib/queries/settings", () => ({ getSettings, saveSettings }));
+vi.mock("@/lib/queries/credits", () => ({ rederiveAllCredits, getCreditLabelSets }));
 
+import { ROLES_IMPACT_UNCHECKED_MESSAGE } from "@/lib/creditRoleImpact";
 import { FORM_FAILURE_MESSAGE } from "@/lib/forms";
 import { DEFAULT_SETTINGS } from "@/lib/settings";
 import {
     saveCopyrightAction,
+    saveCreditsAction,
+    saveEmailAction,
     saveHymnalNotesAction,
     saveScheduleTextAction,
     syncPcoSongsAction,
@@ -46,12 +60,23 @@ function run(ok: boolean, message: string | null) {
 const SYNC_PAGES = [["/settings"], ["/catalog", "layout"], ["/plans", "layout"]];
 
 beforeEach(() => {
-    for (const mock of [auth, revalidatePath, syncPcoSongsNow, getSettings, saveSettings]) {
+    for (const mock of [
+        auth,
+        revalidatePath,
+        syncPcoSongsNow,
+        getSettings,
+        saveSettings,
+        rederiveAllCredits,
+        getCreditLabelSets,
+    ]) {
         mock.mockReset();
     }
     auth.mockResolvedValue(SESSION);
     getSettings.mockReturnValue({ settings: DEFAULT_SETTINGS, error: null });
     saveSettings.mockReturnValue({ ok: true, saved: [] });
+    rederiveAllCredits.mockReturnValue({ songs: 8, ok: 1, legacy: 7, unparsed: 0 });
+    // No song is labelled, so no change of the roles changes any song's copyright text.
+    getCreditLabelSets.mockReturnValue({ sets: [], error: null });
     vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -129,6 +154,12 @@ describe("syncPcoSongsAction", () => {
 /** Every page a saved setting revalidates: Settings, the plan pages and the dashboard. */
 const SETTINGS_PAGES = [["/settings"], ["/plans", "layout"], ["/"]];
 
+/** What saving the credits revalidates: Settings, the plan pages and the catalog's, not the dashboard. */
+const CREDIT_PAGES = [["/settings"], ["/plans", "layout"], ["/catalog", "layout"]];
+
+/** What saving the email settings revalidates: Settings alone. */
+const EMAIL_PAGES = [["/settings"]];
+
 /** The message above the Save button when a field needs fixing. */
 const FIX_FIELDS = "Nothing was saved. Fix the fields that have an error message, then try again.";
 
@@ -141,39 +172,61 @@ function formWith(fields: Record<string, string>): FormData {
     return formData;
 }
 
-/** Each action, to test what they share. */
+/** Each action, to test what they share: its form's fields, and the pages a save revalidates. */
 const FORM_ACTIONS = [
-    ["saveCopyrightAction", saveCopyrightAction, { ccliLicenseNumber: "7654321" }],
+    ["saveCopyrightAction", saveCopyrightAction, { ccliLicenseNumber: "7654321" }, SETTINGS_PAGES],
     [
         "saveScheduleTextAction",
         saveScheduleTextAction,
         { numberSeparator: " / ", "headerLabel-1405391": "Sunday AM" },
+        SETTINGS_PAGES,
     ],
     [
         "saveHymnalNotesAction",
         saveHymnalNotesAction,
         { hymnNoteCategoryName: "Hymnal", hymnNoteIncludesTune: "no" },
+        SETTINGS_PAGES,
+    ],
+    [
+        "saveCreditsAction",
+        saveCreditsAction,
+        {
+            "creditRole-0": "Words",
+            "creditPhrase-0": "Words by",
+            "creditRole-1": "Music",
+            "creditPhrase-1": "Music by",
+            creditPairPhrase: "Words and Music by",
+        },
+        CREDIT_PAGES,
+    ],
+    [
+        "saveEmailAction",
+        saveEmailAction,
+        { emailRecipients: "pastor@example.org", emailSubjectTemplate: "Songs for {date}" },
+        EMAIL_PAGES,
     ],
 ] as const;
 
-describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
+describe.each(FORM_ACTIONS)("%s", (_name, action, fields, pages) => {
     test("throws without a session, before it reads or saves anything", async () => {
         auth.mockResolvedValue(null);
 
         await expect(action(formWith(fields))).rejects.toThrow("Not signed in");
         expect(getSettings).not.toHaveBeenCalled();
         expect(saveSettings).not.toHaveBeenCalled();
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
+        expect(getCreditLabelSets).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
-    test("saves, revalidates Settings, the plan pages and the dashboard, and says it is saved", async () => {
+    test("saves, revalidates the pages that show it, and says it is saved", async () => {
         saveSettings.mockReturnValue({ ok: true, saved: ["x"] });
 
         const state = await action(formWith(fields));
 
-        expect(state).toMatchObject({ status: "success", message: "Saved." });
+        expect(state).toMatchObject({ status: "success", message: expect.stringMatching(/^Saved\./) });
         expect(saveSettings).toHaveBeenCalledTimes(1);
-        expect(revalidatePath.mock.calls).toEqual(SETTINGS_PAGES);
+        expect(revalidatePath.mock.calls).toEqual(pages);
     });
 
     test("logs the cause and gives the generic message when the save throws, with what was posted", async () => {
@@ -189,6 +242,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
             values: fields,
         });
         expect(console.error).toHaveBeenCalledWith("Failed to save the settings:", cause);
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 
@@ -219,6 +273,7 @@ describe.each(FORM_ACTIONS)("%s", (_name, action, fields) => {
             );
             expect(state.values).toEqual(fields);
         }
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
         expect(revalidatePath).not.toHaveBeenCalled();
     });
 });
@@ -414,5 +469,350 @@ describe("saveHymnalNotesAction", () => {
             },
         });
         expect(saveSettings).not.toHaveBeenCalled();
+    });
+});
+
+describe("saveCreditsAction", () => {
+    /** The form of the default roles. */
+    const DEFAULT_FIELDS = {
+        "creditRole-0": "Words",
+        "creditPhrase-0": "Words by",
+        "creditRole-1": "Music",
+        "creditPhrase-1": "Music by",
+        "creditRole-2": "Arr.",
+        "creditPhrase-2": "Arr. by",
+        "creditRole-3": "Trans.",
+        "creditPhrase-3": "Trans. by",
+        creditPairPhrase: "Words and Music by",
+    };
+
+    test("saves the roles in order with their phrases, as the registry takes them", async () => {
+        await saveCreditsAction(
+            formWith({
+                "creditRole-0": " Lyrics ",
+                "creditPhrase-0": "Text by",
+                "creditRole-1": "Tune",
+                "creditPhrase-1": "",
+                "creditRole-2": "Setting",
+                "creditPhrase-2": "Set by",
+                creditPairPhrase: "Text and tune by",
+            })
+        );
+
+        expect(saveSettings).toHaveBeenCalledWith({
+            creditRoles: ["Lyrics", "Tune", "Setting"],
+            creditPhrases: {
+                Lyrics: "Text by",
+                Setting: "Set by",
+                "Lyrics & Tune": "Text and tune by",
+            },
+        });
+    });
+
+    test("then reads every song's credits again, and says how many songs and how they read", async () => {
+        rederiveAllCredits.mockReturnValue({ songs: 397, ok: 3, legacy: 390, unparsed: 4 });
+
+        const state = await saveCreditsAction(formWith(DEFAULT_FIELDS));
+
+        expect(rederiveAllCredits).toHaveBeenCalledTimes(1);
+        expect(rederiveAllCredits).toHaveBeenCalledWith();
+        // The roles are stored before they are read.
+        expect(saveSettings.mock.invocationCallOrder[0]).toBeLessThan(
+            rederiveAllCredits.mock.invocationCallOrder[0]
+        );
+        expect(state).toEqual({
+            status: "success",
+            message:
+                "Saved. Read the credits of 397 songs again: 3 follow the roles, 390 have no labels and 4 have labels that no role matches.",
+            // Each field as the form shows it once saved: the phrases as the text prints them.
+            values: DEFAULT_FIELDS,
+        });
+    });
+
+    test("shows a blank phrase as what the copyright text prints for it", async () => {
+        const state = await saveCreditsAction(
+            formWith({
+                "creditRole-0": "Words",
+                "creditPhrase-0": "",
+                "creditRole-1": "Music",
+                "creditPhrase-1": "Music by",
+                creditPairPhrase: "",
+            })
+        );
+
+        expect(state).toMatchObject({
+            status: "success",
+            values: {
+                "creditPhrase-0": "Words by",
+                creditPairPhrase: "Words and Music by",
+            },
+        });
+    });
+
+    test("marks every field that needs fixing, and saves and reads nothing", async () => {
+        const state = await saveCreditsAction(
+            formWith({
+                ...DEFAULT_FIELDS,
+                "creditRole-1": "  ",
+                "creditRole-3": "words",
+            })
+        );
+
+        expect(state).toMatchObject({
+            status: "error",
+            message: FIX_FIELDS,
+            fieldErrors: {
+                "creditRole-1": { message: "A role cannot be blank." },
+                "creditRole-3": { message: 'The role "words" is listed twice.' },
+            },
+            values: { "creditRole-1": "  ", "creditRole-3": "words" },
+        });
+        expect(saveSettings).not.toHaveBeenCalled();
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("refuses fewer than two roles, on the list as a whole", async () => {
+        const state = await saveCreditsAction(
+            formWith({ "creditRole-0": "Words", "creditPhrase-0": "Words by", creditPairPhrase: "" })
+        );
+
+        expect(state).toMatchObject({
+            status: "error",
+            fieldErrors: { creditRoles: { message: expect.stringContaining("at least two roles") } },
+        });
+        expect(saveSettings).not.toHaveBeenCalled();
+    });
+
+    test("reads nothing again when the save is refused", async () => {
+        saveSettings.mockReturnValue({
+            ok: false,
+            message: "Nothing was saved: fix the settings marked below.",
+            fieldErrors: { creditRoles: "The roles must be a list." },
+        });
+
+        const state = await saveCreditsAction(formWith(DEFAULT_FIELDS));
+
+        expect(state.status).toBe("error");
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    test("says the roles are saved, and when the credits follow, when they cannot be read again", async () => {
+        const cause = new Error("database or disk is full");
+        rederiveAllCredits.mockImplementation(() => {
+            throw cause;
+        });
+
+        const state = await saveCreditsAction(formWith(DEFAULT_FIELDS));
+
+        expect(state).toEqual({
+            status: "error",
+            message:
+                "The roles were saved, but the songs' credits could not be read again. They follow the new roles at the next song sync, within the hour.",
+            fieldErrors: {},
+            values: DEFAULT_FIELDS,
+        });
+        expect(console.error).toHaveBeenCalledWith("Failed to read the songs' credits again:", cause);
+        // The roles are stored, so the pages that show them are revalidated.
+        expect(revalidatePath.mock.calls).toEqual(CREDIT_PAGES);
+    });
+
+    describe("roles that change songs' copyright text", () => {
+        /** 38 songs labelled with Words and Music, and 2 with Words, Music and Trans. */
+        const SETS = [
+            { labels: ["Words", "Music"], songs: 38 },
+            { labels: ["Words", "Music", "Trans."], songs: 2 },
+        ];
+
+        /** The default roles with Music renamed Tune: 40 songs lose their "Music" label. */
+        const RENAMED = { ...DEFAULT_FIELDS, "creditRole-1": "Tune" };
+
+        /** What the checkbox says when the 40 songs were not confirmed. */
+        const NOT_CONFIRMED =
+            "Confirm that the copyright text of 40 songs will change, or keep the labels their authors use as roles.";
+
+        beforeEach(() => {
+            getCreditLabelSets.mockReturnValue({ sets: SETS, error: null });
+        });
+
+        test("refuses them without a confirmation, on the checkbox, and saves and reads nothing", async () => {
+            const state = await saveCreditsAction(formWith(RENAMED));
+
+            expect(state).toEqual({
+                status: "error",
+                message: FIX_FIELDS,
+                fieldErrors: { creditRolesConfirmed: { message: NOT_CONFIRMED } },
+                values: RENAMED,
+            });
+            expect(getCreditLabelSets).toHaveBeenCalledTimes(1);
+            expect(saveSettings).not.toHaveBeenCalled();
+            expect(rederiveAllCredits).not.toHaveBeenCalled();
+            // Settings again, so its notice shows the songs as they are now.
+            expect(revalidatePath.mock.calls).toEqual([["/settings"]]);
+        });
+
+        test("saves them once exactly those songs are confirmed, then reads the credits again", async () => {
+            const state = await saveCreditsAction(formWith({ ...RENAMED, creditRolesConfirmed: "40" }));
+
+            expect(saveSettings).toHaveBeenCalledWith({
+                creditRoles: ["Words", "Tune", "Arr.", "Trans."],
+                creditPhrases: expect.objectContaining({ Tune: "Music by" }),
+            });
+            expect(rederiveAllCredits).toHaveBeenCalledTimes(1);
+            expect(state).toMatchObject({ status: "success", message: expect.stringMatching(/^Saved\./) });
+            expect(revalidatePath.mock.calls).toEqual(CREDIT_PAGES);
+        });
+
+        test("refuses a confirmation of another number of songs, saying how many it is now", async () => {
+            const state = await saveCreditsAction(formWith({ ...RENAMED, creditRolesConfirmed: "38" }));
+
+            expect(state).toMatchObject({
+                status: "error",
+                message: FIX_FIELDS,
+                fieldErrors: {
+                    creditRolesConfirmed: {
+                        message:
+                            "These roles now change the copyright text of 40 songs, not the 38 you confirmed, since the songs or the saved roles changed. Check which songs, then confirm again.",
+                    },
+                },
+            });
+            expect(saveSettings).not.toHaveBeenCalled();
+            expect(revalidatePath.mock.calls).toEqual([["/settings"]]);
+        });
+
+        test("takes a confirmation that is not a number of songs as none", async () => {
+            for (const confirmed of ["", "forty", "40.0", "-40", "0"]) {
+                const state = await saveCreditsAction(
+                    formWith({ ...RENAMED, creditRolesConfirmed: confirmed })
+                );
+                expect(state).toMatchObject({
+                    fieldErrors: { creditRolesConfirmed: { message: NOT_CONFIRMED } },
+                });
+            }
+            expect(saveSettings).not.toHaveBeenCalled();
+        });
+
+        test("counts a song that would lose two labels once", async () => {
+            const state = await saveCreditsAction(
+                formWith({
+                    "creditRole-0": "Words",
+                    "creditPhrase-0": "Words by",
+                    "creditRole-1": "Tune",
+                    "creditPhrase-1": "Music by",
+                    creditPairPhrase: "Words and Music by",
+                })
+            );
+
+            expect(state).toMatchObject({
+                fieldErrors: { creditRolesConfirmed: { message: NOT_CONFIRMED } },
+            });
+        });
+
+        test("saves roles that keep every label without a confirmation, whatever their case, spaces or order", async () => {
+            for (const fields of [
+                { ...DEFAULT_FIELDS, "creditRole-1": " music " },
+                { ...DEFAULT_FIELDS, "creditRole-4": "Desc.", "creditPhrase-4": "" },
+                {
+                    ...DEFAULT_FIELDS,
+                    "creditRole-2": "Trans.",
+                    "creditPhrase-2": "Trans. by",
+                    "creditRole-3": "Arr.",
+                    "creditPhrase-3": "Arr. by",
+                },
+            ]) {
+                await expect(saveCreditsAction(formWith(fields))).resolves.toMatchObject({
+                    status: "success",
+                });
+            }
+            expect(saveSettings).toHaveBeenCalledTimes(3);
+        });
+
+        test("checks against the songs as the mirror has them when it saves, not as the page showed them", async () => {
+            // No song uses "Music" any more (a sync changed them), so the rename changes none.
+            getCreditLabelSets.mockReturnValue({ sets: [{ labels: ["Words"], songs: 40 }], error: null });
+
+            await expect(saveCreditsAction(formWith(RENAMED))).resolves.toMatchObject({
+                status: "success",
+            });
+            expect(saveSettings).toHaveBeenCalledTimes(1);
+        });
+
+        test("saves nothing when the songs' labels cannot be read, since the change cannot be checked", async () => {
+            getCreditLabelSets.mockReturnValue({ sets: [], error: "Could not open the database" });
+
+            await expect(saveCreditsAction(formWith(RENAMED))).resolves.toEqual({
+                status: "error",
+                message: ROLES_IMPACT_UNCHECKED_MESSAGE,
+                fieldErrors: {},
+                values: RENAMED,
+            });
+            expect(saveSettings).not.toHaveBeenCalled();
+            expect(rederiveAllCredits).not.toHaveBeenCalled();
+            expect(revalidatePath).not.toHaveBeenCalled();
+        });
+
+        test("checks no song while a field needs fixing", async () => {
+            await saveCreditsAction(formWith({ ...RENAMED, "creditRole-3": "words" }));
+
+            expect(getCreditLabelSets).not.toHaveBeenCalled();
+            expect(saveSettings).not.toHaveBeenCalled();
+        });
+    });
+});
+
+describe("saveEmailAction", () => {
+    test("saves the recipients as a list and the subject as a template", async () => {
+        const state = await saveEmailAction(
+            formWith({
+                emailRecipients: " pastor@example.org,\r\nmusic@example.org ;  ",
+                emailSubjectTemplate: "  Songs for {date} \u00b7 {service} ",
+            })
+        );
+
+        expect(saveSettings).toHaveBeenCalledWith({
+            emailRecipients: ["pastor@example.org", "music@example.org"],
+            emailSubjectTemplate: "Songs for {date} \u00b7 {service}",
+        });
+        expect(state).toEqual({
+            status: "success",
+            message: "Saved.",
+            values: {
+                emailRecipients: "pastor@example.org\nmusic@example.org",
+                emailSubjectTemplate: "Songs for {date} \u00b7 {service}",
+            },
+        });
+        expect(rederiveAllCredits).not.toHaveBeenCalled();
+    });
+
+    test("saves a blank field as no recipients", async () => {
+        await saveEmailAction(formWith({ emailRecipients: "  \n", emailSubjectTemplate: "Songs" }));
+
+        expect(saveSettings).toHaveBeenCalledWith({
+            emailRecipients: [],
+            emailSubjectTemplate: "Songs",
+        });
+    });
+
+    test("marks the entries that are not addresses, and the subject, at once, and saves nothing", async () => {
+        const state = await saveEmailAction(
+            formWith({ emailRecipients: "pastor@example.org\nnope", emailSubjectTemplate: "{when}" })
+        );
+
+        expect(state).toMatchObject({
+            status: "error",
+            message: FIX_FIELDS,
+            fieldErrors: {
+                emailRecipients: {
+                    message: '"nope" is not an email address, such as name@example.org.',
+                },
+                emailSubjectTemplate: {
+                    message: expect.stringContaining('"{when}" is not a placeholder'),
+                },
+            },
+            values: { emailRecipients: "pastor@example.org\nnope", emailSubjectTemplate: "{when}" },
+        });
+        expect(saveSettings).not.toHaveBeenCalled();
+        expect(revalidatePath).not.toHaveBeenCalled();
     });
 });

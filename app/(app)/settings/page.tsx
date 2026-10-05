@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import CopyrightCard from "@/app/components/Settings/CopyrightCard";
+import CreditsCard from "@/app/components/Settings/CreditsCard";
 import DatabaseCard from "@/app/components/Settings/DatabaseCard";
+import EmailCard from "@/app/components/Settings/EmailCard";
 import HymnalNotesCard from "@/app/components/Settings/HymnalNotesCard";
 import PcoSyncCard from "@/app/components/Settings/PcoSyncCard";
 import RecentWritesCard from "@/app/components/Settings/RecentWritesCard";
@@ -11,6 +13,8 @@ import ScheduleTextCard, {
 import SettingsIssuesCard from "@/app/components/Settings/SettingsIssuesCard";
 import PageHeader from "@/app/components/ui/PageHeader";
 import { withDeadline } from "@/lib/deadline";
+import { getCreditLabelSets } from "@/lib/queries/credits";
+import { getEmailStatus } from "@/lib/queries/email";
 import { getHymnNoteCategories } from "@/lib/queries/hymnNotes";
 import { getRecentWrites, getSettings, getSettingsIssues } from "@/lib/queries/settings";
 import { getDatabaseStatus, getLastPcoSongsSync } from "@/lib/queries/system";
@@ -20,10 +24,12 @@ export const metadata: Metadata = { title: "Settings" };
 
 /**
  * The Settings page. The everyday settings come first, a card and a form
- * each (Copyright, Schedule text, Hymnal notes), then what the app has
- * written to Planning Center, then the song sync and the database.
+ * each (Copyright, Credits, Schedule text, Hymnal notes, Email), then what
+ * the app has written to Planning Center, then the song sync and the
+ * database.
  *
- * Everything reads the local database, which is quick, and no query throws.
+ * Everything reads the local database (and, for the Email card, the
+ * server's environment), which is quick, and no query throws.
  * Two cards also need Planning Center, for the service types and the item
  * note categories in each: the page starts that one read before it renders
  * (`getHymnNoteCategories`, which never rejects) and the cards that need it
@@ -41,10 +47,12 @@ export const metadata: Metadata = { title: "Settings" };
  */
 export default function SettingsPage() {
     const { settings, error } = getSettings();
+    const labelSets = getCreditLabelSets();
     const issues = getSettingsIssues();
     const recentWrites = getRecentWrites();
     const status = getDatabaseStatus();
     const sync = getLastPcoSongsSync();
+    const emailStatus = getEmailStatus();
     const categories = withDeadline(getHymnNoteCategories(), PCO_WAIT_MS, () => ({
         ok: false as const,
         error: pcoTimedOutReason(PCO_WAIT_MS),
@@ -54,15 +62,25 @@ export default function SettingsPage() {
         <div className="font-sans">
             <PageHeader
                 title="Settings"
-                description="The text the app writes, what it writes to Planning Center, the song sync and the database."
+                description="The text the app writes, the email it sends, what it writes to Planning Center, the song sync and the database."
             />
             <div className="space-y-6">
                 <SettingsIssuesCard issues={issues} error={error} />
                 <CopyrightCard ccliLicenseNumber={settings.ccliLicenseNumber} />
+                <CreditsCard
+                    creditRoles={settings.creditRoles}
+                    creditPhrases={settings.creditPhrases}
+                    labelSets={labelSets.error === null ? labelSets.sets : null}
+                />
                 <Suspense fallback={<ScheduleTextCardFallback />}>
                     <ScheduleTextCard settings={settings} categories={categories} />
                 </Suspense>
                 <HymnalNotesCard settings={settings} categories={categories} />
+                <EmailCard
+                    recipients={settings.emailRecipients}
+                    subjectTemplate={settings.emailSubjectTemplate}
+                    status={emailStatus}
+                />
                 <RecentWritesCard recent={recentWrites} />
                 <PcoSyncCard status={sync} />
                 <DatabaseCard status={status} />

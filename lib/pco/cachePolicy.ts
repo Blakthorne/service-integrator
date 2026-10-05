@@ -6,7 +6,9 @@ export type PcoResourceKind =
     | "plans"
     | "planItems"
     | "itemNoteCategories"
-    | "songs";
+    | "songs"
+    | "arrangements"
+    | "tags";
 
 /**
  * The fetch cache options for each kind of PCO resource: the single switch for
@@ -19,4 +21,6 @@ export const PCO_CACHE_POLICY: Readonly<Record<PcoResourceKind, RequestInit>> = 
     planItems: { cache: "no-store" },
     itemNoteCategories: { cache: "no-store" },
     songs: { cache: "no-store" },
+    arrangements: { cache: "no-store" },
+    tags: { cache: "no-store" },
 };

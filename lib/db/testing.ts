@@ -403,3 +403,102 @@ export function seedSetting(
         updatedAt
     );
 }
+
+/**
+ * Store mirrored song `pcoSongId`'s derived credits straight into
+ * `pco_song_credits`, as a sync derives them: one row for each name of each
+ * role, numbered from 0, all with `status` ("ok" by default; plain text, so
+ * a test can store what a newer build might), or, with no credits, the one
+ * row with neither role nor name that holds the status. The song must be in
+ * the mirror (see `seedPcoSong`).
+ */
+export function seedPcoSongCredits(
+    db: DatabaseSync,
+    pcoSongId: string,
+    credits: readonly { role: string; names: readonly string[] }[],
+    status = "ok"
+): void {
+    const rows = credits.flatMap(({ role, names }) => names.map((name) => [role, name] as const));
+    const insert = db.prepare(
+        "INSERT INTO pco_song_credits (pco_song_id, role, name, position, parse_status) VALUES (?, ?, ?, ?, ?)"
+    );
+    if (rows.length === 0) {
+        insert.run(pcoSongId, null, null, 0, status);
+    }
+    rows.forEach(([role, name], position) => {
+        insert.run(pcoSongId, role, name, position, status);
+    });
+}
+
+/**
+ * A default id for a new row of `table`: the first of `base + n`,
+ * `base + n + 1`, … that no row has, where n is one more than its rows.
+ */
+function firstFreeId(db: DatabaseSync, table: string, base: number): string {
+    const taken = db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`);
+    let ordinal = nextOrdinal(db, table);
+    while (taken.get(String(base + ordinal))) {
+        ordinal += 1;
+    }
+    return String(base + ordinal);
+}
+
+/** The fields of a song tag group of the mirror; `seedPcoTagGroup` fills in the rest. */
+export interface SeedPcoTagGroupFields {
+    id?: string;
+    name?: string;
+    /** Plain text, so a test can store an arrangement group. */
+    tagsFor?: string;
+    allowMultiple?: boolean;
+}
+
+/**
+ * Insert a tag group into the mirror and return its id. By default its id is
+ * the first free one of 8000001, 8000002, …, it is named "Tag Group 1",
+ * "Tag Group 2", …, its tags are for songs, and a song may have several of
+ * them.
+ */
+export function seedPcoTagGroup(db: DatabaseSync, fields: SeedPcoTagGroupFields = {}): string {
+    const id = fields.id ?? firstFreeId(db, "pco_tag_groups", 8_000_000);
+    db.prepare(
+        "INSERT INTO pco_tag_groups (id, name, tags_for, allow_multiple) VALUES (?, ?, ?, ?)"
+    ).run(
+        id,
+        fields.name ?? `Tag Group ${nextOrdinal(db, "pco_tag_groups")}`,
+        fields.tagsFor ?? "song",
+        (fields.allowMultiple ?? true) ? 1 : 0
+    );
+    return id;
+}
+
+/** The fields of a tag of the mirror; `seedPcoTag` fills in the rest. */
+export interface SeedPcoTagFields {
+    id?: string;
+    /** Its group; a new one (see `seedPcoTagGroup`) when left out. */
+    groupId?: string;
+    name?: string;
+}
+
+/**
+ * Insert a tag into the mirror and return its id. By default its id is the
+ * first free one of 8100001, 8100002, …, it is named "Tag 1", "Tag 2", …,
+ * and it is in a new tag group.
+ */
+export function seedPcoTag(db: DatabaseSync, fields: SeedPcoTagFields = {}): string {
+    const groupId = fields.groupId ?? seedPcoTagGroup(db);
+    const id = fields.id ?? firstFreeId(db, "pco_tags", 8_100_000);
+    db.prepare("INSERT INTO pco_tags (id, group_id, name) VALUES (?, ?, ?)").run(
+        id,
+        groupId,
+        fields.name ?? `Tag ${nextOrdinal(db, "pco_tags")}`
+    );
+    return id;
+}
+
+/** Give mirrored song `pcoSongId` the mirrored tag `tagId`. */
+export function seedPcoSongTag(db: DatabaseSync, pcoSongId: string, tagId: string): void {
+    db.prepare("INSERT INTO pco_song_tags (pco_song_id, tag_id) VALUES (?, ?)").run(
+        pcoSongId,
+        tagId
+    );
+}

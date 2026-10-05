@@ -212,3 +212,53 @@ export interface PcoSongResource {
         self: string;
     };
 }
+
+export interface PcoTagAttributes {
+    name: string;
+}
+
+/**
+ * `GET /services/v2/songs/{song}/tags`, or included with tag groups
+ * (`include=tags`). Its group may be named by `tag_group`.
+ */
+export interface PcoTagResource {
+    type: "Tag";
+    id: string;
+    attributes: PcoTagAttributes;
+    relationships?: {
+        tag_group?: PcoToOneRelationship<"TagGroup">;
+    };
+}
+
+export interface PcoTagGroupAttributes {
+    name: string;
+    /** What its tags are for: "song", "arrangement", and so on. */
+    tags_for: string;
+    /** Whether several of its tags may be chosen at once. */
+    allow_multiple_selections?: boolean | null;
+}
+
+/** `GET /services/v2/tag_groups`; its tags come with `include=tags`. */
+export interface PcoTagGroupResource {
+    type: "TagGroup";
+    id: string;
+    attributes: PcoTagGroupAttributes;
+    relationships?: {
+        tags?: PcoToManyRelationship<"Tag">;
+    };
+}
+
+export interface PcoArrangementAttributes {
+    name: string;
+    /** Set when the arrangement has been archived. */
+    archived_at?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+}
+
+/** `GET /services/v2/songs/{song}/arrangements` */
+export interface PcoArrangementResource {
+    type: "Arrangement";
+    id: string;
+    attributes: PcoArrangementAttributes;
+}

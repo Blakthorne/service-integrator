@@ -92,6 +92,90 @@ export function SettingsTextField({
     );
 }
 
+interface SettingsTextAreaProps {
+    /** The textarea's id, unique on the page. */
+    id: string;
+    /** The field's name in the form data. */
+    name: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    /** A sentence under the label, such as how to list the entries. */
+    hint?: string;
+    /** What the value makes, under the field, as `SettingsTextField`'s preview does. */
+    preview?: React.ReactNode;
+    /** What the action found wrong with the field. */
+    error?: FieldError;
+    /** How many lines it shows before it scrolls. */
+    rows?: number;
+    placeholder?: string;
+    /** True while the form saves: the field takes no input (`useSettingsForm` ignores it anyway). */
+    readOnly?: boolean;
+}
+
+/**
+ * A labelled text area of a Settings form, for a list typed one entry to a
+ * line (the email's recipients). It works as `SettingsTextField` does: its
+ * value lives in the form's state, its hint, preview and error describe it,
+ * and an error marks it invalid. The browser sends its line breaks as
+ * CRLF, which the form's reader takes like LF.
+ */
+export function SettingsTextArea({
+    id,
+    name,
+    label,
+    value,
+    onChange,
+    hint,
+    preview,
+    error,
+    rows = 4,
+    placeholder,
+    readOnly,
+}: SettingsTextAreaProps) {
+    const hintId = `${id}-hint`;
+    const previewId = `${id}-preview`;
+    const errorId = `${id}-error`;
+    const describedBy =
+        [hint ? hintId : null, preview ? previewId : null, error ? errorId : null]
+            .filter(Boolean)
+            .join(" ") || undefined;
+    return (
+        <div className="space-y-1">
+            <label htmlFor={id} className={LABEL_CLASS}>
+                {label}
+            </label>
+            {hint && (
+                <p id={hintId} className={HINT_CLASS}>
+                    {hint}
+                </p>
+            )}
+            <textarea
+                id={id}
+                name={name}
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                rows={rows}
+                placeholder={placeholder}
+                autoComplete="off"
+                autoCapitalize="none"
+                inputMode="email"
+                readOnly={readOnly}
+                spellCheck={false}
+                aria-describedby={describedBy}
+                aria-invalid={error ? true : undefined}
+                className={`${INPUT_CLASS} resize-y`}
+            />
+            {preview && (
+                <p id={previewId} className={HINT_CLASS}>
+                    {preview}
+                </p>
+            )}
+            <FieldErrorText id={errorId} error={error} />
+        </div>
+    );
+}
+
 /** A sample of what a setting writes, set apart in a preview: its spaces are kept as they are. */
 export function PreviewSample({ children }: { children: React.ReactNode }) {
     return (

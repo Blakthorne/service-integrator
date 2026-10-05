@@ -101,10 +101,53 @@ export function upsertPcoSongs(
     songs: readonly PcoLibrarySong[],
     now: Date = new Date()
 ): PcoSongUpsert {
+    const { added, updated } = upsertSongs(db, songs, now, null);
+    return { added, updated };
+}
+
+/** What `upsertListedPcoSongs` did. */
+export interface PcoSongListingUpsert extends PcoSongUpsert {
+    /**
+     * The songs of the listing that the mirror had written since the
+     * listing began, which were left as they were.
+     */
+    newer: string[];
+}
+
+/**
+ * Store a sync's listing of the library, which began at
+ * `listingStartedAt`, at `now`, as `upsertPcoSongs` does, except for a song
+ * the mirror wrote at or after `listingStartedAt` (its `synced_at`): a page
+ * read it or wrote to it while the listing was being read, so its fields
+ * are newer than the listing's, and a save made then is never put back to
+ * what it was. Such a song is left as it was, counted neither added nor
+ * updated, and returned in `newer`; the next sync brings it up to date.
+ * One transaction.
+ */
+export function upsertListedPcoSongs(
+    db: DatabaseSync,
+    songs: readonly PcoLibrarySong[],
+    listingStartedAt: Date,
+    now: Date = new Date()
+): PcoSongListingUpsert {
+    return upsertSongs(db, songs, now, listingStartedAt.toISOString());
+}
+
+/**
+ * The upsert of `upsertPcoSongs` and `upsertListedPcoSongs`: rows written
+ * at or after `keepWrittenSince` (ISO 8601 UTC, comparable as text) are
+ * left as they were; null leaves none.
+ */
+function upsertSongs(
+    db: DatabaseSync,
+    songs: readonly PcoLibrarySong[],
+    now: Date,
+    keepWrittenSince: string | null
+): PcoSongListingUpsert {
     return withTransaction(db, () => {
         const syncedAt = now.toISOString();
         const stored = db.prepare(
-            `SELECT ${LIBRARY_COLUMNS.join(", ")}, removed_at FROM pco_songs WHERE id = ?`
+            `SELECT ${LIBRARY_COLUMNS.join(", ")}, removed_at, synced_at FROM pco_songs WHERE id = ?`
         );
         const upsert = db.prepare(
             `INSERT INTO pco_songs (id, ${LIBRARY_COLUMNS.join(", ")}, synced_at)
@@ -116,11 +159,15 @@ export function upsertPcoSongs(
         );
         let added = 0;
         let updated = 0;
+        const newer: string[] = [];
         for (const song of songs) {
             const fields = libraryFields(song);
             const before = stored.get(song.id);
             if (!before) {
                 added += 1;
+            } else if (keepWrittenSince !== null && String(before.synced_at) >= keepWrittenSince) {
+                newer.push(song.id);
+                continue;
             } else if (
                 before.removed_at !== null ||
                 LIBRARY_COLUMNS.some((column, i) => before[column] !== fields[i])
@@ -129,7 +176,7 @@ export function upsertPcoSongs(
             }
             upsert.run(song.id, ...fields, syncedAt);
         }
-        return { added, updated };
+        return { added, updated, newer };
     });
 }
 

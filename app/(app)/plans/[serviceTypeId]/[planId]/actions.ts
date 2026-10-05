@@ -7,6 +7,14 @@ import type { ScheduleSelection } from "@/lib/domain";
 import type { HymnNoteStatus, PreviewedHymnNote } from "@/lib/hymnNotes";
 import { parsePcoId } from "@/lib/pco";
 import { parsePreviewedHymnNotes } from "@/lib/previewedHymnNotes";
+import { readPreviewedPlanEmail } from "@/lib/previewedPlanEmail";
+import {
+    previewPlanEmail,
+    sendPlanEmail,
+    type ExpectedPlanEmail,
+    type PlanEmailPreview,
+    type SendPlanEmailResult,
+} from "@/lib/queries/email";
 import {
     previewHymnNotes,
     syncHymnNotes,
@@ -256,4 +264,120 @@ export async function syncHymnNotesAction(
         revalidatePath(routes.plan(st, plan), "layout");
     }
     return result;
+}
+
+/**
+ * What the email's preview tells the dialog: the email as it would be sent
+ * now, with whether email is set up and who would get it (see
+ * `PlanEmailPreview`); or, when Planning Center could not be read, why
+ * there is nothing to show.
+ */
+export type PreviewPlanEmailState =
+    | { ok: true; preview: PlanEmailPreview }
+    | { ok: false; message: string };
+
+/**
+ * What a send tells the dialog (see `SendPlanEmailResult`): who the mail
+ * server took the email for, and whether its text had changed since the
+ * preview; or why nothing was sent: email is not set up, there are no
+ * recipients, the settings could not be read, the plan's email is being
+ * sent already ("busy"), the recipients or the subject are not the
+ * preview's ("changed"), or the plan could not be read, the preview sent
+ * back is not one, or the send failed ("failed").
+ */
+export type SendPlanEmailState = SendPlanEmailResult;
+
+/** Shown when the preview could not read the plan; the log has the details. */
+const EMAIL_PREVIEW_FAILURE_MESSAGE =
+    "The plan could not be read from Planning Center, so the email could not be prepared. Try again; the server log has the details.";
+
+/** Shown when the email sent back with Send is not a preview: a stale or tampered page. */
+const EMAIL_PREVIEW_NOT_USABLE_MESSAGE =
+    "This page sent a preview the send could not check, so the email was not sent. Preview again.";
+
+/** Shown when the send could not read the plan, so nothing was sent; the log has the details. */
+const EMAIL_SEND_FAILURE_MESSAGE =
+    "The plan could not be read from Planning Center, so the email was not sent. Try again; the server log has the details.";
+
+/**
+ * Plan `planId`'s email as it would be sent now (`previewPlanEmail`: the
+ * plan is read as its pages read it, and the settings): its recipients,
+ * subject and plain-text body, and whether email is set up on the server.
+ * It sends and writes nothing.
+ *
+ * The preview is local but for the plan's Planning Center reads, which it
+ * waits on, so the dialog calls it from a click, with its pending state in
+ * `useState` (convention 15). It checks the session first and throws
+ * without one, then parses both ids; a plan that cannot be read is logged
+ * and comes back as a message.
+ */
+export async function previewPlanEmailAction(
+    serviceTypeId: string,
+    planId: string
+): Promise<PreviewPlanEmailState> {
+    const session = await auth();
+    if (!session) {
+        throw new Error("Not signed in");
+    }
+    const st = parsePcoId(serviceTypeId);
+    const plan = parsePcoId(planId);
+    if (st === null || plan === null) {
+        return { ok: false, message: NOT_A_PLAN_MESSAGE };
+    }
+    try {
+        return { ok: true, preview: await previewPlanEmail(st, plan) };
+    } catch (error) {
+        console.error(`Failed to preview the email of plan ${st}/${plan}:`, error);
+        return { ok: false, message: EMAIL_PREVIEW_FAILURE_MESSAGE };
+    }
+}
+
+/**
+ * Send plan `planId`'s email to the recipients in the settings, now, as the
+ * dialog's preview showed it (`sendPlanEmail`: it reads the plan again and
+ * builds the email from what it finds, refuses as "changed", sending
+ * nothing, when the recipients or the subject are not the preview's, then
+ * sends it and records a `write_log` row, without the email's text), and
+ * say what came of it. Email that is not set up, no recipients, unreadable
+ * settings and a send of the plan's email already under way refuse the
+ * send with their message, and so does a failed send.
+ *
+ * `previewed` is the email the preview showed (its `to`, `subject` and
+ * `text`). It comes from a browser, so its shape is read first
+ * (`readPreviewedPlanEmail`, which keeps only those three fields); one that
+ * is not a preview is refused before anything is read or sent.
+ *
+ * A send waits on the SMTP server, so the dialog calls it from its Send
+ * button, with its pending state in `useState` (convention 15). It
+ * revalidates nothing: no page shows what a send changes but Settings' list
+ * of recent writes, which is read afresh whenever Settings is opened, and a
+ * revalidation would render the plan's page again, reading Planning Center,
+ * while the person waits for the answer. It checks the session first and
+ * throws without one, then parses both ids; a plan that cannot be read is
+ * logged and comes back as a message ("failed"), with nothing sent.
+ */
+export async function sendPlanEmailAction(
+    serviceTypeId: string,
+    planId: string,
+    previewed: ExpectedPlanEmail
+): Promise<SendPlanEmailState> {
+    const session = await auth();
+    if (!session) {
+        throw new Error("Not signed in");
+    }
+    const st = parsePcoId(serviceTypeId);
+    const plan = parsePcoId(planId);
+    if (st === null || plan === null) {
+        return { ok: false, kind: "failed", message: NOT_A_PLAN_MESSAGE };
+    }
+    const expected = readPreviewedPlanEmail(previewed);
+    if (expected === null) {
+        return { ok: false, kind: "failed", message: EMAIL_PREVIEW_NOT_USABLE_MESSAGE };
+    }
+    try {
+        return await sendPlanEmail(st, plan, expected);
+    } catch (error) {
+        console.error(`Failed to email plan ${st}/${plan}:`, error);
+        return { ok: false, kind: "failed", message: EMAIL_SEND_FAILURE_MESSAGE };
+    }
 }

@@ -1,10 +1,10 @@
 import "server-only";
 import { cache } from "react";
-import type { PcoLibrarySong } from "../domain";
+import type { PcoLibrarySong, SongArrangement } from "../domain";
 import { pcoFetch, pcoFetchAll } from "./client";
 import { assertPcoId } from "./ids";
-import { toPcoLibrarySong } from "./mappers";
-import type { PcoSingleResponse, PcoSongResource } from "./resources";
+import { toPcoLibrarySong, toSongArrangement } from "./mappers";
+import type { PcoArrangementResource, PcoSingleResponse, PcoSongResource } from "./resources";
 
 /** 10,000 songs at per_page=100; the library had 397 songs on 2026-10-03. */
 const MAX_SONG_PAGES = 100;
@@ -42,16 +42,43 @@ export async function fetchSongLibrary(): Promise<PcoLibrarySong[]> {
 }
 
 /**
- * One song of the library with every field the mirror keeps, as linking
- * from a page needs when the mirror lacks it. Not paced: someone is waiting.
- * Throws InvalidPcoIdError before fetching, or PcoError (404 when there is
- * no such song).
+ * One song of the library with every field the mirror keeps, read afresh
+ * every time: for a write that must start from what Planning Center has now
+ * (refresh-before-write), or read a song again after one. Not paced:
+ * someone is waiting. Throws InvalidPcoIdError before fetching, or PcoError
+ * (404 when there is no such song).
  */
-export const getSong = cache(async (songId: string): Promise<PcoLibrarySong> => {
+export async function fetchSong(songId: string): Promise<PcoLibrarySong> {
     const id = assertPcoId(songId);
     const { data } = await pcoFetch<PcoSingleResponse<PcoSongResource>>(
         `/songs/${id}`,
         "songs"
     );
     return toPcoLibrarySong(data);
-});
+}
+
+/**
+ * One song of the library with every field the mirror keeps, as linking
+ * from a page needs when the mirror lacks it: `fetchSong`, deduped within a
+ * request. Not paced: someone is waiting. Throws InvalidPcoIdError before
+ * fetching, or PcoError (404 when there is no such song).
+ */
+export const getSong = cache(fetchSong);
+
+/**
+ * Song `songId`'s arrangements, in Planning Center's order, archived ones
+ * included (every song has at least one: Planning Center makes a "Default
+ * Arrangement" with each new song). Not paced: someone is waiting. Throws
+ * InvalidPcoIdError before fetching, or PcoError (404 when there is no such
+ * song).
+ */
+export const getSongArrangements = cache(
+    async (songId: string): Promise<SongArrangement[]> => {
+        const id = assertPcoId(songId);
+        const { data } = await pcoFetchAll<PcoArrangementResource>(
+            `/songs/${id}/arrangements?per_page=100`,
+            "arrangements"
+        );
+        return data.map(toSongArrangement);
+    }
+);

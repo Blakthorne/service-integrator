@@ -3,22 +3,35 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import {
+    ROLES_IMPACT_UNCHECKED_MESSAGE,
+    checkRolesImpactConfirmed,
+    creditRolesImpact,
+} from "@/lib/creditRoleImpact";
+import {
     FORM_FAILURE_MESSAGE,
     formError,
     formSuccess,
     type FieldErrors,
     type FormState,
+    type FormValues,
 } from "@/lib/forms";
 import { parsePcoId } from "@/lib/pco";
+import { getCreditLabelSets, rederiveAllCredits } from "@/lib/queries/credits";
 import { syncPcoSongsNow, type RunJobResult } from "@/lib/queries/reconcile";
 import { getSettings, saveSettings, type SaveSettingsResult } from "@/lib/queries/settings";
 import { routes } from "@/lib/routes";
 import {
+    CREDIT_ROLES_CONFIRM_FIELD,
+    creditRolesOf,
     readCopyrightForm,
+    readCreditRolesConfirmation,
+    readCreditsForm,
+    readEmailForm,
     readHymnalNotesForm,
     readScheduleTextForm,
     type SettingsFormRead,
 } from "@/lib/settingsForms";
+import { CREDITS_NOT_REREAD_MESSAGE, describeRederivedCredits } from "@/lib/settingsText";
 
 /** What "Sync now" says when it is done: how the run went, in a sentence. */
 export interface SyncNowResult {
@@ -127,6 +140,41 @@ function revalidateSettingsPages(): void {
 }
 
 /**
+ * The pages that show what the credit roles and phrases change: Settings, the
+ * plan pages (the copyright text prints the credits) and the catalog's, whose
+ * song pages show each song's credits as the roles read them. Not the
+ * dashboard, which shows no credits.
+ */
+function revalidateCreditPages(): void {
+    revalidatePath(routes.settings());
+    revalidatePath(routes.plans(), "layout");
+    revalidatePath(routes.catalog(), "layout");
+}
+
+/**
+ * The pages that show the email settings: Settings alone. The plan's Email
+ * dialog reads them afresh each time it opens.
+ */
+function revalidateEmailPages(): void {
+    revalidatePath(routes.settings());
+}
+
+/** What follows a save that went through: more to say beside "Saved.", or a problem the save itself did not have. */
+type AfterSave = { ok: true; message: string } | { ok: false; message: string };
+
+/** What `saveRead` does besides saving. */
+interface SaveOptions {
+    /** Revalidate the pages that show what was saved; the settings pages by default. */
+    revalidate?: () => void;
+    /**
+     * Runs once the values are stored. Its message replaces "Saved." when it
+     * went well. When it did not, the form shows its message as an error,
+     * though the values are stored.
+     */
+    after?: () => AfterSave;
+}
+
+/**
  * A refusal from `saveSettings`, as the form shows it. The readers check
  * every value with the registry's own parsers first, so this is only a
  * guard: a setting whose key is a field of the form is marked on that field,
@@ -153,10 +201,11 @@ function refusal(
  * Save what a form read, and say how it went. A field that needs fixing
  * comes back as an error on that field, with nothing saved. A save the
  * database cannot make (`saveSettings` throws) is logged and comes back as
- * the generic message. A save revalidates the pages that show settings, and
+ * the generic message. A save runs `options.after`, revalidates the pages
+ * that show it (`options.revalidate`: the settings pages by default), and
  * gives the form what each field holds now.
  */
-function saveRead(read: SettingsFormRead): SettingsFormState {
+function saveRead(read: SettingsFormRead, options: SaveOptions = {}): SettingsFormState {
     if (!read.ok) {
         return formError(FIX_FIELDS_MESSAGE, {
             fieldErrors: read.fieldErrors,
@@ -173,8 +222,13 @@ function saveRead(read: SettingsFormRead): SettingsFormState {
     if (!result.ok) {
         return refusal(result, read.posted);
     }
-    revalidateSettingsPages();
-    return formSuccess(SAVED_MESSAGE, read.shown);
+    const followUp = options.after?.();
+    // The values are stored whether or not the follow-up worked.
+    (options.revalidate ?? revalidateSettingsPages)();
+    if (followUp?.ok === false) {
+        return formError(followUp.message, { values: read.posted });
+    }
+    return formSuccess(followUp?.message ?? SAVED_MESSAGE, read.shown);
 }
 
 /** The Copyright card's action: save the CCLI license number. */
@@ -204,4 +258,93 @@ export async function saveScheduleTextAction(formData: FormData): Promise<Settin
 export async function saveHymnalNotesAction(formData: FormData): Promise<SettingsFormState> {
     await requireSession();
     return saveRead(readHymnalNotesForm(formData));
+}
+
+/**
+ * Read every song's author again with the roles just saved, and say how
+ * many songs that was and how they read (`rederiveAllCredits`: the database
+ * alone, one transaction). A failure is logged and says when the credits
+ * will follow anyway: the next song sync derives them with the stored roles.
+ */
+function rederiveCredits(): AfterSave {
+    try {
+        return { ok: true, message: describeRederivedCredits(rederiveAllCredits()) };
+    } catch (error) {
+        console.error("Failed to read the songs' credits again:", error);
+        return { ok: false, message: CREDITS_NOT_REREAD_MESSAGE };
+    }
+}
+
+/**
+ * Whether `roles` may be saved, for what they do to songs: the labels the
+ * mirrored songs' authors use are read again (`getCreditLabelSets`), and
+ * roles that would leave some of them labelled with a role that no longer
+ * exists, changing their copyright text, are saved only when the form's
+ * checkbox confirms exactly how many songs that is
+ * (lib/creditRoleImpact.ts). Null when they may be saved. A refusal is
+ * marked on the checkbox, and Settings is revalidated so the form's notice
+ * shows the songs as they are now: the page's may be stale (a sync, or
+ * roles saved in another tab), or show no songs at all. When the labels
+ * cannot be read nothing is saved, since the change cannot be checked.
+ */
+function refuseUnconfirmedImpact(
+    roles: readonly string[],
+    formData: FormData,
+    posted: FormValues
+): SettingsFormState | null {
+    const { sets, error } = getCreditLabelSets();
+    if (error !== null) {
+        return formError(ROLES_IMPACT_UNCHECKED_MESSAGE, { values: posted });
+    }
+    const check = checkRolesImpactConfirmed(
+        creditRolesImpact(sets, roles),
+        readCreditRolesConfirmation(formData)
+    );
+    if (check.ok) {
+        return null;
+    }
+    revalidatePath(routes.settings());
+    return formError(FIX_FIELDS_MESSAGE, {
+        fieldErrors: { [CREDIT_ROLES_CONFIRM_FIELD]: { message: check.message } },
+        values: posted,
+    });
+}
+
+/**
+ * The Credits card's action: save the credit roles, in order, and the
+ * phrase for each, then read every song's author again with the new roles
+ * (`rederiveAllCredits`) so the credits follow at once and not at the next
+ * song sync, and say how many songs that was. A refused form saves nothing
+ * and reads nothing again.
+ *
+ * Roles that rename or remove a role that songs' authors use as a label
+ * change those songs' copyright text (their authors stop reading as
+ * labelled), so they are saved only once the form confirms how many songs
+ * that is, checked against the mirror here (`refuseUnconfirmedImpact`).
+ */
+export async function saveCreditsAction(formData: FormData): Promise<SettingsFormState> {
+    await requireSession();
+    const read = readCreditsForm(formData);
+    // Null when the form was refused, which `saveRead` then says.
+    const roles = creditRolesOf(read);
+    if (roles !== null) {
+        const refused = refuseUnconfirmedImpact(roles, formData, read.posted);
+        if (refused !== null) {
+            return refused;
+        }
+    }
+    return saveRead(read, {
+        revalidate: revalidateCreditPages,
+        after: rederiveCredits,
+    });
+}
+
+/**
+ * The Email card's action: save the recipients, one address each, and the
+ * subject's template. It reads nothing from Planning Center and sends
+ * nothing: the plan's Email dialog does, with what is saved here.
+ */
+export async function saveEmailAction(formData: FormData): Promise<SettingsFormState> {
+    await requireSession();
+    return saveRead(readEmailForm(formData), { revalidate: revalidateEmailPages });
 }

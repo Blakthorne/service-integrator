@@ -11,15 +11,18 @@ import {
     recentSyncRuns,
     startSyncRun,
 } from "@/lib/db/syncRuns";
-import { openTestDb, seedHymn, seedSong } from "@/lib/db/testing";
+import { openTestDb, seedHymn, seedPcoSong, seedSong } from "@/lib/db/testing";
 import {
     PCO_BASE,
+    calledUrls,
     json,
     listPage,
     songResource,
     stubFetchRoutes,
     stubPcoCredentials,
     stubPcoPacer,
+    tagGroupResource,
+    tagResource,
 } from "@/lib/pco/testing";
 import {
     BOOT_DELAY_MS,
@@ -29,6 +32,7 @@ import {
     runIfDue,
     runJob,
     startJobs,
+    tagsJob,
     type Job,
 } from "./jobs";
 
@@ -326,6 +330,143 @@ describe("pcoSongsJob", () => {
             ok: false,
             message: expect.stringContaining("status: 500"),
         });
+    });
+});
+
+describe("tagsJob", () => {
+    const LIBRARY = `${PCO_BASE}/songs?per_page=100`;
+    const TAG_GROUPS = `${PCO_BASE}/tag_groups?include=tags&per_page=100`;
+    const HYMNS = `${PCO_BASE}/songs?where[song_tag_ids]=101&per_page=100`;
+
+    /** The (song, tag) rows stored, in order. */
+    function songTagRows(): [string, string][] {
+        return db
+            .prepare("SELECT pco_song_id, tag_id FROM pco_song_tags ORDER BY pco_song_id, tag_id")
+            .all()
+            .map((row) => [String(row.pco_song_id), String(row.tag_id)]);
+    }
+
+    /**
+     * A library of two songs, which the mirror does not have yet, both
+     * tagged Hymn; `library` answers the listing (by default at once).
+     */
+    function stubPlanningCenter(library: unknown = listPage([songResource("1001"), songResource("1002")])) {
+        stubPcoCredentials();
+        stubPcoPacer();
+        return stubFetchRoutes({
+            [LIBRARY]: library,
+            [TAG_GROUPS]: listPage([tagGroupResource("10", { name: "Type" }, ["101"])], {
+                included: [tagResource("101", { name: "Hymn" })],
+            }),
+            [HYMNS]: listPage([songResource("1001"), songResource("1002")]),
+        });
+    }
+
+    test("is scheduled: run every hour and soon after boot, checked after the song sync", () => {
+        expect(tagsJob).toMatchObject({ kind: "tags", everyMs: HOUR_MS, atBoot: true });
+        expect(tagsJob.isDue).toBeUndefined();
+        expect(JOBS.indexOf(tagsJob)).toBeGreaterThan(JOBS.indexOf(pcoSongsJob));
+    });
+
+    test("syncs the songs first, so the songs it adds get their tags, and records what it did", async () => {
+        const fetchMock = stubPlanningCenter();
+
+        await runJob(tagsJob, openDb);
+        expect(calledUrls(fetchMock)).toEqual([LIBRARY, TAG_GROUPS, HYMNS]);
+        expect(latestSyncRun(db, "pco-songs")).toMatchObject({ ok: true });
+        expect(latestSyncRun(db, "tags")).toMatchObject({
+            ok: true,
+            message: "Synced 1 tag in 1 group: 2 song tags",
+            counts: { groups: 1, tags: 1, songTags: 2, skipped: 0 },
+        });
+        expect(songTagRows()).toEqual([
+            ["1001", "101"],
+            ["1002", "101"],
+        ]);
+    });
+
+    /**
+     * Planning Center as `stubPlanningCenter` stubs it, except that the
+     * library listing waits until `answerListing()`: a song sync stays in
+     * progress, as one does while its requests are on the network.
+     */
+    function stubWithListingHeld() {
+        let answerListing = () => {};
+        const fetchMock = stubPlanningCenter(
+            () =>
+                new Promise<Response>((resolve) => {
+                    answerListing = () =>
+                        resolve(json(listPage([songResource("1001"), songResource("1002")])));
+                })
+        );
+        return { fetchMock, answerListing: () => answerListing() };
+    }
+
+    test("joins a song sync in progress rather than start another", async () => {
+        const { fetchMock, answerListing } = stubWithListingHeld();
+
+        const songs = runJob(pcoSongsJob, openDb);
+        const tags = runJob(tagsJob, openDb);
+        await vi.waitFor(() => expect(calledUrls(fetchMock)).toEqual([LIBRARY]));
+        answerListing();
+        await Promise.all([songs, tags]);
+
+        expect(calledUrls(fetchMock)).toEqual([LIBRARY, TAG_GROUPS, HYMNS]);
+        expect(recentSyncRuns(db).map(({ kind, ok }) => [kind, ok])).toEqual([
+            ["tags", true],
+            ["pco-songs", true],
+        ]);
+        expect(songTagRows()).toHaveLength(2);
+    });
+
+    test("still syncs the tags when the song sync fails, skipping the songs the mirror lacks", async () => {
+        stubPlanningCenter(() => json({ errors: [] }, { status: 500 }));
+        seedPcoSong(db, { id: "1001" });
+
+        await runJob(tagsJob, openDb);
+        expect(latestSyncRun(db, "pco-songs")).toMatchObject({ ok: false });
+        expect(latestSyncRun(db, "tags")).toMatchObject({
+            ok: true,
+            message: "Synced 1 tag in 1 group: 1 song tag, 1 skipped (songs not mirrored yet)",
+        });
+        expect(songTagRows()).toEqual([["1001", "101"]]);
+    });
+
+    test("records a tags sync that failed", async () => {
+        stubPlanningCenter();
+        stubFetchRoutes({
+            [LIBRARY]: listPage([]),
+            [TAG_GROUPS]: () => json({ errors: [] }, { status: 500 }),
+        });
+
+        await runJob(tagsJob, openDb);
+        expect(latestSyncRun(db, "tags")).toMatchObject({
+            ok: false,
+            message: expect.stringContaining("status: 500"),
+        });
+    });
+
+    test("at boot, the scheduler starts the song sync, and the tags sync waits for it", async () => {
+        vi.useFakeTimers();
+        const { fetchMock, answerListing } = stubWithListingHeld();
+
+        startJobs({ jobs: [pcoSongsJob, tagsJob], openDb });
+        await vi.advanceTimersByTimeAsync(BOOT_DELAY_MS);
+        // Both checks have run: one song sync is in progress, and the tags sync waits.
+        expect(calledUrls(fetchMock)).toEqual([LIBRARY]);
+        expect(recentSyncRuns(db).map(({ kind, ok }) => [kind, ok])).toEqual([
+            ["tags", null],
+            ["pco-songs", null],
+        ]);
+
+        answerListing();
+        await vi.waitFor(() => expect(latestSyncRun(db, "tags")?.ok).toBe(true));
+        expect(calledUrls(fetchMock)).toEqual([LIBRARY, TAG_GROUPS, HYMNS]);
+        expect(recentSyncRuns(db).map(({ kind, ok }) => [kind, ok])).toEqual([
+            ["tags", true],
+            ["pco-songs", true],
+        ]);
+        expect(songTagRows()).toHaveLength(2);
     });
 });
 

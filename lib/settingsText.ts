@@ -1,16 +1,23 @@
 import { formatCopyrightText } from "./copyright";
+import { renderCreditLine } from "./credits";
 import type { ServiceType } from "./domain";
 import { formatHymnNote } from "./hymnNotes";
+import { formatPlanEmailSubject } from "./planEmail";
+import { recipientCount } from "./planEmailText";
 import { formatScheduleNumbers, type ScheduleEntry } from "./serviceSchedule";
 import {
     DEFAULT_SETTINGS,
     defaultScheduleHeaderLabel,
+    parseCreditPhrase,
+    parseCreditRole,
+    parseEmailAddress,
     parseSetting,
     type HymnNoteSettings,
     type ScheduleHeaderLabels,
     type SettingIssue,
     type SettingKey,
 } from "./settings";
+import { splitRecipients } from "./settingsForms";
 
 /**
  * The Settings page's words: the previews of what a setting makes, the
@@ -25,6 +32,8 @@ export const SETTINGS_CARD_TITLES = {
     copyright: "Copyright",
     scheduleText: "Schedule text",
     hymnalNotes: "Hymnal notes",
+    credits: "Credits",
+    email: "Email",
 } as const;
 
 /** What each setting is called on the page, and the card that edits it. */
@@ -45,6 +54,10 @@ export const SETTING_DESCRIPTIONS: Readonly<
         label: "Tune in hymnal notes",
         card: SETTINGS_CARD_TITLES.hymnalNotes,
     },
+    creditRoles: { label: "Credit roles", card: SETTINGS_CARD_TITLES.credits },
+    creditPhrases: { label: "Credit phrases", card: SETTINGS_CARD_TITLES.credits },
+    emailRecipients: { label: "Email recipients", card: SETTINGS_CARD_TITLES.email },
+    emailSubjectTemplate: { label: "Email subject", card: SETTINGS_CARD_TITLES.email },
 };
 
 /** The longest stored value an issue shows. */
@@ -57,6 +70,14 @@ function defaultInWords(key: SettingKey): string {
             return "no labels of its own, so each service type gets its default header";
         case "hymnNoteIncludesTune":
             return DEFAULT_SETTINGS.hymnNoteIncludesTune ? "yes" : "no";
+        case "creditRoles":
+            return DEFAULT_SETTINGS.creditRoles.join(", ");
+        case "creditPhrases":
+            return Object.entries(DEFAULT_SETTINGS.creditPhrases)
+                .map(([role, phrase]) => `${role}: "${phrase}"`)
+                .join(", ");
+        case "emailRecipients":
+            return "no recipients";
         default:
             return JSON.stringify(DEFAULT_SETTINGS[key]);
     }
@@ -256,4 +277,201 @@ export function categoryLookupIntro(categoryName: string): string {
  */
 export function missingCategoryHelp(categoryName: string): string {
     return `Planning Center does not let this app create an item note category, so create it in Planning Center's web app (Services › Plans › item notes): add one named "${categoryName}" to each service type marked Missing, then reload this page.`;
+}
+
+/** What each credit role's fieldset is called: the first two are the words' and the music's. */
+export function creditRoleLegend(index: number): string {
+    return index === 0 ? "Role 1 (the words)" : index === 1 ? "Role 2 (the music)" : `Role ${index + 1}`;
+}
+
+/** What a blank phrase does, under its field: `Left blank, it reads "Words by".` */
+export function creditPhraseHint(role: string): string {
+    const name = role.trim();
+    return `Left blank, it reads "${name === "" ? "the role" : name} by".`;
+}
+
+/**
+ * What a blank phrase for the first two roles together does, under its
+ * field: `Left blank, it reads "Words and Music by".`
+ */
+export function creditPairPhraseHint(firstRole: string, secondRole: string): string {
+    const first = firstRole.trim() === "" ? "the first role" : firstRole.trim();
+    const second = secondRole.trim() === "" ? "the second role" : secondRole.trim();
+    return `Left blank, it reads "${first} and ${second} by".`;
+}
+
+/** The names a credit preview gives each role in turn: no two next to each other are the same. */
+const SAMPLE_CREDIT_NAMES = ["Isaac Watts", "Lowell Mason", "John Doe", "Jane Roe", "Sam Poe"];
+
+/** The one person a preview has hold both the words and the music. */
+const SAMPLE_SAME_PERSON = "John Newton";
+
+/** A credit line as the copyright text prints it, for two sample songs. */
+export interface CreditPreview {
+    /** A song with a different person for each role: "Words by Isaac Watts. Music by Lowell Mason." */
+    apart: string;
+    /** A song whose words and music are by the same person: "Words and Music by John Newton." */
+    together: string;
+}
+
+/**
+ * The credit line the copyright text prints with these rows (the role and
+ * the phrase typed for each, in order) and the phrase for the first two
+ * roles together, as the form holds them: the text itself, from the credits'
+ * own function (`renderCreditLine`), so the preview cannot drift from it. A
+ * role that is not one the setting takes, or is listed twice, is left out,
+ * and so is a phrase that is blank or not one the setting takes (the text
+ * prints "<role> by" for it). Null when fewer than two roles are left.
+ */
+export function previewCreditLines(
+    rows: readonly { role: string; phrase: string }[],
+    pairPhrase: string
+): CreditPreview | null {
+    const roles: string[] = [];
+    const phrases: Record<string, string> = {};
+    const seen = new Set<string>();
+    for (const row of rows) {
+        const role = parseCreditRole(row.role);
+        if (!role.ok || seen.has(role.value.toLowerCase())) {
+            continue;
+        }
+        seen.add(role.value.toLowerCase());
+        roles.push(role.value);
+        const phrase = parseCreditPhrase(row.phrase);
+        if (phrase.ok) {
+            phrases[role.value] = phrase.value;
+        }
+    }
+    if (roles.length < 2) {
+        return null;
+    }
+    const pair = parseCreditPhrase(pairPhrase);
+    if (pair.ok) {
+        phrases[`${roles[0]} & ${roles[1]}`] = pair.value;
+    }
+    return {
+        apart: renderCreditLine(
+            roles.map((role, i) => ({
+                role,
+                names: [SAMPLE_CREDIT_NAMES[i % SAMPLE_CREDIT_NAMES.length]],
+            })),
+            phrases
+        ),
+        together: renderCreditLine(
+            [
+                { role: roles[0], names: [SAMPLE_SAME_PERSON] },
+                { role: roles[1], names: [SAMPLE_SAME_PERSON] },
+            ],
+            phrases
+        ),
+    };
+}
+
+/** How many songs' authors read as each status, as `rederiveAllCredits` counts them. */
+export interface RederivedCreditCounts {
+    songs: number;
+    ok: number;
+    legacy: number;
+    unparsed: number;
+}
+
+/** What the Credits form says when the roles are saved but the songs' credits could not be read again. */
+export const CREDITS_NOT_REREAD_MESSAGE =
+    "The roles were saved, but the songs' credits could not be read again. They follow the new roles at the next song sync, within the hour.";
+
+/** "1 song", "397 songs". */
+function songCount(count: number): string {
+    return `${count} ${count === 1 ? "song" : "songs"}`;
+}
+
+/** "a", "a and b", "a, b and c". */
+function listedParts(parts: readonly string[]): string {
+    return parts.length <= 1
+        ? parts.join("")
+        : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * What the Credits form says once it is saved: how many songs' credits were
+ * read again with the new roles, and how they read: following the roles,
+ * with no labels at all (read as the copyright text always read them), or
+ * with labels that no role matches (a role renamed or removed: they print
+ * their whole author in place of their credit line, and are flagged on the
+ * song's page; see lib/creditRoleImpact.ts).
+ */
+export function describeRederivedCredits(counts: RederivedCreditCounts): string {
+    if (counts.songs === 0) {
+        return "Saved. No songs have been synced from Planning Center yet, so there were no credits to read again.";
+    }
+    const parts: string[] = [];
+    if (counts.ok > 0) {
+        parts.push(`${counts.ok} follow${counts.ok === 1 ? "s" : ""} the roles`);
+    }
+    if (counts.legacy > 0) {
+        parts.push(`${counts.legacy} ${counts.legacy === 1 ? "has" : "have"} no labels`);
+    }
+    if (counts.unparsed > 0) {
+        parts.push(
+            `${counts.unparsed} ${counts.unparsed === 1 ? "has" : "have"} labels that no role matches`
+        );
+    }
+    return `Saved. Read the credits of ${songCount(counts.songs)} again: ${listedParts(parts)}.`;
+}
+
+/** What the subject field explains: its two placeholders. */
+export const EMAIL_SUBJECT_HINT =
+    "{date} becomes the plan's date, such as 10/4/26, and {service} its service type's name, such as Sunday Morning.";
+
+/** What the recipients field explains: how to list them. */
+export const EMAIL_RECIPIENTS_HINT =
+    "One email address on each line, or separated by commas. Email this plan sends to all of them.";
+
+/** The plan a subject preview is for. */
+const SAMPLE_PLAN = { dates: "October 4, 2026", sortDate: "2026-10-04T11:00:00Z" } as const;
+const SAMPLE_SERVICE_TYPE = { name: "Sunday Morning" } as const;
+
+/** What a subject preview is about, in words: "a Sunday Morning plan for October 4, 2026". */
+export const EMAIL_SUBJECT_SAMPLE_PLAN = `a ${SAMPLE_SERVICE_TYPE.name} plan for ${SAMPLE_PLAN.dates}`;
+
+/**
+ * The subject of a plan's email with this template, for a sample plan (see
+ * `EMAIL_SUBJECT_SAMPLE_PLAN`): "Songs for 10/4/26 · Sunday Morning", from
+ * the email's own function (`formatPlanEmailSubject`). Null when
+ * `template` is not one the setting accepts (blank, too long, an unknown
+ * placeholder), so there is nothing to show.
+ */
+export function previewEmailSubject(template: string): string | null {
+    const parsed = parseSetting("emailSubjectTemplate", template);
+    return parsed.ok ? formatPlanEmailSubject(parsed.value, SAMPLE_PLAN, SAMPLE_SERVICE_TYPE) : null;
+}
+
+/** What the recipients field says under it while nothing is typed. */
+export const NO_RECIPIENTS_PREVIEW =
+    "No recipients yet: Email this plan sends nothing until there is at least one.";
+
+/** The most entries a preview names. */
+const NAMED_ENTRIES_MAX = 3;
+
+/**
+ * What the recipients typed come to, as they are typed: how many people the
+ * email goes to, or which entries are not email addresses, or what is wrong
+ * with the list (an address twice, too many). Said quietly under the field:
+ * the save marks the field.
+ */
+export function previewRecipients(text: string): string {
+    const entries = splitRecipients(text);
+    if (entries.length === 0) {
+        return NO_RECIPIENTS_PREVIEW;
+    }
+    const refused = entries.filter((entry) => !parseEmailAddress(entry).ok);
+    if (refused.length > 0) {
+        const named = refused
+            .slice(0, NAMED_ENTRIES_MAX)
+            .map((entry) => JSON.stringify(entry.length > 40 ? `${entry.slice(0, 40)}…` : entry));
+        const more =
+            refused.length > NAMED_ENTRIES_MAX ? ` and ${refused.length - NAMED_ENTRIES_MAX} more` : "";
+        return `Not an email address: ${named.join(", ")}${more}.`;
+    }
+    const parsed = parseSetting("emailRecipients", entries);
+    return parsed.ok ? `The email goes to ${recipientCount(entries.length)}.` : parsed.message;
 }

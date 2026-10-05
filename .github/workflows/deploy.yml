@@ -204,11 +204,25 @@ jobs:
                   ALLOWED_EMAIL_3: ${{ secrets.ALLOWED_EMAIL_3 }}
                   PLANNING_CENTER_ID: ${{ secrets.PLANNING_CENTER_ID }}
                   PLANNING_CENTER_TOKEN: ${{ secrets.PLANNING_CENTER_TOKEN }}
+                  SMTP_URL: ${{ secrets.SMTP_URL }}
+                  EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+              # Email (SMTP_URL, EMAIL_FROM; see lib/email.ts) is optional: each is
+              # written only when its secret is set, so a secret that is not set
+              # writes no empty value, which would hide one set in the server's
+              # ~/service-integrator/.env.
               run: |
-                  printf 'AUTH_SECRET=%s\nAUTH_URL=%s\nAUTH_GOOGLE_ID=%s\nAUTH_GOOGLE_SECRET=%s\nALLOWED_EMAIL_1=%s\nALLOWED_EMAIL_2=%s\nALLOWED_EMAIL_3=%s\nPLANNING_CENTER_ID=%s\nPLANNING_CENTER_TOKEN=%s\n' \
-                    "$AUTH_SECRET" "$AUTH_URL" "$AUTH_GOOGLE_ID" "$AUTH_GOOGLE_SECRET" \
-                    "$ALLOWED_EMAIL_1" "$ALLOWED_EMAIL_2" "$ALLOWED_EMAIL_3" \
-                    "$PLANNING_CENTER_ID" "$PLANNING_CENTER_TOKEN" \
+                  {
+                    printf 'AUTH_SECRET=%s\nAUTH_URL=%s\nAUTH_GOOGLE_ID=%s\nAUTH_GOOGLE_SECRET=%s\nALLOWED_EMAIL_1=%s\nALLOWED_EMAIL_2=%s\nALLOWED_EMAIL_3=%s\nPLANNING_CENTER_ID=%s\nPLANNING_CENTER_TOKEN=%s\n' \
+                      "$AUTH_SECRET" "$AUTH_URL" "$AUTH_GOOGLE_ID" "$AUTH_GOOGLE_SECRET" \
+                      "$ALLOWED_EMAIL_1" "$ALLOWED_EMAIL_2" "$ALLOWED_EMAIL_3" \
+                      "$PLANNING_CENTER_ID" "$PLANNING_CENTER_TOKEN"
+                    if [ -n "$SMTP_URL" ]; then
+                      printf 'SMTP_URL=%s\n' "$SMTP_URL"
+                    fi
+                    if [ -n "$EMAIL_FROM" ]; then
+                      printf 'EMAIL_FROM=%s\n' "$EMAIL_FROM"
+                    fi
+                  } \
                   | ssh -F ~/.ssh/config-ci \
                       -p "$DEPLOY_PORT" \
                       "$DEPLOY_USER@$DEPLOY_HOST" \

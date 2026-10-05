@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PcoError } from "./client";
 import { InvalidPcoIdError } from "./ids";
-import { getAllPlans, getNextPlan, getPlan, getPlansForServiceType } from "./plans";
+import {
+    fetchUpcomingPlans,
+    getAllPlans,
+    getNextPlan,
+    getPlan,
+    getPlansForServiceType,
+    getUpcomingPlans,
+} from "./plans";
 import {
     PCO_BASE,
     calledUrls,
@@ -251,5 +258,51 @@ describe("getNextPlan", () => {
         const fetchMock = stubFetchRoutes({});
         await expect(getNextPlan("1e3")).rejects.toBeInstanceOf(InvalidPcoIdError);
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+});
+
+describe("getUpcomingPlans", () => {
+    const upcomingUrl = (serviceTypeId: string) =>
+        `${PCO_BASE}/service_types/${serviceTypeId}/plans?filter=future&order=sort_date&per_page=100`;
+    const nextPage = `${PCO_BASE}/service_types/${MORNING}/plans?filter=future&offset=100&order=sort_date&per_page=100`;
+
+    test("reads every page of the type's future plans, earliest first", async () => {
+        const later = planResource({ id: "103" }, { sort_date: "2026-10-11T08:00:00Z" });
+        const fetchMock = stubFetchRoutes({
+            [upcomingUrl(MORNING)]: listPage([later], { next: nextPage, total: 2 }),
+            [nextPage]: listPage([morningPlan], { total: 2 }),
+        });
+
+        const plans = await getUpcomingPlans(MORNING);
+
+        expect(calledUrls(fetchMock)).toEqual([upcomingUrl(MORNING), nextPage]);
+        expect(plans.map(({ id, serviceTypeId }) => [id, serviceTypeId])).toEqual([
+            ["101", MORNING],
+            ["103", MORNING],
+        ]);
+    });
+
+    test("is empty when nothing lies ahead", async () => {
+        stubFetchRoutes({ [upcomingUrl(EVENING)]: listPage([]) });
+        await expect(getUpcomingPlans(EVENING)).resolves.toEqual([]);
+    });
+
+    test("fetchUpcomingPlans reads the same, afresh every time", async () => {
+        const fetchMock = stubFetchRoutes({ [upcomingUrl(MORNING)]: listPage([morningPlan]) });
+        await expect(fetchUpcomingPlans(MORNING)).resolves.toMatchObject([{ id: "101" }]);
+        await fetchUpcomingPlans(MORNING);
+        expect(calledUrls(fetchMock)).toEqual([upcomingUrl(MORNING), upcomingUrl(MORNING)]);
+        await expect(fetchUpcomingPlans("0")).rejects.toBeInstanceOf(InvalidPcoIdError);
+    });
+
+    test("refuses an id that is not a Planning Center id before fetching", async () => {
+        const fetchMock = stubFetchRoutes({});
+        await expect(getUpcomingPlans("x")).rejects.toBeInstanceOf(InvalidPcoIdError);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("lets a failure through", async () => {
+        stubFetchRoutes({ [upcomingUrl(MORNING)]: () => json({ errors: [] }, { status: 500 }) });
+        await expect(getUpcomingPlans(MORNING)).rejects.toBeInstanceOf(PcoError);
     });
 });

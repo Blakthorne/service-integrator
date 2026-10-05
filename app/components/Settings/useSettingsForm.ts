@@ -19,6 +19,15 @@ export interface SettingsForm {
     values: FormValues;
     /** Change one field (ignored while a save is under way). */
     setValue: (name: string, value: string) => void;
+    /**
+     * Change the fields as a whole, for a form whose rows come and go (the
+     * Credits form's roles): `update` gets the fields and gives them back
+     * with a row added, removed or moved. Ignored while a save is under way,
+     * which it says by returning false. A refusal's marks name fields, which
+     * no longer mean what they did once rows move, so a refusal on screen is
+     * cleared.
+     */
+    replaceValues: (update: (current: FormValues) => FormValues) => boolean;
     /** True while the fields show exactly what the last save stored, so "Saved." is true. */
     saved: boolean;
     /** The form's `onSubmit`. */
@@ -81,6 +90,14 @@ export function useSettingsForm(
             if (!saving.current) {
                 setValues((current) => ({ ...current, [name]: value }));
             }
+        },
+        replaceValues: (update) => {
+            if (saving.current) {
+                return false;
+            }
+            setValues(update);
+            setState((current) => (current.status === "error" ? IDLE_FORM : current));
+            return true;
         },
         saved: isSaved(values, state),
         onSubmit: (event) => {
