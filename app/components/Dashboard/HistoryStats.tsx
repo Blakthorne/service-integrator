@@ -135,6 +135,8 @@ export default function HistoryStats({ history }: HistoryStatsProps) {
                 )}
                 <div className="px-4 sm:px-6 py-3 border-t border-gray-200 dark:border-gray-700">
                     <Link
+                        // No prefetch, like every link on the dashboard (convention 13).
+                        prefetch={false}
                         href={routes.reports()}
                         className={`text-sm font-medium ${LINK_CLASS}`}
                     >
