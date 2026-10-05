@@ -287,12 +287,13 @@ function readRepeatWarnings(
  * note categories, in parallel (four requests); then find the songs'
  * catalog links and suggestions, the plan's saved choices, the settings,
  * which of its notes the app wrote and which of its songs were sung lately
- * in the database (at most eleven queries), and compare the hymnal notes. PCO
- * errors in the plan, its service type or its items pass through (wrap the
- * call in orNotFound to turn a missing plan into a 404). Nothing else does:
- * categories or a database that cannot be read leave the plan without what
- * they would give, each with the reason (`catalogError`, `selectionsError`,
- * `settingsError`, `hymnNoteStatus`).
+ * in the database (at most ten queries, eleven when its song items have
+ * notes), and compare the hymnal notes. PCO errors in the plan, its service
+ * type or its items pass through (wrap the call in orNotFound to turn a
+ * missing plan into a 404). Nothing else does: categories or a database that
+ * cannot be read leave the plan without what they would give, each with the
+ * reason (`catalogError`, `selectionsError`, `settingsError`,
+ * `hymnNoteStatus`).
  */
 export const getPlanDetail = cache(
     async (serviceTypeId: string, planId: string): Promise<PlanDetail> => {
