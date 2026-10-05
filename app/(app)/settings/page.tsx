@@ -5,6 +5,7 @@ import CreditsCard from "@/app/components/Settings/CreditsCard";
 import DataCard from "@/app/components/Settings/DataCard";
 import DatabaseCard from "@/app/components/Settings/DatabaseCard";
 import EmailCard from "@/app/components/Settings/EmailCard";
+import HistorySyncCard from "@/app/components/Settings/HistorySyncCard";
 import HymnalNotesCard from "@/app/components/Settings/HymnalNotesCard";
 import PcoSyncCard from "@/app/components/Settings/PcoSyncCard";
 import RecentWritesCard from "@/app/components/Settings/RecentWritesCard";
@@ -19,7 +20,11 @@ import { getCreditLabelSets } from "@/lib/queries/credits";
 import { getEmailStatus } from "@/lib/queries/email";
 import { getHymnNoteCategories } from "@/lib/queries/hymnNotes";
 import { getRecentWrites, getSettings, getSettingsIssues } from "@/lib/queries/settings";
-import { getDatabaseStatus, getLastPcoSongsSync } from "@/lib/queries/system";
+import {
+    getDatabaseStatus,
+    getLastHistorySync,
+    getLastPcoSongsSync,
+} from "@/lib/queries/system";
 import { PCO_WAIT_MS, pcoTimedOutReason } from "@/lib/settingsText";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -28,7 +33,7 @@ export const metadata: Metadata = { title: "Settings" };
  * The Settings page. The everyday settings come first, a card and a form
  * each (Copyright, Credits, Schedule text, Hymnal notes, Repeat warnings,
  * Email), then what the app has written to Planning Center, then the song
- * sync and the database.
+ * sync, the plan history sync and the database.
  *
  * The Data card, last, exports the catalog as a JSON file. Everything
  * else reads the local database (and, for the Email card, the server's
@@ -55,6 +60,7 @@ export default function SettingsPage() {
     const recentWrites = getRecentWrites();
     const status = getDatabaseStatus();
     const sync = getLastPcoSongsSync();
+    const historySync = getLastHistorySync();
     const emailStatus = getEmailStatus();
     const categories = withDeadline(getHymnNoteCategories(), PCO_WAIT_MS, () => ({
         ok: false as const,
@@ -65,7 +71,7 @@ export default function SettingsPage() {
         <div className="font-sans">
             <PageHeader
                 title="Settings"
-                description="The text the app writes, the email it sends, what it writes to Planning Center, the song sync, the database and an export of the catalog."
+                description="The text the app writes, the email it sends, what it writes to Planning Center, the song and plan history syncs, the database and an export of the catalog."
             />
             <div className="space-y-6">
                 <SettingsIssuesCard issues={issues} error={error} />
@@ -87,6 +93,7 @@ export default function SettingsPage() {
                 />
                 <RecentWritesCard recent={recentWrites} />
                 <PcoSyncCard status={sync} />
+                <HistorySyncCard status={historySync} />
                 <DatabaseCard status={status} />
                 <DataCard />
             </div>

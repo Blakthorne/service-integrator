@@ -4,7 +4,7 @@ import { describeHistory } from "@/lib/reportsView";
 import SyncNowButton from "./SyncNowButton";
 import SyncRunStatus from "./SyncRunStatus";
 
-interface HistorySyncStatusProps {
+interface HistorySyncDetailsProps {
     /** The latest run of the history sync, finished or not, or null before the first. */
     lastRun: SyncRun | null;
     /** What the history holds. */
@@ -15,10 +15,10 @@ const LABEL_CLASS = "text-sm font-medium text-gray-500 dark:text-gray-400";
 const VALUE_CLASS = "mt-1 text-gray-900 dark:text-gray-100";
 
 /**
- * The plan history sync's status, shared by Settings and Reports: when it
+ * The plan history sync's details, shared by Settings and Reports: when it
  * last ran and how it went, what the history holds, and "Sync history now".
  */
-export default function HistorySyncStatus({ lastRun, counts }: HistorySyncStatusProps) {
+export default function HistorySyncDetails({ lastRun, counts }: HistorySyncDetailsProps) {
     return (
         <>
             <dl className="mb-4 space-y-3">

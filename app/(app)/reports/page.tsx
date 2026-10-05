@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import CatalogCard from "@/app/components/Catalog/CatalogCard";
 import ReportsView from "@/app/components/Reports/ReportsView";
-import HistorySyncStatus from "@/app/components/Settings/HistorySyncStatus";
+import HistorySyncDetails from "@/app/components/Settings/HistorySyncDetails";
 import EmptyState from "@/app/components/ui/EmptyState";
 import LoadingState from "@/app/components/ui/LoadingState";
 import PageHeader from "@/app/components/ui/PageHeader";
@@ -40,10 +40,10 @@ export default function ReportsPage() {
                 <CatalogCard title="Plan history" headingId="plan-history-heading">
                     <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
                         The app keeps a copy of which songs each plan held, read from Planning
-                        Center once a day and when the server starts. A song counts as sung in a
-                        plan dated before today; one in a later plan is only scheduled.
+                        Center once a day. A song counts as sung in a plan dated before today;
+                        one in a later plan is only scheduled.
                     </p>
-                    <HistorySyncStatus lastRun={reports.lastRun} counts={reports.history} />
+                    <HistorySyncDetails lastRun={reports.lastRun} counts={reports.history} />
                 </CatalogCard>
                 {reports.history.plans === 0 ? (
                     <EmptyState
