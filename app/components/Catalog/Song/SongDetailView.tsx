@@ -6,6 +6,7 @@ import CreditsCard from "./CreditsCard";
 import EntriesCard from "./EntriesCard";
 import HymnCard from "./HymnCard";
 import PcoLinkCard from "./PcoLinkCard";
+import SongHistorySection, { type SongHistoryInput } from "./SongHistorySection";
 import TagsCard from "./TagsCard";
 import ToLearnCard from "./ToLearnCard";
 import TuneCard from "./TuneCard";
@@ -30,6 +31,8 @@ interface SongDetailViewProps {
     tagGroups: PcoTagGroup[];
     /** The linked song's tags, as the mirror has them. */
     songTags: PcoTag[];
+    /** What its History card shows; null for a song that is not linked, which has no history. */
+    history: SongHistoryInput | null;
 }
 
 /**
@@ -38,8 +41,9 @@ interface SongDetailViewProps {
  * then whether it is marked to learn, then its link to Planning Center
  * (with Add to a plan, or Create in Planning Center), and, for a song
  * linked to one the app's copy of the library has, its credits and its
- * tags. Server components, except the Books, Hymn, To learn, Planning
- * Center, Credits and Tags cards, which edit. The Hymn card is keyed by
+ * tags, and, for a song that is linked, its history: when it was sung.
+ * Server components, except the Books, Hymn, To learn, Planning Center,
+ * Credits and Tags cards, which edit. The Hymn card is keyed by
  * the hymn, so a merge that leaves the page on this song starts it
  * afresh; the last two are keyed by the Planning Center song, so a new
  * link starts them afresh.
@@ -52,6 +56,7 @@ export default function SongDetailView({
     newPcoSongTitle,
     tagGroups,
     songTags,
+    history,
 }: SongDetailViewProps) {
     const linkedSong = song.pcoSongId !== null && pcoSong !== null ? pcoSong : null;
     return (
@@ -102,11 +107,7 @@ export default function SongDetailView({
                     />
                 </>
             )}
-            {/*
-              Room for the card a later phase adds below, full width and only
-              once it works (no placeholders): HistoryCard (phase 6), when the
-              song was sung.
-            */}
+            {history && <SongHistorySection {...history} />}
         </div>
     );
 }
