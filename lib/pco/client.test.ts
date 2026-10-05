@@ -1,5 +1,18 @@
+import { inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { PcoError, PcoUrlError, pcoFetch, pcoFetchAll } from "./client";
+import {
+    PcoError,
+    PcoUrlError,
+    PcoValidationError,
+    jsonApi,
+    pcoFetch,
+    pcoFetchAll,
+    pcoMutate,
+    toMany,
+    toOne,
+} from "./client";
+import { InvalidPcoIdError } from "./ids";
+import { calledRequests, stubFetchRoutes, stubPcoPacer } from "./testing";
 
 const BASE = "https://api.planningcenteronline.com/services/v2";
 const AUTH = `Basic ${Buffer.from("id:tok").toString("base64")}`;
@@ -613,5 +626,752 @@ describe("rate limiting (429)", () => {
             status: 503,
         });
         expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("jsonApi", () => {
+    test("builds a JSON:API body from the type and attributes", () => {
+        expect(jsonApi("Song", { title: "Amazing Grace", ccli_number: 22025 })).toStrictEqual({
+            data: { type: "Song", attributes: { title: "Amazing Grace", ccli_number: 22025 } },
+        });
+    });
+
+    test("adds the relationships, each built with toOne", () => {
+        const body = jsonApi(
+            "ItemNote",
+            { content: "R-396 / G-317" },
+            { item_note_category: toOne("ItemNoteCategory", "123") }
+        );
+        expect(body).toStrictEqual({
+            data: {
+                type: "ItemNote",
+                attributes: { content: "R-396 / G-317" },
+                relationships: {
+                    item_note_category: { data: { type: "ItemNoteCategory", id: "123" } },
+                },
+            },
+        });
+    });
+
+    test.each(["", "0", "01", "1.5", "../1", "1/2", " 1"])("toOne rejects the ID %j", (id) => {
+        expect(() => toOne("Song", id)).toThrow(InvalidPcoIdError);
+    });
+
+    test("toMany builds a to-many relationship, as assign_tags takes", () => {
+        expect(
+            jsonApi("TagAssignment", {}, { tags: toMany("Tag", ["11", "12"]) })
+        ).toStrictEqual({
+            data: {
+                type: "TagAssignment",
+                attributes: {},
+                relationships: {
+                    tags: {
+                        data: [
+                            { type: "Tag", id: "11" },
+                            { type: "Tag", id: "12" },
+                        ],
+                    },
+                },
+            },
+        });
+    });
+
+    test("toMany allows an empty list", () => {
+        expect(toMany("Tag", [])).toStrictEqual({ data: [] });
+    });
+
+    test.each([[["11", "../12"]], [["0"]], [["11", ""]]])("toMany rejects the IDs %j", (ids) => {
+        expect(() => toMany("Tag", ids)).toThrow(InvalidPcoIdError);
+    });
+});
+
+describe("pcoMutate", () => {
+    const songBody = jsonApi("Song", { title: "Amazing Grace" });
+    const song = { data: { type: "Song", id: "9", attributes: { title: "Amazing Grace" } } };
+
+    test.each([
+        ["POST", "/songs", 201],
+        ["PATCH", "/songs/9", 200],
+    ] as const)(
+        "%s sends the JSON body with auth and a JSON content type, uncached and refusing redirects",
+        async (method, path, status) => {
+            const fetchMock = stubFetchRoutes({
+                [`${method} ${BASE}${path}`]: () => json(song, { status }),
+            });
+
+            await expect(pcoMutate(method, path, songBody)).resolves.toEqual(song);
+
+            expect(calledRequests(fetchMock)).toEqual([
+                { method, url: `${BASE}${path}`, body: songBody },
+            ]);
+            expect(fetchMock).toHaveBeenCalledWith(
+                `${BASE}${path}`,
+                expect.objectContaining({
+                    method,
+                    body: JSON.stringify(songBody),
+                    cache: "no-store",
+                    redirect: "error",
+                    headers: { Authorization: AUTH, "Content-Type": "application/json" },
+                    signal: expect.any(AbortSignal),
+                })
+            );
+        }
+    );
+
+    test("DELETE sends no body and resolves to null on 204 No Content", async () => {
+        const fetchMock = stubFetchRoutes({
+            [`DELETE ${BASE}/songs/9`]: () => new Response(null, { status: 204 }),
+        });
+
+        await expect(pcoMutate("DELETE", "/songs/9")).resolves.toBeNull();
+
+        const [[, init]] = fetchMock.mock.calls;
+        expect(init).not.toHaveProperty("body");
+        expect(init).toMatchObject({ method: "DELETE", cache: "no-store", redirect: "error" });
+    });
+
+    test("resolves to null for a 2xx with an empty body", async () => {
+        stubFetchRoutes({
+            [`PATCH ${BASE}/songs/9`]: () => new Response("", { status: 200 }),
+        });
+        await expect(pcoMutate("PATCH", "/songs/9", songBody)).resolves.toBeNull();
+    });
+
+    test("POSTs assign_tags with a to-many body and resolves to null on its 204", async () => {
+        const fetchMock = stubFetchRoutes({
+            [`POST ${BASE}/songs/9/assign_tags`]: () => new Response(null, { status: 204 }),
+        });
+        const body = jsonApi("TagAssignment", {}, { tags: toMany("Tag", ["11", "12"]) });
+
+        await expect(pcoMutate("POST", "/songs/9/assign_tags", body)).resolves.toBeNull();
+
+        expect(calledRequests(fetchMock)).toEqual([
+            { method: "POST", url: `${BASE}/songs/9/assign_tags`, body },
+        ]);
+    });
+
+    test.each([
+        "/service_types/../../../people/v2/people%3F/plans",
+        "/service_types/%2e%2e/%2E%2E/%2e%2e/people/v2/people",
+        "/../people/v2/people",
+        "songs",
+        "https://evil.example/services/v2/songs",
+    ])("refuses %j before any fetch", async (path) => {
+        const fetchMock = stubFetchRoutes({});
+        await expect(pcoMutate("POST", path, songBody)).rejects.toBeInstanceOf(PcoUrlError);
+        await expect(pcoMutate("DELETE", path)).rejects.toBeInstanceOf(PcoUrlError);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("throws a PcoError with the status and path on a 404", async () => {
+        stubFetchRoutes({
+            [`PATCH ${BASE}/songs/404`]: () => json({ errors: [] }, { status: 404 }),
+        });
+
+        const error = await pcoMutate("PATCH", "/songs/404", songBody).catch(
+            (e: unknown) => e
+        );
+
+        expect(error).toBeInstanceOf(PcoError);
+        expect(error).toMatchObject({
+            name: "PcoError",
+            status: 404,
+            path: "/services/v2/songs/404",
+        });
+    });
+
+    test("retries a 429 POST once after Retry-After, as PCO refused it unprocessed", async () => {
+        vi.useFakeTimers();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0 ? tooManyRequests("2") : json(song, { status: 201 })
+        );
+
+        const result = pcoMutate("POST", "/songs", songBody);
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(result).resolves.toEqual(song);
+        expect(calledRequests(fetchMock)).toEqual([
+            { method: "POST", url: `${BASE}/songs`, body: songBody },
+            { method: "POST", url: `${BASE}/songs`, body: songBody },
+        ]);
+    });
+
+    test("gives each attempt a 15-second timeout, and never retries a write that timed out", async () => {
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        const abort = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+        const fetchMock = vi.fn().mockRejectedValue(abort);
+        vi.stubGlobal("fetch", fetchMock);
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect(timeout.mock.calls).toEqual([[15_000]]);
+        expect((error as Error).message).toBe(
+            "Planning Center did not respond within 15 s (/services/v2/songs)"
+        );
+        expect((error as Error).cause).toBe(abort);
+        // PCO may have applied it, so sending it again could apply it twice.
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("no error it throws carries the credentials", async () => {
+        vi.stubEnv("PLANNING_CENTER_ID", "app-id");
+        vi.stubEnv("PLANNING_CENTER_TOKEN", "s3cret-pat");
+        const encoded = Buffer.from("app-id:s3cret-pat").toString("base64");
+        const timedOut = new DOMException("The operation was aborted due to timeout", "TimeoutError");
+        const fetchMock = stubFetchRoutes({
+            [`PATCH ${BASE}/songs/404`]: () => json({ errors: [] }, { status: 404 }),
+            [`PATCH ${BASE}/songs/9`]: () =>
+                json({ errors: [{ detail: "Title can't be blank" }] }, { status: 422 }),
+            [`POST ${BASE}/songs`]: () => tooManyRequests(),
+            [`DELETE ${BASE}/songs/9`]: () => Promise.reject(timedOut),
+        });
+
+        const errors = await Promise.all(
+            [
+                pcoMutate("PATCH", "/songs/404", songBody),
+                pcoMutate("PATCH", "/songs/9", songBody),
+                pcoMutate("POST", "/songs", songBody),
+                pcoMutate("DELETE", "/songs/9"),
+                pcoMutate("POST", "/../people/v2/people", songBody),
+            ].map((promise) => promise.then(() => null, (e: unknown) => e))
+        );
+
+        // The requests did carry them, so the check below is not vacuous.
+        expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe(`Basic ${encoded}`);
+        for (const error of errors) {
+            expect(error).toBeInstanceOf(Error);
+            const printed = inspect(error, { depth: null });
+            for (const secret of ["s3cret-pat", encoded, "Basic "]) {
+                expect(printed).not.toContain(secret);
+            }
+        }
+    });
+});
+
+describe("validation errors (422)", () => {
+    const songBody = jsonApi("Song", { title: "" });
+    const MESSAGE = "Planning Center API responded with status: 422 (/services/v2/songs)";
+
+    /** Stub POST /songs with a 422 built by `makeResponse`. */
+    function rejectSong(makeResponse: () => Response) {
+        return stubFetchRoutes({ [`POST ${BASE}/songs`]: makeResponse });
+    }
+
+    // The two 422s the live spike saw: an item note with no category, and a
+    // song attribute PCO will not assign.
+    const MISSING_CATEGORY = {
+        detail: "must exist",
+        status: "422",
+        title: "Validation Error",
+        source: { parameter: "category" },
+        meta: { resource: "PlanItemNote", associated_resources: [] },
+    };
+    const FORBIDDEN_ATTRIBUTE = {
+        status: "422",
+        title: "Forbidden Attribute",
+        detail: "notes cannot be assigned",
+    };
+
+    test.each([
+        [
+            "a missing category",
+            MISSING_CATEGORY,
+            { title: "Validation Error", detail: "must exist", parameter: "category" },
+            "category: must exist",
+        ],
+        [
+            "a forbidden attribute",
+            FORBIDDEN_ATTRIBUTE,
+            { title: "Forbidden Attribute", detail: "notes cannot be assigned" },
+            "Forbidden Attribute: notes cannot be assigned",
+        ],
+    ])("a 422 for %s is a PcoValidationError naming the issue", async (_case, body, issue, line) => {
+        const fetchMock = rejectSong(() => json({ errors: [body] }, { status: 422 }));
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(PcoValidationError);
+        expect(error).toBeInstanceOf(PcoError);
+        expect(error).toMatchObject({
+            name: "PcoValidationError",
+            status: 422,
+            path: "/services/v2/songs",
+            details: [line],
+        });
+        expect((error as PcoValidationError).errors).toEqual([issue]);
+        expect((error as Error).message).toBe(`${MESSAGE}: ${JSON.stringify([line])}`);
+        // A 422 is never retried.
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test("names every issue a body lists, in order", async () => {
+        rejectSong(() => json({ errors: [MISSING_CATEGORY, FORBIDDEN_ATTRIBUTE] }, { status: 422 }));
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect((error as PcoValidationError).details).toEqual([
+            "category: must exist",
+            "Forbidden Attribute: notes cannot be assigned",
+        ]);
+        expect((error as Error).message).toBe(
+            `${MESSAGE}: ["category: must exist","Forbidden Attribute: notes cannot be assigned"]`
+        );
+    });
+
+    test.each([
+        [
+            { title: "Validation Error", detail: "must exist", parameter: "category" },
+            "category: must exist",
+        ],
+        [{ detail: "must exist", parameter: "category" }, "category: must exist"],
+        [{ title: "Validation Error", parameter: "category" }, "category: Validation Error"],
+        [{ parameter: "category" }, "category"],
+        [
+            { title: "Forbidden Attribute", detail: "notes cannot be assigned" },
+            "Forbidden Attribute: notes cannot be assigned",
+        ],
+        [{ detail: "must exist" }, "must exist"],
+        [{ title: "Validation Error" }, "Validation Error"],
+    ])("describes the issue %j as %j", (issue, line) => {
+        expect(new PcoValidationError("/services/v2/songs", [issue]).details).toEqual([line]);
+    });
+
+    test.each([
+        ["a body that is not JSON", () => new Response("<html>Unprocessable</html>", { status: 422 })],
+        ["an empty body", () => new Response(null, { status: 422 })],
+        ["JSON null", () => json(null, { status: 422 })],
+        ["JSON without errors", () => json({ message: "invalid" }, { status: 422 })],
+        ["errors that is not a list", () => json({ errors: "invalid" }, { status: 422 })],
+    ])("%s gives a PcoValidationError with no details", async (_case, makeResponse) => {
+        rejectSong(makeResponse);
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(PcoValidationError);
+        expect(error).toMatchObject({ status: 422, errors: [], details: [] });
+        expect((error as Error).message).toBe(MESSAGE);
+    });
+
+    test("keeps only fields that are non-empty strings, and skips an error with none", async () => {
+        rejectSong(() =>
+            json(
+                {
+                    errors: [
+                        { title: "Validation Error" },
+                        { detail: 42, title: "", source: { parameter: 7 } },
+                        { detail: "must exist", source: "category" },
+                        { detail: "", source: null, meta: {} },
+                        { source: { parameter: "category" } },
+                        null,
+                        "invalid",
+                    ],
+                },
+                { status: 422 }
+            )
+        );
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect((error as PcoValidationError).errors).toEqual([
+            { title: "Validation Error" },
+            { detail: "must exist" },
+            { parameter: "category" },
+        ]);
+        expect((error as PcoValidationError).details).toEqual([
+            "Validation Error",
+            "must exist",
+            "category",
+        ]);
+    });
+
+    test("a body that fails while being read gives no details", async () => {
+        const body = new ReadableStream({
+            pull: (controller) => controller.error(new TypeError("terminated")),
+        });
+        rejectSong(() => new Response(body, { status: 422 }));
+        await expect(pcoMutate("POST", "/songs", songBody)).rejects.toMatchObject({
+            name: "PcoValidationError",
+            errors: [],
+            details: [],
+        });
+    });
+
+    test("quotes the details in the message, so a detail cannot forge a log line", async () => {
+        rejectSong(() => json({ errors: [{ detail: "bad\nFAKE LOG LINE" }] }, { status: 422 }));
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect((error as Error).message).toBe(`${MESSAGE}: ["bad\\nFAKE LOG LINE"]`);
+        expect((error as PcoValidationError).details).toEqual(["bad\nFAKE LOG LINE"]);
+    });
+
+    test("a 422 to a GET is a PcoValidationError too", async () => {
+        stubFetch(() => json({ errors: [{ detail: "Unknown filter" }] }, { status: 422 }));
+        await expect(pcoFetch("/service_types/1/plans", "plans")).rejects.toMatchObject({
+            name: "PcoValidationError",
+            status: 422,
+            details: ["Unknown filter"],
+        });
+    });
+
+    test.each([400, 404, 409, 500])("a %i stays a plain PcoError", async (status) => {
+        rejectSong(() => json({ errors: [{ detail: "Something" }] }, { status }));
+
+        const error = await pcoMutate("POST", "/songs", songBody).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(PcoError);
+        expect(error).not.toBeInstanceOf(PcoValidationError);
+        expect(error).toMatchObject({ name: "PcoError", status });
+        expect(error).not.toHaveProperty("errors");
+        expect(error).not.toHaveProperty("details");
+    });
+});
+
+describe("paced requests", () => {
+    const songBody = jsonApi("Song", { title: "Amazing Grace" });
+
+    /** Swap in the test's own pacer, whose turns are logged and granted at once. */
+    function spyOnPacer(log: string[]) {
+        return vi.spyOn(stubPcoPacer(), "acquire").mockImplementation(async () => {
+            log.push("turn");
+        });
+    }
+
+    /** Stub fetch, logging each request's method and URL; `respond` answers it. */
+    function stubLoggedFetch(log: string[], respond: (call: number) => Response) {
+        let call = 0;
+        const fetchMock = vi
+            .fn()
+            .mockImplementation(async (url: string, init?: RequestInit) => {
+                log.push(`${init?.method ?? "GET"} ${url}`);
+                return respond(call++);
+            });
+        vi.stubGlobal("fetch", fetchMock);
+        return fetchMock;
+    }
+
+    test("are off by default: no read or write waits for the pacer", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        stubFetch((url) =>
+            json(
+                url === `${BASE}/songs`
+                    ? page([{ id: "1" }], { next: `${BASE}/songs?offset=1` })
+                    : page([{ id: "2" }])
+            )
+        );
+
+        await pcoFetch("/service_types/1", "serviceTypes");
+        await pcoFetchAll("/songs", "songs");
+        await pcoMutate("PATCH", "/songs/9", songBody);
+
+        expect(acquire).not.toHaveBeenCalled();
+    });
+
+    test("pcoFetchAll takes a turn before every page it follows, and before a 429 retry", async () => {
+        vi.useFakeTimers();
+        const log: string[] = [];
+        const acquire = spyOnPacer(log);
+        stubLoggedFetch(log, (call) => {
+            if (call === 0) return json(page([{ id: "1" }], { next: `${BASE}/songs?offset=1` }));
+            if (call === 1) return tooManyRequests("1");
+            if (call === 2) return json(page([{ id: "2" }], { next: `${BASE}/songs?offset=2` }));
+            return json(page([{ id: "3" }]));
+        });
+
+        const result = pcoFetchAll("/songs", "songs", { maxPages: 3, paced: true });
+        await vi.advanceTimersByTimeAsync(1000);
+
+        await expect(result).resolves.toMatchObject({
+            data: [{ id: "1" }, { id: "2" }, { id: "3" }],
+        });
+        expect(log).toEqual([
+            "turn",
+            `GET ${BASE}/songs`,
+            "turn",
+            `GET ${BASE}/songs?offset=1`,
+            "turn",
+            `GET ${BASE}/songs?offset=1`,
+            "turn",
+            `GET ${BASE}/songs?offset=2`,
+        ]);
+        expect(acquire).toHaveBeenCalledTimes(4);
+    });
+
+    test("pcoFetch and pcoMutate take one turn per request", async () => {
+        const log: string[] = [];
+        spyOnPacer(log);
+        stubLoggedFetch(log, () => json({ data: {} }));
+
+        await pcoFetch("/service_types/1", "serviceTypes", { paced: true });
+        await pcoMutate("PATCH", "/songs/9", songBody, { paced: true });
+        await pcoMutate("DELETE", "/songs/9", undefined, { paced: true });
+
+        expect(log).toEqual([
+            "turn",
+            `GET ${BASE}/service_types/1`,
+            "turn",
+            `PATCH ${BASE}/songs/9`,
+            "turn",
+            `DELETE ${BASE}/songs/9`,
+        ]);
+    });
+
+    test("sends nothing, and starts no timeout, until the pacer grants the turn", async () => {
+        let grant = () => {};
+        vi.spyOn(stubPcoPacer(), "acquire").mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    grant = resolve;
+                })
+        );
+        const timeout = vi.spyOn(AbortSignal, "timeout");
+        const fetchMock = stubFetch(() => json({ data: { id: "9" } }, { status: 201 }));
+
+        const result = pcoMutate("POST", "/songs", songBody, { paced: true });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(timeout).not.toHaveBeenCalled();
+
+        grant();
+        await expect(result).resolves.toEqual({ data: { id: "9" } });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(timeout.mock.calls).toEqual([[15_000]]);
+    });
+
+    test("a URL the guard refuses takes no turn", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire").mockResolvedValue(undefined);
+        const fetchMock = stubFetch(() =>
+            json(page([{ id: "1" }], { next: "https://evil.example/services/v2/songs" }))
+        );
+
+        await expect(
+            pcoMutate("POST", "/../people/v2/people", songBody, { paced: true })
+        ).rejects.toBeInstanceOf(PcoUrlError);
+        expect(acquire).not.toHaveBeenCalled();
+
+        // The first page takes its turn; the refused links.next takes none.
+        await expect(pcoFetchAll("/songs", "songs", { paced: true })).rejects.toBeInstanceOf(
+            PcoUrlError
+        );
+        expect(acquire).toHaveBeenCalledTimes(1);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("what every response tells the pacer", () => {
+    /** PCO's rate-limit headers. */
+    const rate = (limit: number, count: number, period = 20) => ({
+        "x-pco-api-request-rate-limit": String(limit),
+        "x-pco-api-request-rate-period": String(period),
+        "x-pco-api-request-rate-count": String(count),
+    });
+
+    test("an unpaced page load sets the budget", async () => {
+        const pacer = stubPcoPacer();
+        stubFetch(() => json({ data: {} }, { headers: rate(10, 1, 30) }));
+
+        await pcoFetch("/service_types/1", "serviceTypes");
+
+        expect(pacer.limits()).toEqual({ limit: 10, periodMs: 30_000, budget: 8 });
+    });
+
+    test("a failed response does too", async () => {
+        const pacer = stubPcoPacer();
+        stubFetch(() => json({ errors: [] }, { status: 404, headers: rate(10, 1) }));
+
+        await expect(pcoFetch("/service_types/1", "serviceTypes")).rejects.toMatchObject({
+            status: 404,
+        });
+        expect(pacer.limits().limit).toBe(10);
+    });
+
+    test("a busy window seen by a page load holds paced requests until it rolls over", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            json({ data: {} }, { headers: rate(100, call === 0 ? 85 : 1) })
+        );
+
+        await pcoFetch("/service_types/1", "serviceTypes");
+        const paced = pcoFetch("/service_types/1", "serviceTypes", { paced: true });
+
+        await vi.advanceTimersByTimeAsync(19_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(paced).resolves.toEqual({ data: {} });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test("a page load never waits, however busy the window", async () => {
+        stubPcoPacer();
+        const fetchMock = stubFetch(() => json({ data: {} }, { headers: rate(10, 25) }));
+
+        for (let i = 0; i < 3; i++) {
+            await pcoFetch("/service_types/1", "serviceTypes");
+        }
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    test("a paced pcoFetchAll slows down as soon as a page lowers the limit", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        // PCO drops to 10 per 20 s; the first page is already the 8th request.
+        const fetchMock = stubFetch((_url, call) => {
+            const links = call === 0 ? { next: `${BASE}/songs?offset=1` } : {};
+            return json(page([{ id: String(call) }], links), {
+                headers: rate(10, call === 0 ? 8 : 1),
+            });
+        });
+
+        const result = pcoFetchAll("/songs", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(19_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(result).resolves.toMatchObject({ data: [{ id: "0" }, { id: "1" }] });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe("429s on paced requests", () => {
+    const songBody = jsonApi("Song", { title: "Amazing Grace" });
+
+    /** A 429 with these headers, as PCO sends it. */
+    const throttled = (headers: Record<string, string> = {}) => {
+        const detail = "Rate limit exceeded: 118 of 100 requests per 20 seconds";
+        return json({ errors: [{ code: "429", detail }] }, { status: 429, headers });
+    };
+
+    test("waits out a Retry-After of any length up to 60 s, then retries the same write", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0
+                ? throttled({ "Retry-After": "60" })
+                : json({ data: { id: "9" } }, { status: 201 })
+        );
+
+        const result = pcoMutate("POST", "/songs", songBody, { paced: true });
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(result).resolves.toEqual({ data: { id: "9" } });
+        expect(calledRequests(fetchMock)).toEqual([
+            { method: "POST", url: `${BASE}/songs`, body: songBody },
+            { method: "POST", url: `${BASE}/songs`, body: songBody },
+        ]);
+    });
+
+    test("retries up to 3 times, then throws its PcoError 429", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch(() => throttled({ "Retry-After": "1" }));
+
+        const result = pcoFetch("/songs/9", "songs", { paced: true });
+        const settled = expect(result).rejects.toMatchObject({ name: "PcoError", status: 429 });
+        await vi.advanceTimersByTimeAsync(3_000);
+        await settled;
+        expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    test("past the 60 s cap, throws its PcoError 429 at once and holds paced requests 60 s", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0 ? throttled({ "Retry-After": "61" }) : json({ data: {} })
+        );
+
+        await expect(pcoFetch("/songs/9", "songs", { paced: true })).rejects.toMatchObject({
+            name: "PcoError",
+            status: 429,
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const next = pcoFetch("/songs/10", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(59_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(next).resolves.toEqual({ data: {} });
+    });
+
+    test("holds every paced request, not just the one that hit it, while page loads go on", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        let first = true;
+        const fetchMock = stubFetchRoutes({
+            [`${BASE}/songs/1`]: () => {
+                const answer = first ? throttled({ "Retry-After": "10" }) : json({ data: { id: "1" } });
+                first = false;
+                return answer;
+            },
+            [`${BASE}/songs/2`]: { data: { id: "2" } },
+            [`${BASE}/songs/3`]: { data: { id: "3" } },
+        });
+
+        const hit = pcoFetch("/songs/1", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(0);
+        const other = pcoFetch("/songs/2", "songs", { paced: true });
+        await expect(pcoFetch("/songs/3", "songs")).resolves.toEqual({ data: { id: "3" } });
+
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(calledUrls(fetchMock)).toEqual([`${BASE}/songs/1`, `${BASE}/songs/3`]);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(other).resolves.toEqual({ data: { id: "2" } });
+        await expect(hit).resolves.toEqual({ data: { id: "1" } });
+        expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+
+    test("without Retry-After, waits a whole window before retrying", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) => (call === 0 ? throttled() : json({ data: {} })));
+
+        const result = pcoFetch("/songs/9", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(19_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(result).resolves.toEqual({ data: {} });
+    });
+
+    test("trusts Retry-After over the 429's own count, which is past the limit", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0
+                ? throttled({
+                      "Retry-After": "3",
+                      "x-pco-api-request-rate-limit": "100",
+                      "x-pco-api-request-rate-period": "20",
+                      "x-pco-api-request-rate-count": "118",
+                  })
+                : json({ data: {} })
+        );
+
+        const result = pcoFetch("/songs/9", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(3_000);
+        await expect(result).resolves.toEqual({ data: {} });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test("a page load's 429 keeps its single short retry, and holds paced requests too", async () => {
+        vi.useFakeTimers();
+        stubPcoPacer();
+        const fetchMock = stubFetch((_url, call) =>
+            call === 0 ? throttled({ "Retry-After": "30" }) : json({ data: {} })
+        );
+
+        // Over 5 s: a page load fails at once, as it always has.
+        await expect(pcoFetch("/songs/9", "songs")).rejects.toMatchObject({ status: 429 });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        const paced = pcoFetch("/songs/10", "songs", { paced: true });
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(paced).resolves.toEqual({ data: {} });
     });
 });

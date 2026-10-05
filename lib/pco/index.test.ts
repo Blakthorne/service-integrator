@@ -1,9 +1,28 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import * as barrel from "@/lib/pco";
 import { fetchAllSongs, pcoAuthHeaders } from "@/lib/pco";
 
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+});
+
+describe("the barrel", () => {
+    test("exports PcoValidationError, the PcoError for a 422", () => {
+        const error = new barrel.PcoValidationError("/services/v2/songs", [
+            { title: "Validation Error", detail: "must exist", parameter: "category" },
+        ]);
+        expect(error).toBeInstanceOf(barrel.PcoError);
+        expect(error).toMatchObject({ status: 422, details: ["category: must exist"] });
+    });
+
+    test("leaves out the write plumbing: only modules inside lib/pco write to PCO", () => {
+        const exported = Object.keys(barrel);
+        expect(exported).toContain("PcoError");
+        for (const name of ["pcoMutate", "jsonApi", "toOne", "toMany"]) {
+            expect(exported).not.toContain(name);
+        }
+    });
 });
 
 describe("pcoAuthHeaders", () => {

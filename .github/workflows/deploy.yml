@@ -28,7 +28,7 @@ jobs:
               # Verify SHA at https://github.com/actions/setup-node/releases
               uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
               with:
-                  node-version: "20"
+                  node-version: "22"
                   cache: "npm"
 
             - name: Install dependencies
@@ -212,7 +212,7 @@ jobs:
                   | ssh -F ~/.ssh/config-ci \
                       -p "$DEPLOY_PORT" \
                       "$DEPLOY_USER@$DEPLOY_HOST" \
-                      'mkdir -p ~/service-integrator && cat > ~/service-integrator/.env.production && chmod 600 ~/service-integrator/.env.production'
+                      'mkdir -p ~/service-integrator ~/service-integrator-data/backups && chmod 700 ~/service-integrator-data && { cat; printf "DATABASE_PATH=%s\nDATABASE_BACKUP_DIR=%s\n" "$HOME/service-integrator-data/service-integrator.sqlite" "$HOME/service-integrator-data/backups"; } > ~/service-integrator/.env.production && chmod 600 ~/service-integrator/.env.production'
 
             - name: Extract and restart
               env:
@@ -230,6 +230,31 @@ jobs:
                   # Source it explicitly here so pm2 is on PATH regardless.
                   export NVM_DIR="${HOME}/.nvm"
                   [ -s "${NVM_DIR}/nvm.sh" ] && \. "${NVM_DIR}/nvm.sh"
+
+                  # The catalog database needs node:sqlite (Node 22.13+). Check
+                  # before extracting, so a server still on an older Node keeps
+                  # running the current build instead of a broken one.
+                  if ! node -e "require('node:sqlite')" 2>/dev/null; then
+                      echo "Node $(node --version) on the server has no node:sqlite." >&2
+                      echo "Install Node 22 with nvm, make it the default, then run 'pm2 update'." >&2
+                      exit 1
+                  fi
+                  # pm2 restart keeps the Node that PM2 started the app with, so
+                  # the default above is not enough: check the app's own Node too
+                  # (skipped when PM2 does not know the app yet).
+                  PM2_NODE="$(pm2 jlist 2>/dev/null | node -e '
+                      let s = "";
+                      process.stdin.on("data", (d) => (s += d)).on("end", () => {
+                          try {
+                              const app = JSON.parse(s).find((p) => p.name === "service-integrator");
+                              process.stdout.write(String(app?.pm2_env?.node_version ?? ""));
+                          } catch {}
+                      });' 2>/dev/null || true)"
+                  if [ -n "$PM2_NODE" ] && [ "${PM2_NODE%%.*}" -lt 22 ] 2>/dev/null; then
+                      echo "PM2 runs service-integrator on Node $PM2_NODE, which has no node:sqlite." >&2
+                      echo "Run 'pm2 update' so PM2 and the app move to the default Node." >&2
+                      exit 1
+                  fi
 
                   cd ~/service-integrator
                   tar -xzf /tmp/deploy.tar.gz

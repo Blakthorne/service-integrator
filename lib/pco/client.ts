@@ -1,12 +1,22 @@
 import "server-only";
 import { PCO_CACHE_POLICY, type PcoResourceKind } from "./cachePolicy";
-import type { PcoListResponse, PcoResourceIdentifier } from "./resources";
+import { assertPcoId, type PcoId } from "./ids";
+import { MAX_PACED_WAIT_SECONDS, pcoPacer, readRetryAfter } from "./pacer";
+import type {
+    PcoErrorObject,
+    PcoErrorResponse,
+    PcoListResponse,
+    PcoResourceIdentifier,
+} from "./resources";
 
 const PCO_ORIGIN = "https://api.planningcenteronline.com";
 const SERVICES_PATH = "/services/v2";
 
-/** A 429 is retried once, but only when PCO asks us to wait at most this long. */
+/** A page load retries a 429 once, and only when PCO asks it to wait at most this long. */
 const MAX_RETRY_AFTER_SECONDS = 5;
+
+/** A paced request retries a 429 up to this many times. */
+const MAX_PACED_RETRIES = 3;
 
 /** pcoFetchAll's default page limit: 5,000 rows at per_page=100. */
 const DEFAULT_MAX_PAGES = 50;
@@ -41,6 +51,48 @@ export class PcoError extends Error {
         this.name = "PcoError";
         this.status = status;
         this.path = path;
+    }
+}
+
+/** One problem a 422 names. PCO may leave out any of the fields. */
+export interface PcoValidationIssue {
+    /** The kind of problem, e.g. "Validation Error" or "Forbidden Attribute". */
+    title?: string;
+    /** What was wrong, e.g. "must exist". */
+    detail?: string;
+    /** The request parameter at fault, e.g. "category". */
+    parameter?: string;
+}
+
+/**
+ * One readable line for an issue: the parameter at fault (or else the title),
+ * then what was wrong. "category: must exist"; with no parameter, "Forbidden
+ * Attribute: notes cannot be assigned". A field PCO left out is left out.
+ */
+function describeIssue({ title, detail, parameter }: PcoValidationIssue): string {
+    const label = parameter ?? (detail === undefined ? undefined : title);
+    const text = detail ?? title;
+    return [label, text].filter((part) => part !== undefined).join(": ");
+}
+
+/**
+ * PCO refused a request as invalid (422), typically a write whose attributes
+ * failed validation. `errors` are the issues its body names, possibly none,
+ * and `details` one readable line for each, to show the user.
+ */
+export class PcoValidationError extends PcoError {
+    readonly errors: readonly PcoValidationIssue[];
+    readonly details: readonly string[];
+
+    constructor(path: string, errors: readonly PcoValidationIssue[]) {
+        super(422, path);
+        this.name = "PcoValidationError";
+        this.errors = errors;
+        this.details = errors.map(describeIssue);
+        if (this.details.length > 0) {
+            // JSON-quoted, so a detail cannot forge log lines.
+            this.message += `: ${JSON.stringify(this.details)}`;
+        }
     }
 }
 
@@ -87,17 +139,29 @@ function servicesUrl(path: string): URL {
 }
 
 /**
- * How long to wait before retrying a 429, or null for no retry: only a
- * Retry-After of whole seconds, at most MAX_RETRY_AFTER_SECONDS, qualifies.
+ * How long to wait before retrying a 429 after `retries` retries, or null to
+ * give up. A page load retries once, and only after a Retry-After of whole
+ * seconds, at most MAX_RETRY_AFTER_SECONDS. A paced request retries up to
+ * MAX_PACED_RETRIES times after its Retry-After of any length, or a whole
+ * window (`periodMs`) without one, unless that is over MAX_PACED_WAIT_SECONDS.
+ * The pacer holds every other paced request as long (Pacer.observe).
  */
-function retryDelayMs(response: Response): number | null {
-    // Optional chaining: bare test doubles ({ ok, status }) have no headers.
-    const header = response.headers?.get("Retry-After")?.trim();
-    if (!header || !/^\d+$/.test(header)) {
-        return null;
+function retryDelayMs(
+    response: Response,
+    retries: number,
+    paced: boolean,
+    periodMs: number
+): number | null {
+    const seconds = readRetryAfter(response.headers);
+    if (!paced) {
+        return retries === 0 && seconds !== undefined && seconds <= MAX_RETRY_AFTER_SECONDS
+            ? seconds * 1000
+            : null;
     }
-    const seconds = Number(header);
-    return seconds <= MAX_RETRY_AFTER_SECONDS ? seconds * 1000 : null;
+    const delayMs = seconds === undefined ? periodMs : seconds * 1000;
+    return retries < MAX_PACED_RETRIES && delayMs <= MAX_PACED_WAIT_SECONDS * 1000
+        ? delayMs
+        : null;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -117,45 +181,131 @@ function discardBody(response: Response): void {
     void response.body?.cancel().catch(() => {});
 }
 
+/** `value` when it is a non-empty string, else undefined. */
+function nonEmptyString(value: unknown): string | undefined {
+    return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/**
+ * The issues a 422's body names: each error's title, detail and
+ * source.parameter. Read defensively: a body that is not JSON, or not shaped
+ * like PCO's errors, gives none; a field that is not a non-empty string is
+ * left out, and an error with none of the three is skipped.
+ */
+async function validationIssues(response: Response): Promise<PcoValidationIssue[]> {
+    let body: unknown;
+    try {
+        body = await response.json();
+    } catch {
+        return [];
+    }
+    const errors = (body as Partial<PcoErrorResponse> | null)?.errors;
+    if (!Array.isArray(errors)) {
+        return [];
+    }
+    return errors.flatMap((error: Partial<PcoErrorObject> | null) => {
+        const title = nonEmptyString(error?.title);
+        const detail = nonEmptyString(error?.detail);
+        const parameter = nonEmptyString(error?.source?.parameter);
+        return title || detail || parameter ? [{ title, detail, parameter }] : [];
+    });
+}
+
+/**
+ * The error for a non-2xx response. A 422's body says what PCO found invalid,
+ * so it is read; any other body is released unread.
+ */
+async function responseError(response: Response, path: string): Promise<PcoError> {
+    if (response.status === 422) {
+        return new PcoValidationError(path, await validationIssues(response));
+    }
+    discardBody(response);
+    return new PcoError(response.status, path);
+}
+
 /** True for what fetch (or a body read) rejects with when its signal fires. */
 function isAbortError(error: unknown): boolean {
     const name = (error as { name?: unknown } | null)?.name;
     return name === "TimeoutError" || name === "AbortError";
 }
 
-/** One guarded request, retrying a short 429 once. Resolves to the JSON body. */
-async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
-    const init: RequestInit = {
+/** Turns a 2xx response into what the request resolves to. */
+type ReadBody = (response: Response) => Promise<unknown>;
+
+/** A GET's body, which is always JSON. */
+const readJson: ReadBody = (response) => response.json();
+
+/** A write's body: JSON, or null when there is none (204 No Content). */
+const readOptionalJson: ReadBody = async (response) => {
+    const text = await response.text();
+    return text.trim() === "" ? null : JSON.parse(text);
+};
+
+/** Options that every PCO request function takes. */
+export interface PcoRequestOptions {
+    /**
+     * Wait for the shared pacer (pacer.ts) before each request this call
+     * sends, every page pcoFetchAll follows and a 429 retry included, and
+     * ride out a 429: up to 3 retries, each after PCO's Retry-After unless
+     * that is over 60 s. Sync jobs pass `paced: true`; page loads leave it
+     * off, so they never wait on the pacer and retry a 429 only once, after
+     * at most 5 s.
+     */
+    paced?: boolean;
+}
+
+/**
+ * One guarded request, retrying a 429 as retryDelayMs allows. `init` carries
+ * what differs between calls (method, body, cache option); the auth headers,
+ * the redirect refusal and the timeout are added here, so no caller can leave
+ * them out. Resolves to `read` of the 2xx response.
+ */
+async function request(
+    url: URL,
+    init: RequestInit,
+    read: ReadBody,
+    { paced = false }: PcoRequestOptions = {}
+): Promise<unknown> {
+    const guarded: RequestInit = {
+        ...init,
         headers: pcoAuthHeaders(),
-        ...PCO_CACHE_POLICY[kind],
         // Following a redirect would re-send the token to an unguarded URL
         // (even same-origin, e.g. /people/v2), so a 3xx makes fetch reject.
         redirect: "error",
     };
     const path = url.pathname + url.search;
+    const pacer = pcoPacer();
     // A fresh timeout for each attempt; it also bounds reading the body.
-    const attempt = () =>
-        fetch(url.href, { ...init, signal: AbortSignal.timeout(PCO_TIMEOUT_MS) });
+    const send = () =>
+        fetch(url.href, { ...guarded, signal: AbortSignal.timeout(PCO_TIMEOUT_MS) });
+    const attempt = async (): Promise<Response> => {
+        // A paced attempt waits for its turn, so its timeout starts only once
+        // it is sent.
+        const response = await (paced ? pacer.acquire().then(send) : send());
+        // Every response, paced or not, tells the pacer PCO's current limit
+        // and how much of this window is used; a 429 holds paced requests.
+        pacer.observe(response);
+        return response;
+    };
 
     try {
         let response = await attempt();
-        if (!response.ok) {
-            // Headers are read only here: success mocks are bare { ok, json }.
-            const delay = response.status === 429 ? retryDelayMs(response) : null;
-            if (delay !== null) {
-                discardBody(response);
-                await sleep(delay);
-                response = await attempt();
+        for (let retries = 0; response.status === 429; retries++) {
+            const delay = retryDelayMs(response, retries, paced, pacer.limits().periodMs);
+            if (delay === null) {
+                break;
             }
-            if (!response.ok) {
-                discardBody(response);
-                throw new PcoError(response.status, path);
-            }
+            discardBody(response);
+            await sleep(delay);
+            response = await attempt();
         }
-        return await response.json();
+        if (!response.ok) {
+            throw await responseError(response, path);
+        }
+        return await read(response);
     } catch (error) {
         if (isAbortError(error)) {
-            // The path only: init holds the Authorization header.
+            // The path only: the request init holds the Authorization header.
             throw new Error(
                 `Planning Center did not respond within ${PCO_TIMEOUT_MS / 1000} s (${path})`,
                 { cause: error }
@@ -170,8 +320,12 @@ async function request(url: URL, kind: PcoResourceKind): Promise<unknown> {
  * starts with "/". Throws PcoUrlError before fetching if the normalized URL
  * leaves the Services API, and PcoError on a non-2xx response.
  */
-export async function pcoFetch<T>(path: string, kind: PcoResourceKind): Promise<T> {
-    return (await request(servicesUrl(path), kind)) as T;
+export async function pcoFetch<T>(
+    path: string,
+    kind: PcoResourceKind,
+    options?: PcoRequestOptions
+): Promise<T> {
+    return (await request(servicesUrl(path), PCO_CACHE_POLICY[kind], readJson, options)) as T;
 }
 
 /** What pcoFetchAll collects across every page of a list endpoint. */
@@ -184,6 +338,12 @@ export interface PcoPages<T, I> {
     totalCount: number;
 }
 
+/** Options for pcoFetchAll. */
+export interface PcoFetchAllOptions extends PcoRequestOptions {
+    /** The most pages to fetch before throwing; defaults to 50. */
+    maxPages?: number;
+}
+
 /**
  * GET every page of a PCO list endpoint by following `links.next`, which is
  * guarded like the first URL. Throws rather than silently truncating when a
@@ -192,8 +352,9 @@ export interface PcoPages<T, I> {
 export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResourceIdentifier>(
     path: string,
     kind: PcoResourceKind,
-    { maxPages = DEFAULT_MAX_PAGES }: { maxPages?: number } = {}
+    { maxPages = DEFAULT_MAX_PAGES, paced = false }: PcoFetchAllOptions = {}
 ): Promise<PcoPages<T, I>> {
+    const init = PCO_CACHE_POLICY[kind];
     const data: T[] = [];
     const included: I[] = [];
     const seen = new Set<string>();
@@ -206,7 +367,7 @@ export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResour
                 `Planning Center returned more than ${maxPages} pages for ${path}`
             );
         }
-        const page = (await request(url, kind)) as PcoListResponse<T, I>;
+        const page = (await request(url, init, readJson, { paced })) as PcoListResponse<T, I>;
         data.push(...page.data);
         for (const resource of page.included ?? []) {
             const key = `${resource.type}:${resource.id}`;
@@ -221,4 +382,82 @@ export async function pcoFetchAll<T, I extends PcoResourceIdentifier = PcoResour
     }
 
     return { data, included, totalCount: totalCount ?? data.length };
+}
+
+/** The methods pcoMutate sends. */
+export type PcoMutationMethod = "POST" | "PATCH" | "DELETE";
+
+/**
+ * Write to the PCO Services API: `path` as for pcoFetch, `body` (built with
+ * jsonApi) sent as JSON. Guarded, timed out and retried on a 429 exactly like
+ * a GET (PCO answers 429 before processing a request, so a retried POST
+ * cannot apply twice), and never cached. Resolves to the JSON
+ * response, or null when there is none (204 No Content). Throws PcoUrlError
+ * before sending, PcoValidationError on a 422 and PcoError on any other
+ * non-2xx response.
+ *
+ * Only modules inside lib/pco write to Planning Center, so the barrel does not
+ * export this.
+ */
+export async function pcoMutate<T = unknown>(
+    method: PcoMutationMethod,
+    path: string,
+    body?: PcoWriteBody,
+    options?: PcoRequestOptions
+): Promise<T | null> {
+    const init: RequestInit = {
+        method,
+        cache: "no-store",
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    };
+    return (await request(servicesUrl(path), init, readOptionalJson, options)) as T | null;
+}
+
+/** A resource identifier in a write body. Its ID has passed assertPcoId. */
+export interface PcoWriteIdentifier {
+    type: string;
+    id: PcoId;
+}
+
+/** A relationship in a write body: to-one (toOne) or to-many (toMany). */
+export interface PcoWriteRelationship {
+    data: PcoWriteIdentifier | PcoWriteIdentifier[];
+}
+
+/** The JSON:API document a write sends; build it with jsonApi. */
+export interface PcoWriteBody {
+    data: {
+        type: string;
+        attributes: Record<string, unknown>;
+        relationships?: Record<string, PcoWriteRelationship>;
+    };
+}
+
+/**
+ * Build a write's JSON:API body: `{ data: { type, attributes } }`, with
+ * `relationships` when given. Build each relationship with toOne or toMany.
+ */
+export function jsonApi(
+    type: string,
+    attributes: Record<string, unknown>,
+    relationships?: Record<string, PcoWriteRelationship>
+): PcoWriteBody {
+    return { data: { type, attributes, ...(relationships ? { relationships } : {}) } };
+}
+
+/**
+ * A to-one relationship for jsonApi, `{ data: { type, id } }`. Throws
+ * InvalidPcoIdError unless `id` is a PCO ID.
+ */
+export function toOne(type: string, id: string): PcoWriteRelationship {
+    return { data: { type, id: assertPcoId(id) } };
+}
+
+/**
+ * A to-many relationship for jsonApi, `{ data: [{ type, id }, …] }`. An empty
+ * list is allowed: assign_tags with none clears a song's tags. Throws
+ * InvalidPcoIdError unless every ID is a PCO ID.
+ */
+export function toMany(type: string, ids: readonly string[]): PcoWriteRelationship {
+    return { data: ids.map((id) => ({ type, id: assertPcoId(id) })) };
 }

@@ -20,6 +20,9 @@
 # production
 /build
 
+# the local database and its backups (DATABASE_PATH, DATABASE_BACKUP_DIR defaults)
+/data/
+
 # misc
 .DS_Store
 *.pem

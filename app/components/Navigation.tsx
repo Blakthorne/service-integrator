@@ -3,6 +3,7 @@ import { signOut } from "@/auth";
 import React from "react";
 import { routes } from "@/lib/routes";
 import NavLinks from "./Navigation/NavLinks";
+import NavUtilityLinks from "./Navigation/NavUtilityLinks";
 
 export default function Navigation() {
     return (
@@ -25,7 +26,8 @@ export default function Navigation() {
                         </div>
                         <NavLinks />
                     </div>
-                    <div className="flex items-center">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                        <NavUtilityLinks />
                         <form
                             action={async () => {
                                 "use server";

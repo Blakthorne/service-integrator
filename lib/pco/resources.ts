@@ -37,6 +37,23 @@ export interface PcoSingleResponse<T> {
     data: T;
 }
 
+/** One JSON:API error object in an error response. */
+export interface PcoErrorObject {
+    status?: string;
+    /** The kind of error, e.g. "Validation Error" or "Forbidden Attribute". */
+    title?: string;
+    /** What was wrong, e.g. "must exist" or "notes cannot be assigned". */
+    detail?: string;
+    /** The request parameter at fault, when PCO names one, e.g. "category". */
+    source?: { parameter?: string };
+    meta?: Record<string, unknown>;
+}
+
+/** The body of an error response, e.g. a 422 for a write that failed validation. */
+export interface PcoErrorResponse {
+    errors: PcoErrorObject[];
+}
+
 export interface PcoServiceTypeAttributes {
     name: string;
     frequency: string;
