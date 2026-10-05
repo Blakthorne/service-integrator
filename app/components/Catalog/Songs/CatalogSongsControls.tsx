@@ -1,5 +1,6 @@
 "use client";
 
+import ExportCsvButton from "@/app/components/ui/ExportCsvButton";
 import Segmented, { type SegmentedOption } from "@/app/components/ui/Segmented";
 import { formatCount } from "@/lib/catalog/counts";
 import type { CatalogLinked, CatalogMark, CatalogSort, CatalogUsed } from "@/lib/catalog/filter";
@@ -163,9 +164,6 @@ export default function CatalogSongsControls({
             title: option.name,
         })),
     ];
-    // Like SubmitButton: aria-disabled rather than disabled, so the button
-    // keeps focus when the filters leave nothing to export.
-    const canExport = exportCount > 0;
 
     return (
         <div
@@ -238,27 +236,12 @@ export default function CatalogSongsControls({
                 >
                     {summary}
                 </p>
-                <button
-                    type="button"
-                    aria-disabled={!canExport}
-                    title={
-                        canExport
-                            ? "Download every song the filters leave, on every page, as a CSV file"
-                            : "No songs to export"
-                    }
-                    onClick={() => {
-                        if (canExport) {
-                            onExport();
-                        }
-                    }}
-                    className={`px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                        canExport
-                            ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-600"
-                            : "opacity-50 cursor-not-allowed"
-                    }`}
-                >
-                    Export CSV
-                </button>
+                <ExportCsvButton
+                    canExport={exportCount > 0}
+                    title="Download every song the filters leave, on every page, as a CSV file"
+                    emptyTitle="No songs to export"
+                    onExport={onExport}
+                />
             </div>
         </div>
     );
