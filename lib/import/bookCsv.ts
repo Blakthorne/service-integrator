@@ -34,9 +34,11 @@ import { normalizeTitle } from "@/lib/normalizeTitle";
  * - **Matching.** A row's hymn is the one whose title, or another title, is
  *   the row's (by `normalizeTitle`), else a new one; its tune the one whose
  *   name, or another name, is the row's (by `normalizeTuneName`), else a new
- *   one, or none when the row has no tune; its song that hymn to that tune,
- *   else a new one. Rows of one new title share one new hymn, and the same
- *   for tunes and songs.
+ *   one; its song that hymn to that tune, else a new one. A row with no tune
+ *   goes with its hymn's only song, whatever its tune, so a book imported as
+ *   `number,title` joins the songs the catalog has and makes no twins of
+ *   them; a hymn with no song gets a new one, with no tune. Rows of one new
+ *   title share one new hymn, and the same for tunes and songs.
  * - **Places.** A numbered book's rows take their numbers. A book without
  *   numbers keeps its entries and takes the rows after them, in the order of
  *   their positions, so its positions stay 1, 2, 3, ….
@@ -44,8 +46,10 @@ import { normalizeTitle } from "@/lib/normalizeTitle";
  *   that is not CSV, is empty, or whose header does not fit the book; a row
  *   with extra fields, no title, a field too long, or a number (or position)
  *   that does not read; a number (or position) on two rows; a number the
- *   book already has for another song; and one song in the book twice with
- *   the same variant note, or none, from two rows or a row and the book.
+ *   book already has for another song; a row with no tune for a hymn that
+ *   has several songs, which needs its tune named; and one song in the book
+ *   twice with the same variant note, or none, from two rows or a row and
+ *   the book.
  * - **Warnings** need a look but do not block: a title (or tune name)
  *   several hymns (or tunes) have, where the row goes with one of them; a
  *   row the book already has, which is left out; and where a book without
@@ -282,6 +286,8 @@ interface Matched {
     songId: number | null;
     /** The song's label, for messages. */
     label: string;
+    /** What blocks the row: it has no tune, and its hymn has several songs. */
+    problems: BookCsvProblem[];
     warnings: BookCsvWarning[];
 }
 
@@ -360,6 +366,17 @@ export function planBookCsvImport(
     );
     const hasSong = (hymnId: number, tuneId: number | null) =>
         songsByKey.has(songKey({ id: hymnId }, tuneId === null ? null : { id: tuneId }));
+    const songsByHymn = new Map<number, BookCsvCatalog["songs"][number][]>();
+    for (const song of [...catalog.songs].sort((a, b) => a.id - b.id)) {
+        songsByHymn.set(song.hymnId, [...(songsByHymn.get(song.hymnId) ?? []), song]);
+    }
+    /** A hymn's songs, in id order. */
+    const songsOf = (hymnId: number) => songsByHymn.get(hymnId) ?? [];
+    /** A hymn's only song, or undefined when it has none or several. */
+    const onlySongOf = (hymnId: number) => {
+        const songs = songsOf(hymnId);
+        return songs.length === 1 ? songs[0] : undefined;
+    };
     const existingLabel = (songId: number) => {
         const song = catalog.songs.find(({ id }) => id === songId);
         return song
@@ -371,6 +388,7 @@ export function planBookCsvImport(
 
     /** Match a row's hymn, tune and song (see the module's comment). */
     const match = (row: ReadRow): Matched => {
+        const rowProblems: BookCsvProblem[] = [];
         const rowWarnings: BookCsvWarning[] = [];
         const warn = (reason: BookCsvWarningReason, message: string) =>
             rowWarnings.push({ reason, line: row.line, lines: [row.line], message });
@@ -384,15 +402,21 @@ export function planBookCsvImport(
         let hymnMatch: BookCsvMatch;
         const titled = hymns.names.get(hymnKey) ?? [];
         if (titled.length > 0) {
-            const id =
-                titled.find((hymnId) =>
-                    tuneIds.length === 0 ? hasSong(hymnId, null) : tuneIds.some((tuneId) => hasSong(hymnId, tuneId))
-                ) ?? titled[0];
+            // The hymn that suits the row: one sung to its tune, or, for a row
+            // with no tune, one with a single song, best a song with no tune.
+            const suited =
+                tuneKey === null
+                    ? (titled.find((hymnId) => onlySongOf(hymnId)?.tuneId === null) ??
+                      titled.find((hymnId) => onlySongOf(hymnId) !== undefined))
+                    : titled.find((hymnId) => tuneIds.some((tuneId) => hasSong(hymnId, tuneId)));
+            const id = suited ?? titled[0];
             hymnMatch = { kind: "existing", id, name: hymns.byId.get(id)!, by: "name" };
             if (titled.length > 1) {
+                const goesWith =
+                    suited === undefined ? "first added" : tuneKey === null ? "that has a single song" : "sung to its tune";
                 warn(
                     "ambiguous-hymn",
-                    `Line ${row.line}: ${formatCount(titled.length)} hymns are titled "${row.title}"; the row goes with the one ${tuneIds.length > 0 ? "sung to its tune" : "first added"}. Merge them, or retitle one, if they are one hymn.`
+                    `Line ${row.line}: ${formatCount(titled.length)} hymns are titled "${row.title}"; the row goes with the one ${goesWith}. Merge them, or retitle one, if they are one hymn.`
                 );
             }
         } else if (hymns.aliases.has(hymnKey)) {
@@ -404,7 +428,25 @@ export function planBookCsvImport(
 
         let tuneMatch: BookCsvMatch;
         if (tuneKey === null) {
-            tuneMatch = { kind: "none" };
+            // No tune: the hymn's only song, whatever its tune. With several
+            // songs the row cannot say which, and the file needs a tune.
+            const songs = hymnMatch.kind === "existing" ? songsOf(hymnMatch.id) : [];
+            const only = songs.length === 1 ? songs[0] : undefined;
+            tuneMatch =
+                only === undefined || only.tuneId === null
+                    ? { kind: "none" }
+                    : { kind: "existing", id: only.tuneId, name: tunes.byId.get(only.tuneId)!, by: "song" };
+            if (hymnMatch.kind === "existing" && songs.length > 1) {
+                const sungTo = songs.map(({ tuneId }) =>
+                    tuneId === null ? "no tune" : (tunes.byId.get(tuneId) ?? `tune ${tuneId}`)
+                );
+                rowProblems.push({
+                    reason: "tune-needed",
+                    line: row.line,
+                    lines: [row.line],
+                    message: `Line ${row.line}: "${hymnMatch.name}" has ${formatCount(songs.length)} songs, sung to ${joinWithAnd(sungTo)}, so a row with no tune cannot say which one it is. Name the tune in the row's tune column (add the column if the file has none).`,
+                });
+            }
         } else {
             const named = tunes.names.get(tuneKey) ?? [];
             if (named.length > 0) {
@@ -437,24 +479,28 @@ export function planBookCsvImport(
             tuneMatch,
             songId: existing?.id ?? null,
             label: songLabel(title, tuneName),
+            problems: rowProblems,
             warnings: rowWarnings,
         };
     };
 
     const read = filled.map((record) => readRow(record, headerRead.columns, book));
     const matched = new Map<ReadRow, Matched>();
+    const blocked = new Set<ReadRow>(read.filter((row) => row.problems.length > 0));
+    const skipped = new Set<ReadRow>();
+    const block = (row: ReadRow) => blocked.add(row);
     for (const row of read) {
         problems.push(...row.problems);
         if (!row.problems.some(({ reason }) => reason === "blank-title" || reason === "too-long")) {
             const result = match(row);
             matched.set(row, result);
+            problems.push(...result.problems);
             warnings.push(...result.warnings);
+            if (result.problems.length > 0) {
+                block(row);
+            }
         }
     }
-
-    const blocked = new Set<ReadRow>(read.filter((row) => row.problems.length > 0));
-    const skipped = new Set<ReadRow>();
-    const block = (row: ReadRow) => blocked.add(row);
 
     // A number (or position) on several rows.
     const byPlace = new Map<number, ReadRow[]>();
@@ -619,7 +665,8 @@ export function planBookCsvImport(
             variantNote: row.variantNote,
             hymn: result?.hymnMatch ?? { kind: "none" },
             tuneMatch: result?.tuneMatch ?? { kind: "none" },
-            song: result ? (result.songId === null ? "new" : "existing") : null,
+            // A row that has no tune for a hymn with several songs matches none.
+            song: result && result.problems.length === 0 ? (result.songId === null ? "new" : "existing") : null,
             outcome: blocked.has(row) ? "blocked" : skipped.has(row) ? "skip" : "add",
         });
     }

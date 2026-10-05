@@ -497,6 +497,8 @@ export type BookCsvProblemReason =
     | "bad-number"
     /** A row of a book without numbers has no position, or one that is not a whole number from 1 to 99,999. */
     | "bad-position"
+    /** A row has no tune, and its hymn has several songs, so it does not say which one it is. */
+    | "tune-needed"
     /** One number is on several rows. */
     | "number-duplicated"
     /** One position is on several rows. */
@@ -533,10 +535,12 @@ export type BookCsvWarning = BookCsvIssue<BookCsvWarningReason>;
 
 /**
  * How a row's hymn or tune matched the catalog: one it has ("existing", by
- * its own name or by another), a new one, or none (a row with no tune).
+ * its own name or by another; for a row with no tune, by "song": the tune of
+ * its hymn's only song), a new one, or none (a row with no tune that has
+ * none to take).
  */
 export type BookCsvMatch =
-    | { kind: "existing"; id: number; name: string; by: "name" | "alias" }
+    | { kind: "existing"; id: number; name: string; by: "name" | "alias" | "song" }
     | { kind: "new" }
     | { kind: "none" };
 

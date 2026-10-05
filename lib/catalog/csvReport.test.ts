@@ -140,6 +140,7 @@ describe("limiting a long list", () => {
 describe("the words for a report", () => {
     test("every problem, warning and outcome has a short label", () => {
         expect(PROBLEM_LABELS["number-duplicated"]).toBe("Number twice");
+        expect(PROBLEM_LABELS["tune-needed"]).toBe("Tune needed");
         expect(WARNING_LABELS["already-in-book"]).toBe("Already in the book");
         expect(OUTCOME_LABELS).toEqual({ add: "Adds the entry", skip: "Left out", blocked: "Blocked" });
         for (const label of [...Object.values(PROBLEM_LABELS), ...Object.values(WARNING_LABELS)]) {
@@ -159,15 +160,17 @@ describe("the words for a report", () => {
         expect(placeText({ label: null, position: null }, false)).toBe("No position");
     });
 
-    test("a hymn and a tune match the catalog by name, by another name, or are new", () => {
+    test("a hymn and a tune match the catalog by name, by another name, or are new, and a tune can be its hymn's only song's", () => {
         const byName: BookCsvMatch = { kind: "existing", id: 1, name: "Amazing Grace", by: "name" };
         const byAlias: BookCsvMatch = { kind: "existing", id: 1, name: "Amazing Grace", by: "alias" };
+        const bySong: BookCsvMatch = { kind: "existing", id: 10, name: "NEW BRITAIN", by: "song" };
 
         expect(describeHymnMatch(byName)).toBe("Hymn in the catalog");
         expect(describeHymnMatch(byAlias)).toBe('Hymn in the catalog, as "Amazing Grace"');
         expect(describeHymnMatch({ kind: "new" })).toBe("New hymn");
         expect(describeTuneMatch(byName)).toBe("Tune in the catalog");
         expect(describeTuneMatch(byAlias)).toBe('Tune in the catalog, as "Amazing Grace"');
+        expect(describeTuneMatch(bySong)).toBe('Tune of the hymn\'s only song, "NEW BRITAIN"');
         expect(describeTuneMatch({ kind: "new" })).toBe("New tune");
         expect(describeTuneMatch({ kind: "none" })).toBe("No tune");
     });

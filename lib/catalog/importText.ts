@@ -142,7 +142,7 @@ export const CSV_COLUMN_HELP: readonly CsvColumnHelp[] = [
     },
     {
         name: "tune",
-        text: "Optional. The tune's name, matched the same way. Leave it blank for a song with no known tune.",
+        text: "Optional. The tune's name, matched the same way. With none, a row goes with its hymn's only song, whatever its tune (a new hymn gets a song with no tune); a hymn with several songs needs the tune named.",
     },
     {
         name: "variant",

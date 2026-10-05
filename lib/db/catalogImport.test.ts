@@ -350,6 +350,15 @@ describe("a book's CSV file", () => {
         ]);
     });
 
+    test("applies a file with no tune column: its rows join the songs the catalog has, making no twins", () => {
+        const { chorus, amazingGrace } = seedBooks();
+        const before = countCatalog(db);
+        const id = previewFile(chorus, "position,title\n1,Amazing Grace\n");
+        expect(applyImportRun(db, id)).toMatchObject({ hymns: 0, tunes: 0, songs: 0, entries: 1 });
+        expect(countCatalog(db)).toEqual({ ...before, entries: before.entries + 1 });
+        expect(findCatalogSong(db, amazingGrace)?.entries.map(({ label }) => label)).toEqual(["R-108", "Chorus Book"]);
+    });
+
     test("refuses a file with problems, writing nothing", () => {
         const { rejoice } = seedBooks();
         const id = previewFile(rejoice, "number,title\n108,Taken\n500,Fine\n");

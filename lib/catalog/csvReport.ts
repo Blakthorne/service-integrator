@@ -35,6 +35,7 @@ export const PROBLEM_LABELS: Record<BookCsvProblemReason, string> = {
     "too-long": "Too long",
     "bad-number": "Number",
     "bad-position": "Position",
+    "tune-needed": "Tune needed",
     "number-duplicated": "Number twice",
     "position-duplicated": "Position twice",
     "number-taken": "Number taken",
@@ -144,7 +145,11 @@ export function describeTuneMatch(match: BookCsvMatch): string {
         case "none":
             return "No tune";
         case "existing":
-            return match.by === "alias" ? `Tune in the catalog, as "${match.name}"` : "Tune in the catalog";
+            return match.by === "song"
+                ? `Tune of the hymn's only song, "${match.name}"`
+                : match.by === "alias"
+                  ? `Tune in the catalog, as "${match.name}"`
+                  : "Tune in the catalog";
     }
 }
 

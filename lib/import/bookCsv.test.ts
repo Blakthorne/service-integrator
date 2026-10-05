@@ -16,8 +16,10 @@ const CHORUS: BookCsvBook = { id: 2, code: "CB", name: "Chorus Book", numbered: 
 /**
  * Amazing Grace (also "Amazing Grace! How Sweet the Sound") to NEW
  * BRITAIN, at R-108; two hymns titled "Thank You, Lord", the first to
- * LYNCH at R-561 and the second with no tune; DARWALL (also DARWAL); and
- * two tunes named OLD HUNDREDTH, the Doxology sung to the second.
+ * LYNCH at R-561 and the second with no tune; DARWALL (also DARWAL); two
+ * tunes named OLD HUNDREDTH, the Doxology sung to the second; Holy, Holy,
+ * Holy, with three songs (to NICAEA, to SANCTUS and to no tune); and Crown
+ * Him with Many Crowns, which has no song.
  */
 function catalog(entries: BookCsvCatalog["entries"] = []): BookCsvCatalog {
     return {
@@ -26,6 +28,8 @@ function catalog(entries: BookCsvCatalog["entries"] = []): BookCsvCatalog {
             { id: 2, title: "Thank You, Lord", aliases: [] },
             { id: 3, title: "Thank You, Lord", aliases: [] },
             { id: 4, title: "Doxology", aliases: [] },
+            { id: 5, title: "Holy, Holy, Holy", aliases: [] },
+            { id: 6, title: "Crown Him with Many Crowns", aliases: [] },
         ],
         tunes: [
             { id: 10, name: "NEW BRITAIN", aliases: [] },
@@ -33,12 +37,17 @@ function catalog(entries: BookCsvCatalog["entries"] = []): BookCsvCatalog {
             { id: 12, name: "DARWALL", aliases: ["DARWAL"] },
             { id: 13, name: "OLD HUNDREDTH", aliases: [] },
             { id: 14, name: "OLD HUNDREDTH", aliases: [] },
+            { id: 15, name: "NICAEA", aliases: [] },
+            { id: 16, name: "SANCTUS", aliases: [] },
         ],
         songs: [
             { id: 100, hymnId: 1, tuneId: 10 },
             { id: 101, hymnId: 2, tuneId: 11 },
             { id: 102, hymnId: 3, tuneId: null },
             { id: 103, hymnId: 4, tuneId: 14 },
+            { id: 104, hymnId: 5, tuneId: 15 },
+            { id: 105, hymnId: 5, tuneId: 16 },
+            { id: 106, hymnId: 5, tuneId: null },
         ],
         entries,
     };
@@ -143,6 +152,8 @@ describe("planBookCsvImport: matching", () => {
             "301,\"Thank You, Lord\",",
         ]);
         expect(report.rows.map(({ hymn }) => hymn.kind === "existing" && hymn.id)).toEqual([2, 3]);
+        // The second hymn's only song has no tune, which is the row's.
+        expect(report.rows[1]).toMatchObject({ tuneMatch: { kind: "none" }, song: "existing" });
         expect(reasons(report.warnings)).toEqual(["ambiguous-hymn", "ambiguous-hymn"]);
         expect(report.warnings[0]).toEqual({
             reason: "ambiguous-hymn",
@@ -151,8 +162,145 @@ describe("planBookCsvImport: matching", () => {
             message:
                 'Line 2: 2 hymns are titled "Thank You, Lord"; the row goes with the one sung to its tune. Merge them, or retitle one, if they are one hymn.',
         });
+        expect(report.warnings[1].message).toBe(
+            'Line 3: 2 hymns are titled "Thank You, Lord"; the row goes with the one that has a single song. Merge them, or retitle one, if they are one hymn.'
+        );
         // Thank You, Lord (LYNCH) is R-561 already, so a second plain entry would be its twin.
         expect(reasons(report.problems)).toEqual(["song-twice"]);
+    });
+
+    test("of hymns with a shared title, a row with no tune goes with one that has a single song, and a row with a new tune with the first added", () => {
+        // The first hymn has two songs, so a row with no tune cannot go with it; the second has one.
+        const twins: BookCsvCatalog = {
+            hymns: [
+                { id: 1, title: "Thank You, Lord", aliases: [] },
+                { id: 2, title: "Thank You, Lord", aliases: [] },
+            ],
+            tunes: [
+                { id: 10, name: "LYNCH", aliases: [] },
+                { id: 11, name: "OTHER", aliases: [] },
+                { id: 12, name: "THIRD", aliases: [] },
+            ],
+            songs: [
+                { id: 100, hymnId: 1, tuneId: 10 },
+                { id: 101, hymnId: 1, tuneId: 11 },
+                { id: 102, hymnId: 2, tuneId: 12 },
+            ],
+            entries: [],
+        };
+        const { report, rows } = planBookCsvImport(
+            REJOICE,
+            records("number,title,tune", "1,\"Thank You, Lord\",", "2,\"Thank You, Lord\",NEW TUNE"),
+            twins
+        );
+        expect(report.problems).toEqual([]);
+        expect(report.rows.map(({ hymn, tuneMatch, song }) => [hymn.kind === "existing" && hymn.id, tuneMatch.kind, song])).toEqual([
+            [2, "existing", "existing"],
+            [1, "new", "new"],
+        ]);
+        expect(report.warnings.map(({ message }) => message)).toEqual([
+            expect.stringContaining("the row goes with the one that has a single song."),
+            expect.stringContaining("the row goes with the one first added."),
+        ]);
+        expect(rows.songs).toEqual([{ hymn: { id: 1 }, tune: { key: "NEW TUNE" } }]);
+    });
+
+    test("goes with the only song its hymn has, whatever its tune, for a row with no tune", () => {
+        // No tune column at all, as in a book imported from a list of numbers and titles.
+        const { report, rows } = plan(REJOICE, ["number,title", "14,Doxology", "108,Amazing Grace"]);
+        expect(report.problems).toEqual([]);
+        expect(report.rows.map(({ line, hymn, tuneMatch, song, outcome }) => [line, hymn, tuneMatch, song, outcome])).toEqual([
+            [
+                2,
+                { kind: "existing", id: 4, name: "Doxology", by: "name" },
+                { kind: "existing", id: 14, name: "OLD HUNDREDTH", by: "song" },
+                "existing",
+                "add",
+            ],
+            [
+                3,
+                { kind: "existing", id: 1, name: "Amazing Grace", by: "name" },
+                { kind: "existing", id: 10, name: "NEW BRITAIN", by: "song" },
+                "existing",
+                "skip",
+            ],
+        ]);
+        // A row for the song's own entry is left out, so importing the file again changes nothing.
+        expect(report.warnings).toEqual([
+            expect.objectContaining({
+                reason: "already-in-book",
+                message: 'Line 3: "Amazing Grace (NEW BRITAIN)" is in Rejoice Hymns already as R-108, so the row is left out.',
+            }),
+        ]);
+        // The entry joins the song the catalog has, by its own tune (the second OLD HUNDREDTH): no new song, no twin.
+        expect(rows.songs).toEqual([]);
+        expect(rows.entries).toEqual([
+            { line: 2, hymn: { id: 4 }, tune: { id: 14 }, number: 14, position: null, variantNote: null },
+        ]);
+        expect(report.planned).toMatchObject({ hymns: 0, tunes: 0, songs: 0, songsWithoutTune: 0, entries: 1 });
+    });
+
+    test("takes a row with no tune and a row with the tune of its hymn's only song for one song", () => {
+        const { report } = plan(REJOICE, [
+            "number,title,tune,variant",
+            "200,Amazing Grace,,Descant",
+            "201,Amazing Grace,New Britain,Descant",
+        ]);
+        expect(report.problems).toEqual([
+            {
+                reason: "song-twice",
+                line: 3,
+                lines: [2, 3],
+                message:
+                    'Lines 2 and 3 put "Amazing Grace (NEW BRITAIN)" in Rejoice Hymns 2 times, with the variant note "Descant". Give each a variant note of its own, or keep one.',
+            },
+        ]);
+    });
+
+    test("a row with no tune for a hymn with several songs is a problem that names its tunes", () => {
+        const { report, rows } = plan(REJOICE, [
+            "number,title,tune",
+            '300,"Holy, Holy, Holy",',
+            '301,"Holy, Holy, Holy",nicaea',
+        ]);
+        expect(report.problems).toEqual([
+            {
+                reason: "tune-needed",
+                line: 2,
+                lines: [2],
+                message:
+                    'Line 2: "Holy, Holy, Holy" has 3 songs, sung to NICAEA, SANCTUS and no tune, so a row with no tune cannot say which one it is. Name the tune in the row\'s tune column (add the column if the file has none).',
+            },
+        ]);
+        // The row cannot be matched or added; the same hymn with its tune named is a song the catalog has.
+        expect(report.rows.map(({ line, hymn, tuneMatch, song, outcome }) => [line, hymn.kind, tuneMatch.kind, song, outcome])).toEqual([
+            [2, "existing", "none", null, "blocked"],
+            [3, "existing", "existing", "existing", "add"],
+        ]);
+        expect(rows.songs).toEqual([]);
+        expect(rows.entries.map(({ line }) => line)).toEqual([3]);
+
+        // The same when the file has no tune column at all.
+        expect(plan(REJOICE, ["number,title", '300,"holy, holy, holy"']).report.problems).toEqual([
+            expect.objectContaining({ reason: "tune-needed", line: 2 }),
+        ]);
+    });
+
+    test("a row with no tune for a hymn with no song adds a song with no tune", () => {
+        const { report, rows } = plan(REJOICE, ["number,title", "400,Crown Him with Many Crowns"]);
+        expect(report.problems).toEqual([]);
+        expect(report.rows[0]).toMatchObject({
+            hymn: { kind: "existing", id: 6, name: "Crown Him with Many Crowns", by: "name" },
+            tuneMatch: { kind: "none" },
+            song: "new",
+            outcome: "add",
+        });
+        expect(rows.hymns).toEqual([]);
+        expect(rows.songs).toEqual([{ hymn: { id: 6 }, tune: null }]);
+        expect(rows.entries).toEqual([
+            { line: 2, hymn: { id: 6 }, tune: null, number: 400, position: null, variantNote: null },
+        ]);
+        expect(report.planned).toMatchObject({ songs: 1, songsWithoutTune: 1, entries: 1 });
     });
 
     test("goes with the tune of a shared name that the row's hymn is sung to, and says so", () => {
