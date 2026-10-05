@@ -1,3 +1,5 @@
+import { countOf, formatCount } from "./catalog/counts";
+import type { BookCoverage } from "./db/history";
 import { hymnNoteBadgeLabel } from "./hymnNoteText";
 import {
     hymnNoteState,
@@ -8,6 +10,7 @@ import {
 import { planLabel } from "./planLabel";
 import type {
     Dashboard,
+    DashboardHistory,
     DashboardServiceType,
     DashboardSong,
     DashboardTodo,
@@ -351,3 +354,113 @@ export function emptyTodosText(
         dashboard.serviceTypes.some((entry) => entry.status === "failed");
     return unchecked ? "Nothing to do among what could be checked." : "Nothing to do.";
 }
+
+/** How much of a book's entries were sung, as the song history card says it. */
+export interface ShareView {
+    count: number;
+    total: number;
+    /**
+     * The share as a whole percent from 0 to 100, or null when there is
+     * nothing to take a share of. Never 0 for some, nor 100 for less than
+     * all: a rounded-off 99.6% reads 99%, and 0.2% reads 1%.
+     */
+    percent: number | null;
+    /** "123 of 400", or "No entries" for a book with none. */
+    text: string;
+}
+
+/** `count` of `total` as a share (see `ShareView`). */
+export function shareView(count: number, total: number): ShareView {
+    if (total <= 0) {
+        return { count, total, percent: null, text: "No entries" };
+    }
+    const percent =
+        count >= total ? 100 : count <= 0 ? 0 : Math.min(99, Math.max(1, Math.round((100 * count) / total)));
+    return { count, total, percent, text: `${formatCount(count)} of ${formatCount(total)}` };
+}
+
+/** An active book's row of the coverage table. */
+export interface CoverageRowView {
+    bookId: number;
+    /** The book's short name, which the row is named by (its full name is its tooltip). */
+    label: string;
+    name: string;
+    /** "400 entries". */
+    entries: string;
+    /** The share of its entries whose song was sung in the last years. */
+    recently: ShareView;
+    /** The share of its entries whose song was ever sung. */
+    ever: ShareView;
+}
+
+/**
+ * The coverage table's rows, in the books' order: for each book, how many of
+ * its entries have a song that was sung in a past plan lately, and ever. An
+ * entry whose song is not linked to Planning Center counts as not sung
+ * (it is in the book's total only), as `bookCoverage` counts it.
+ */
+export function coverageRows(coverage: readonly BookCoverage[]): CoverageRowView[] {
+    return coverage.map((book) => ({
+        bookId: book.bookId,
+        label: book.shortName,
+        name: book.name,
+        entries: countOf(book.entries, "entry", "entries"),
+        recently: shareView(book.sungRecently, book.entries),
+        ever: shareView(book.sungEver, book.entries),
+    }));
+}
+
+/**
+ * How many years back "sung lately" looks, from the dates the figures are
+ * as of: `since` is exactly that many years before `today`.
+ */
+export function coverageYears({ today, since }: Pick<DashboardHistory, "today" | "since">): number {
+    return Number(today.slice(0, 4)) - Number(since.slice(0, 4));
+}
+
+/** What the dashboard's song history card says. */
+export type HistoryStats =
+    /** The history has never been synced: there are no figures. */
+    | { kind: "unread" }
+    /** It has, but no song in it was sung (past plans only): nothing to show but that. */
+    | { kind: "empty" }
+    | {
+          kind: "figures";
+          /** The year "sung this year" counts: "2026". */
+          year: string;
+          /** How many different songs were sung in past plans this year, in the catalog or not. */
+          songsSungThisYear: number;
+          /** What the first share column says: "Last 5 years". */
+          recentlyLabel: string;
+          /** Each active book's coverage. */
+          coverage: CoverageRowView[];
+      };
+
+/**
+ * The song history card's content from the dashboard's history figures:
+ * none before the history's first sync, "empty" when it has been read but no
+ * song was sung (so no share is taken of nothing), else the year's count and
+ * each active book's coverage.
+ */
+export function historyStats(history: DashboardHistory): HistoryStats {
+    if (history.lastSync === null) {
+        return { kind: "unread" };
+    }
+    if (history.songsSungThisYear === 0 && history.coverage.every(({ sungEver }) => sungEver === 0)) {
+        return { kind: "empty" };
+    }
+    const years = coverageYears(history);
+    return {
+        kind: "figures",
+        year: history.today.slice(0, 4),
+        songsSungThisYear: history.songsSungThisYear,
+        recentlyLabel: years === 1 ? "Last year" : `Last ${years} years`,
+        coverage: coverageRows(history.coverage),
+    };
+}
+
+/** What the card says in place of figures, for the two kinds that have none. */
+export const HISTORY_STATS_TEXT = {
+    unread: "The plan history has not been read yet, so there are no figures.",
+    empty: "No song in the plan history was sung yet.",
+} as const;
