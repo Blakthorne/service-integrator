@@ -13,6 +13,7 @@ import {
     stubFetchRoutes,
     stubPcoCredentials,
     stubPcoPacer,
+    planListingUrl,
 } from "@/lib/pco/testing";
 import { describePlanHistorySync, syncPlanHistory, type PlanHistorySyncCounts } from "./history";
 
@@ -34,8 +35,7 @@ const MORNING = "1405391";
 const EVENING = "1486055";
 
 const SERVICE_TYPES = `${PCO_BASE}/service_types?per_page=100`;
-const plansUrl = (serviceTypeId: string) =>
-    `${PCO_BASE}/service_types/${serviceTypeId}/plans?order=-sort_date&per_page=100`;
+const plansUrl = planListingUrl;
 const itemsUrl = (serviceTypeId: string, planId: string) =>
     `${PCO_BASE}/service_types/${serviceTypeId}/plans/${planId}/items?include=song&per_page=100`;
 

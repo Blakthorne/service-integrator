@@ -28,6 +28,7 @@ import {
     songResource,
     stubFetchRoutes,
     stubPcoCredentials,
+    planListingUrl,
 } from "@/lib/pco/testing";
 import { mergeScheduleSelections } from "@/lib/scheduleSelections";
 import { buildScheduleCopyText } from "@/lib/serviceSchedule";
@@ -52,8 +53,7 @@ const PLAN = "81234567";
 
 const urls = {
     serviceTypes: `${PCO_BASE}/service_types?per_page=100`,
-    plans: (st: string) =>
-        `${PCO_BASE}/service_types/${st}/plans?order=-sort_date&per_page=100`,
+    plans: planListingUrl,
     plan: `${PCO_BASE}/service_types/${MORNING}/plans/${PLAN}`,
     serviceType: `${PCO_BASE}/service_types/${MORNING}`,
     items: `${PCO_BASE}/service_types/${MORNING}/plans/${PLAN}/items?include=song,item_notes&per_page=100`,

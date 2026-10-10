@@ -106,11 +106,26 @@ export interface PcoPlanAttributes {
     updated_at: string;
 }
 
+/**
+ * The plan attributes the app reads (`toPlan`). A plan listing asks for
+ * these alone (`fields[Plan]`, lib/pco/plans.ts), so a plan's type has only
+ * these, and `toPlan` cannot read one that a listing leaves out.
+ */
+export type PcoPlanField =
+    | "created_at"
+    | "dates"
+    | "items_count"
+    | "planning_center_url"
+    | "short_dates"
+    | "sort_date"
+    | "title"
+    | "updated_at";
+
 /** `GET /services/v2/service_types/{st}/plans[/{id}]` */
 export interface PcoPlanResource {
     type: "Plan";
     id: string;
-    attributes: PcoPlanAttributes;
+    attributes: Pick<PcoPlanAttributes, PcoPlanField>;
     relationships?: {
         service_type?: PcoToOneRelationship<"ServiceType">;
     };

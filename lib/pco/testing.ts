@@ -19,6 +19,15 @@ import type {
 
 export const PCO_BASE = "https://api.planningcenteronline.com/services/v2";
 
+/**
+ * A service type's plan listing as sent (`getPlansForServiceType`,
+ * `fetchAllPlans`): newest first, 100 to a page, asking only for the
+ * attributes `toPlan` reads.
+ */
+export function planListingUrl(serviceTypeId: string): string {
+    return `${PCO_BASE}/service_types/${serviceTypeId}/plans?order=-sort_date&per_page=100&fields[Plan]=created_at,dates,items_count,planning_center_url,short_dates,sort_date,title,updated_at`;
+}
+
 /** The Authorization header that the stubbed credentials produce. */
 export const PCO_AUTH = `Basic ${Buffer.from("id:tok").toString("base64")}`;
 
@@ -144,30 +153,13 @@ export function planResource(
         type: "Plan",
         id,
         attributes: {
-            can_view_order: true,
             created_at: "2026-09-01T12:00:00Z",
             dates: "October 4, 2026",
-            files_expire_at: "2026-10-20T00:00:00Z",
             items_count: 17,
-            last_time_at: "2026-10-04T09:30:00Z",
-            multi_day: false,
-            needed_positions_count: 0,
-            other_time_count: 0,
-            permissions: "Administrator",
-            plan_notes_count: 0,
-            plan_people_count: 12,
             planning_center_url: `https://services.planningcenteronline.com/plans/${id}`,
-            prefers_order_view: true,
-            public: false,
-            rehearsable: true,
-            rehearsal_time_count: 1,
-            reminders_disabled: false,
-            series_title: null,
-            service_time_count: 1,
             short_dates: "Oct 4",
             sort_date: "2026-10-04T08:00:00Z",
             title: "Communion Sunday",
-            total_length: 4200,
             updated_at: "2026-10-02T15:00:00Z",
             ...attributes,
         },
