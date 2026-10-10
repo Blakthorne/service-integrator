@@ -2,10 +2,11 @@ import "server-only";
 import { cache } from "react";
 import type { Plan, PlanSummary } from "../domain";
 import { pcoFetch, pcoFetchAll, type PcoRequestOptions } from "./client";
-import { assertPcoId } from "./ids";
+import { assertPcoId, type PcoId } from "./ids";
 import { toPlan } from "./mappers";
 import type {
     PcoListResponse,
+    PcoPlanField,
     PcoPlanResource,
     PcoSingleResponse,
 } from "./resources";
@@ -17,6 +18,29 @@ const MAX_PLAN_PAGES = 20;
 /** Up to 500 upcoming plans per service type; the spike found just next Sunday's. */
 const MAX_UPCOMING_PLAN_PAGES = 5;
 
+/** The attributes a plan listing asks for: those `toPlan` reads, each once (a Record keeps the list whole). */
+const PLAN_FIELDS: Readonly<Record<PcoPlanField, true>> = {
+    created_at: true,
+    dates: true,
+    items_count: true,
+    planning_center_url: true,
+    short_dates: true,
+    sort_date: true,
+    title: true,
+    updated_at: true,
+};
+
+/**
+ * A service type's plans, newest first, 100 to a page, with only the
+ * attributes `toPlan` reads (`fields[Plan]`). Planning Center works out each
+ * of a plan's 26 attributes as it sends it, so a page of 100 with all of them
+ * took 2.7 to 3.9 s, and with these 0.5 s; `links.next` keeps the fields.
+ */
+function planListingPath(id: PcoId): string {
+    const fields = Object.keys(PLAN_FIELDS).join(",");
+    return `/service_types/${id}/plans?order=-sort_date&per_page=100&fields[Plan]=${fields}`;
+}
+
 /**
  * All of a service type's plans, newest first, paging 100 at a time through
  * links.next. Throws InvalidPcoIdError, PcoError, or an error if the type
@@ -25,11 +49,9 @@ const MAX_UPCOMING_PLAN_PAGES = 5;
 export const getPlansForServiceType = cache(
     async (serviceTypeId: string): Promise<Plan[]> => {
         const id = assertPcoId(serviceTypeId);
-        const { data } = await pcoFetchAll<PcoPlanResource>(
-            `/service_types/${id}/plans?order=-sort_date&per_page=100`,
-            "plans",
-            { maxPages: MAX_PLAN_PAGES }
-        );
+        const { data } = await pcoFetchAll<PcoPlanResource>(planListingPath(id), "plans", {
+            maxPages: MAX_PLAN_PAGES,
+        });
         return data.map((plan) => toPlan(plan, id));
     }
 );
@@ -55,7 +77,7 @@ export async function fetchAllPlans({ paced = false }: PcoRequestOptions = {}): 
     for (const serviceType of serviceTypes) {
         const id = assertPcoId(serviceType.id);
         const { data, totalCount } = await pcoFetchAll<PcoPlanResource>(
-            `/service_types/${id}/plans?order=-sort_date&per_page=100`,
+            planListingPath(id),
             "plans",
             { maxPages: MAX_PLAN_PAGES, paced }
         );

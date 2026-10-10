@@ -20,6 +20,7 @@ import {
     stubFetchRoutes,
     stubPcoCredentials,
     stubPcoPacer,
+    planListingUrl,
 } from "./testing";
 
 beforeEach(stubPcoCredentials);
@@ -32,8 +33,7 @@ afterEach(() => {
 
 const MORNING = "1405391";
 const EVENING = "1486055";
-const plansUrl = (serviceTypeId: string) =>
-    `${PCO_BASE}/service_types/${serviceTypeId}/plans?order=-sort_date&per_page=100`;
+const plansUrl = planListingUrl;
 
 const morningPlan = planResource(
     { id: "101" },

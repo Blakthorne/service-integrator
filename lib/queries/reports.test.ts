@@ -23,6 +23,7 @@ import {
     stubFetchRoutes,
     stubPcoCredentials,
     stubPcoPacer,
+    planListingUrl,
 } from "@/lib/pco/testing";
 
 // vi.hoisted: vi.mock factories run before the module's own declarations.
@@ -53,7 +54,7 @@ afterEach(() => {
 });
 
 const SERVICE_TYPES = `${PCO_BASE}/service_types?per_page=100`;
-const PLANS = `${PCO_BASE}/service_types/1405391/plans?order=-sort_date&per_page=100`;
+const PLANS = planListingUrl("1405391");
 const ITEMS = `${PCO_BASE}/service_types/1405391/plans/501/items?include=song&per_page=100`;
 
 describe("syncPlanHistoryNow", () => {
