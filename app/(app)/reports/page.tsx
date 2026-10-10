@@ -6,6 +6,7 @@ import HistorySyncDetails from "@/app/components/Settings/HistorySyncDetails";
 import EmptyState from "@/app/components/ui/EmptyState";
 import LoadingState from "@/app/components/ui/LoadingState";
 import PageHeader from "@/app/components/ui/PageHeader";
+import { getActiveCatalogBooks } from "@/lib/queries/catalog";
 import { getReports } from "@/lib/queries/reports";
 import { getSettings } from "@/lib/queries/settings";
 import { toReportData } from "@/lib/reportsView";
@@ -14,7 +15,8 @@ export const metadata: Metadata = { title: "Reports" };
 
 /**
  * The reports of what the church sang: the most sung songs of a period,
- * when each catalog song was last sung, and the songs not sung since a date.
+ * when each catalog song was last sung, the songs not sung since a date,
+ * and the songs in Planning Center or in a book that were never sung.
  * They are built from the plan history, the app's copy of which songs each
  * Planning Center plan held, which this page reads from the local database
  * only (`getReports`); "Sync history now" brings it up to date. "Sung" means
@@ -29,12 +31,13 @@ export const metadata: Metadata = { title: "Reports" };
 export default function ReportsPage() {
     const reports = getReports();
     const { settings } = getSettings();
+    const books = getActiveCatalogBooks().map(({ code, name, shortName }) => ({ code, name, shortName }));
 
     return (
         <div className="w-full max-w-4xl mx-auto">
             <PageHeader
                 title="Reports"
-                description="Which songs the church sang, from the plans in Planning Center: the most sung, when each was last sung, and the songs not sung for a while."
+                description="Which songs the church sang, from the plans in Planning Center: the most sung, when each was last sung, the songs not sung for a while, and those never sung."
             />
             <div className="space-y-6">
                 <CatalogCard title="Plan history" headingId="plan-history-heading">
@@ -53,7 +56,10 @@ export default function ReportsPage() {
                 ) : (
                     // The view reads the query string, which needs a Suspense boundary.
                     <Suspense fallback={<LoadingState label="Loading reports…" />}>
-                        <ReportsView data={toReportData(reports, settings.numberSeparator)} />
+                        <ReportsView
+                            data={toReportData(reports, settings.numberSeparator)}
+                            books={books}
+                        />
                     </Suspense>
                 )}
             </div>

@@ -1,5 +1,5 @@
 import type { HistoryOccurrence } from "./db/history";
-import type { CatalogSongSummary } from "./domain";
+import type { CatalogSongSummary, MirroredPcoSong } from "./domain";
 import { addMonthsToYmd, planDateFromSortDate } from "./format";
 
 /**
@@ -232,6 +232,85 @@ export function notSungSince<T extends SongUse & { song: ReportSongKey }>(
                 // A date is later than no date, so never sung sorts first.
                 compareBy(a.lastSungOn ?? "", b.lastSungOn ?? "") || compareSongs(a.song, b.song)
         );
+}
+
+/** What "never sung" needs of a Planning Center song: the mirror's id, title and whether a sync found it gone. */
+export type ReportPcoSong = Pick<MirroredPcoSong, "id" | "title" | "removedAt">;
+
+/**
+ * A row of the "never sung" report: a song in Planning Center or in a book
+ * of the catalog that was never in a past plan.
+ */
+export interface NeverSungRow {
+    /** The catalog song, with its numbers (`entries`); null for a Planning Center song in no catalog song. */
+    song: ReportSong | null;
+    /** The Planning Center song; null for a catalog song not linked to one. */
+    pcoSongId: string | null;
+    /** What to call it: the catalog song's title, or else Planning Center's. */
+    title: string;
+    /**
+     * Whether it is in Planning Center: linked to a song a sync has not found
+     * gone. A catalog song that is not linked has no history, so it counts
+     * as never sung.
+     */
+    inPlanningCenter: boolean;
+    /** The date of the first upcoming plan it is in; null when it is in none. */
+    nextScheduledOn: string | null;
+}
+
+/**
+ * The songs never sung as of `today`, by title, then tune: every song that
+ * is in Planning Center (`pcoSongs`, the mirror, less those a sync found
+ * gone) or in a book of the catalog (an entry in any book), and was never in
+ * a past plan. A catalog song linked to a Planning Center song is one row,
+ * with its numbers; a Planning Center song in no catalog song is listed by
+ * its own title. A song only scheduled in upcoming plans is listed, with its
+ * next date, since it has not been sung yet. A catalog song that is not
+ * linked has no history and is listed as never sung, not in Planning Center;
+ * one in no book and not in Planning Center is in neither, and left out.
+ */
+export function buildNeverSung(
+    occurrences: readonly HistoryOccurrence[],
+    today: string,
+    songs: readonly ReportSong[],
+    pcoSongs: readonly ReportPcoSong[]
+): NeverSungRow[] {
+    const uses = summarizeUse(occurrences, today);
+    const gone = new Set(pcoSongs.flatMap(({ id, removedAt }) => (removedAt === null ? [] : [id])));
+    const linked = new Set(songs.flatMap(({ pcoSongId }) => (pcoSongId === null ? [] : [pcoSongId])));
+    const neverSung = (pcoSongId: string | null) =>
+        pcoSongId === null || (uses.get(pcoSongId)?.lastSungOn ?? null) === null;
+    const nextOf = (pcoSongId: string | null) =>
+        pcoSongId === null ? null : (uses.get(pcoSongId)?.nextScheduledOn ?? null);
+
+    const rows: NeverSungRow[] = [];
+    for (const song of songs) {
+        const inPlanningCenter = song.pcoSongId !== null && !gone.has(song.pcoSongId);
+        if ((inPlanningCenter || song.entries.length > 0) && neverSung(song.pcoSongId)) {
+            rows.push({
+                song,
+                pcoSongId: song.pcoSongId,
+                title: song.title,
+                inPlanningCenter,
+                nextScheduledOn: nextOf(song.pcoSongId),
+            });
+        }
+    }
+    for (const { id, title, removedAt } of pcoSongs) {
+        if (removedAt === null && !linked.has(id) && neverSung(id)) {
+            rows.push({ song: null, pcoSongId: id, title, inPlanningCenter: true, nextScheduledOn: nextOf(id) });
+        }
+    }
+    return rows.sort(
+        (a, b) =>
+            compareTitles(a.title, b.title) ||
+            compareTitles(a.song?.tuneName ?? "", b.song?.tuneName ?? "") ||
+            // A catalog song before a Planning Center song of the same title.
+            Number(a.song === null) - Number(b.song === null) ||
+            (a.song !== null && b.song !== null
+                ? a.song.id - b.song.id
+                : compareIds(a.pcoSongId ?? "", b.pcoSongId ?? ""))
+    );
 }
 
 /** How far back the "not sung since" report looks by default, in months. */

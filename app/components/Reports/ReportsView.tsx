@@ -8,6 +8,7 @@ import Segmented, { type SegmentedOption } from "@/app/components/ui/Segmented";
 import { useUrlState } from "@/app/hooks/useUrlState";
 import { MOST_SUNG_PERIOD_LABELS, type MostSungPeriod } from "@/lib/reports";
 import {
+    ANYWHERE,
     DEFAULT_PERIOD,
     DEFAULT_REPORT,
     PERIOD_OPTIONS,
@@ -15,12 +16,16 @@ import {
     REPORT_DESCRIPTIONS,
     REPORT_LABELS,
     describeReport,
+    neverSungScope,
+    neverSungScopeName,
+    neverSungScopeOptions,
     notSinceDate,
     pageReportRows,
     parseReportsQuery,
     reportCsv,
     reportCsvFilename,
     selectReportRows,
+    type ReportBookOption,
     type ReportData,
     type ReportKind,
 } from "@/lib/reportsView";
@@ -41,11 +46,14 @@ const EMPTY_MESSAGES: Readonly<Record<ReportKind, string>> = {
     "most-sung": "No song was sung in this period.",
     "last-sung": "No catalog song is linked to a Planning Center song yet.",
     "not-sung": "Every song was sung since this date.",
+    "never-sung": "Every song here was sung at least once.",
 };
 
 interface ReportsViewProps {
-    /** What the page sends: the date it is as of, and the rows of "most sung" and "last sung". */
+    /** What the page sends: the date it is as of, and the rows of "most sung", "last sung" and "never sung". */
     data: ReportData;
+    /** The books in use, in book order, which "never sung" can be narrowed to. */
+    books: readonly ReportBookOption[];
 }
 
 /**
@@ -53,23 +61,27 @@ interface ReportsViewProps {
  * (`?report=`), each with a table of its songs in pages (`?page=`) and
  * Export CSV, which downloads every row of the report, not only the page
  * shown. "Most sung" has a period (`?period=`: the last 12 months, this year
- * or all time), and "not sung since" a date (`?notSince=`, a year ago until
+ * or all time), "not sung since" a date (`?notSince=`, a year ago until
  * one is chosen) that it works out from the rows of "last sung" as it is
- * typed, with no round trip. All of it lives in the URL, so a view can be
+ * typed, with no round trip, and "never sung" a place (`?in=`: anywhere,
+ * Planning Center or a book). All of it lives in the URL, so a view can be
  * linked to and survives Back. A choice replaces the history entry and sends
  * the table back to page 1; pages push one, so Back steps through them. A
- * value at its default (the most sung, the last 12 months, a year ago, page
- * 1) leaves the URL.
+ * value at its default (the most sung, the last 12 months, a year ago,
+ * anywhere, page 1) leaves the URL.
  */
-export default function ReportsView({ data }: ReportsViewProps) {
+export default function ReportsView({ data, books }: ReportsViewProps) {
     const { searchParams, setSearchParams } = useUrlState();
     const listRef = useRef<HTMLDivElement>(null);
 
-    const { report, period, notSince, page } = parseReportsQuery(searchParams);
+    const query = parseReportsQuery(searchParams);
+    const { report, period, notSince, page } = query;
     const since = notSinceDate(notSince, data.today);
+    const scope = neverSungScope(query.scope, books);
+    const scopeOptions = useMemo(() => neverSungScopeOptions(books), [books]);
     const rows = useMemo(
-        () => selectReportRows(data, { report, period }, since),
-        [data, report, period, since]
+        () => selectReportRows(data, { report, period, scope }, since),
+        [data, report, period, scope, since]
     );
     const shown = pageReportRows(rows, page);
 
@@ -87,6 +99,10 @@ export default function ReportsView({ data }: ReportsViewProps) {
         );
     }
 
+    function handleScopeChange(next: string) {
+        setSearchParams({ in: next === ANYWHERE ? null : next, page: null }, { history: "replace" });
+    }
+
     function handleDateChange(next: string) {
         // An emptied field leaves the report as it is, on the date it has;
         // the field shows that date again when it is left.
@@ -99,7 +115,7 @@ export default function ReportsView({ data }: ReportsViewProps) {
         // Every row of the report, in the order shown, from the same
         // function as the page: what is exported is what is listed.
         downloadCsv(
-            reportCsvFilename(report, { period, since }, new Date()),
+            reportCsvFilename(report, { period, since, scope }, new Date()),
             reportCsv(report, rows)
         );
     }
@@ -145,6 +161,17 @@ export default function ReportsView({ data }: ReportsViewProps) {
                             />
                         </div>
                     )}
+                    {report === "never-sung" && (
+                        <div className="max-w-full space-y-1">
+                            <span className={GROUP_LABEL}>In</span>
+                            <Segmented
+                                value={scope}
+                                options={scopeOptions}
+                                onChange={handleScopeChange}
+                                ariaLabel="Where to look"
+                            />
+                        </div>
+                    )}
                     {report === "not-sung" && (
                         <DateField
                             label="Not sung since"
@@ -160,7 +187,11 @@ export default function ReportsView({ data }: ReportsViewProps) {
                         aria-live="polite"
                         className="text-sm font-medium text-gray-900 dark:text-gray-100"
                     >
-                        {describeReport(report, rows, { period, since })}
+                        {describeReport(report, rows, {
+                            period,
+                            since,
+                            scopeName: neverSungScopeName(scope, books),
+                        })}
                     </p>
                     <ExportCsvButton
                         canExport={rows.length > 0}

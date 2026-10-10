@@ -6,6 +6,7 @@ import {
     MOST_SUNG_PERIOD_LABELS,
     buildLastSung,
     buildMostSung,
+    buildNeverSung,
     buildSongHistory,
     defaultNotSince,
     isPastPlan,
@@ -13,6 +14,7 @@ import {
     parseReportDate,
     periodStart,
     summarizeUse,
+    type ReportPcoSong,
     type ReportSong,
 } from "./reports";
 
@@ -344,6 +346,104 @@ describe("notSungSince", () => {
             notSungSince(lastSung, "2026-06-01").map(({ song }) => song.id)
         );
         expect(kept[0].song.numbers).toBe("R-1");
+    });
+});
+
+describe("buildNeverSung", () => {
+    const pco = (id: string, title: string, removedAt: string | null = null): ReportPcoSong => ({
+        id,
+        title,
+        removedAt,
+    });
+    const sung = song(1, "Amazing Grace", "1", "NEW BRITAIN", ["R-12"]);
+    const scheduled = song(2, "Be Thou My Vision", "2", "SLANE", ["R-50"]);
+    const linkedNever = song(3, "Crown Him", "3", "DIADEMATA", ["R-60"]);
+    const linkedNoBook = song(4, "Doxology", "4");
+    const unlinkedInBook = song(5, "Eternal Father", null, "MELITA", ["R-70"]);
+    const unlinkedNoBook = song(6, "Fairest Lord Jesus", null);
+    const goneInBook = song(7, "Glorious Things", "7", "AUSTRIA", ["R-80"]);
+    const goneNoBook = song(8, "Hark the Herald", "8");
+    const songs = [sung, scheduled, linkedNever, linkedNoBook, unlinkedInBook, unlinkedNoBook, goneInBook, goneNoBook];
+    const pcoSongs = [
+        pco("1", "Amazing Grace"),
+        pco("2", "Be Thou My Vision"),
+        pco("3", "Crown Him with Many Crowns"),
+        pco("4", "Doxology"),
+        pco("7", "Glorious Things", "2026-10-01T12:00:00.000Z"),
+        pco("8", "Hark the Herald", "2026-10-01T12:00:00.000Z"),
+        pco("9", "In Christ Alone"),
+        pco("10", "Jesus Paid It All"),
+        pco("11", "King of Kings", "2026-10-01T12:00:00.000Z"),
+    ];
+    const occurrences = [
+        occurrence("p1", "2026-09-27", "1"),
+        occurrence("p2", TODAY, "2"),
+        occurrence("p3", "2026-10-11", "2"),
+        occurrence("p1", "2026-09-27", "10"),
+        occurrence("p4", "2026-10-18", "9"),
+    ];
+
+    test("lists the songs in Planning Center or in a book never in a past plan, by title", () => {
+        expect(
+            buildNeverSung(occurrences, TODAY, songs, pcoSongs).map(
+                ({ title, song: catalog, pcoSongId, inPlanningCenter, nextScheduledOn }) => [
+                    title,
+                    catalog?.id ?? null,
+                    pcoSongId,
+                    inPlanningCenter,
+                    nextScheduledOn,
+                ]
+            )
+        ).toEqual([
+            ["Be Thou My Vision", 2, "2", true, TODAY],
+            ["Crown Him", 3, "3", true, null],
+            ["Doxology", 4, "4", true, null],
+            ["Eternal Father", 5, null, false, null],
+            ["Glorious Things", 7, "7", false, null],
+            ["In Christ Alone", null, "9", true, "2026-10-18"],
+        ]);
+    });
+
+    test("leaves out a song sung, one in no book and not in Planning Center, and a Planning Center song gone", () => {
+        const titles = buildNeverSung(occurrences, TODAY, songs, pcoSongs).map(({ title }) => title);
+        expect(titles).not.toContain("Amazing Grace");
+        expect(titles).not.toContain("Jesus Paid It All");
+        expect(titles).not.toContain("Fairest Lord Jesus");
+        expect(titles).not.toContain("Hark the Herald");
+        expect(titles).not.toContain("King of Kings");
+    });
+
+    test("lists a linked song once, by the catalog's title, with its numbers", () => {
+        const rows = buildNeverSung(occurrences, TODAY, songs, pcoSongs);
+        expect(rows.filter(({ pcoSongId }) => pcoSongId === "3")).toEqual([
+            { song: linkedNever, pcoSongId: "3", title: "Crown Him", inPlanningCenter: true, nextScheduledOn: null },
+        ]);
+    });
+
+    test("orders by title, then tune (an unknown tune first), then a catalog song before a Planning Center song, then by id", () => {
+        const rows = buildNeverSung(
+            [],
+            TODAY,
+            [
+                song(21, "Abide", null, "MONK", ["R-1"]),
+                song(20, "Abide", null, "EVENTIDE", ["R-2"]),
+                song(22, "Abide", null, null, ["R-3"]),
+            ],
+            [pco("100", "Abide"), pco("30", "Abide"), pco("40", "Above All")]
+        );
+        expect(rows.map(({ song: catalog, pcoSongId }) => catalog?.id ?? pcoSongId)).toEqual([
+            22,
+            "30",
+            "100",
+            20,
+            21,
+            "40",
+        ]);
+    });
+
+    test("lists every song when nothing was ever sung, and none when there are no songs", () => {
+        expect(buildNeverSung([], TODAY, songs, pcoSongs)).toHaveLength(8);
+        expect(buildNeverSung(occurrences, TODAY, [], [])).toEqual([]);
     });
 });
 

@@ -17,12 +17,14 @@ import {
     MOST_SUNG_PERIODS,
     buildLastSung,
     buildMostSung,
+    buildNeverSung,
     buildSongHistory,
     defaultNotSince,
     notSungSince,
     type LastSungRow,
     type MostSungPeriod,
     type MostSungRow,
+    type NeverSungRow,
     type SongHistory,
 } from "@/lib/reports";
 import { createTtlCache } from "@/lib/ttlCache";
@@ -70,6 +72,8 @@ export interface Reports {
     notSince: string;
     /** The linked songs not sung since `notSince`, never sung first, then the longest unsung. */
     notSungSince: LastSungRow[];
+    /** Every song in Planning Center or in a book of the catalog that was never in a past plan, by title. */
+    neverSung: NeverSungRow[];
 }
 
 /** What a page may ask the reports for. */
@@ -83,16 +87,18 @@ export interface ReportsOptions {
 }
 
 /**
- * Every report at `now`: most sung in each period, last sung and not sung
- * since. Reads the whole history (a few thousand rows), the catalog's songs
- * and the mirror's titles, in a few queries however many songs there are.
+ * Every report at `now`: most sung in each period, last sung, not sung
+ * since and never sung. Reads the whole history (a few thousand rows), the
+ * catalog's songs and the mirror's songs, in a few queries however many
+ * songs there are.
  */
 export function getReports({ notSince = null }: ReportsOptions = {}, now: Date = new Date()): Reports {
     const db = getDb();
     const today = localYmd(now);
     const occurrences = listOccurrences(db);
     const songs = listCatalogSongs(db, today);
-    const titles = new Map(listPcoSongs(db).map(({ id, title }) => [id, title]));
+    const pcoSongs = listPcoSongs(db);
+    const titles = new Map(pcoSongs.map(({ id, title }) => [id, title]));
     const lastSung = buildLastSung(occurrences, today, songs);
     const since = notSince ?? defaultNotSince(today);
     return {
@@ -108,6 +114,7 @@ export function getReports({ notSince = null }: ReportsOptions = {}, now: Date =
         lastSung,
         notSince: since,
         notSungSince: notSungSince(lastSung, since),
+        neverSung: buildNeverSung(occurrences, today, songs, pcoSongs),
     };
 }
 

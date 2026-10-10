@@ -202,6 +202,7 @@ describe("getReports", () => {
             lastSung: [],
             notSince: "2025-10-04",
             notSungSince: [],
+            neverSung: [],
         });
     });
 
@@ -273,6 +274,34 @@ describe("getReports", () => {
         expect(since("2024-01-01")).toEqual(["Never Sung"]);
     });
 
+    test("lists the songs in Planning Center or in a book never in a past plan, by title", () => {
+        const { help } = seedChurch();
+        const rejoice = Number(db.prepare("SELECT id FROM books WHERE code = 'R'").get()?.id);
+        const unlinkedInBook = seedSong(db, { hymnId: seedHymn(db, { title: "Be Thou My Vision" }) });
+        seedEntry(db, { bookId: rejoice, songId: unlinkedInBook, number: 50 });
+        seedPcoSong(db, { id: "1007", title: "Cornerstone" });
+        seedPcoSong(db, { id: "1008", title: "Gone From Planning Center", removedAt: "2026-10-01T12:00:00.000Z" });
+
+        const rows = getReports({}, NOW).neverSung;
+
+        expect(
+            rows.map(({ title, song, pcoSongId, inPlanningCenter, nextScheduledOn }) => [
+                title,
+                song?.id ?? null,
+                pcoSongId,
+                inPlanningCenter,
+                nextScheduledOn,
+            ])
+        ).toEqual([
+            ["Be Thou My Vision", unlinkedInBook, null, false, null],
+            ["Cornerstone", null, "1007", true, null],
+            // In the plan dated today, which is upcoming: scheduled, not sung.
+            ["Never Sung", expect.any(Number), "1003", true, "2026-10-04"],
+        ]);
+        expect(rows[0].song?.entries.map(({ label }) => label)).toEqual(["R-50"]);
+        expect(rows.some(({ song }) => song?.id === help)).toBe(false);
+    });
+
     test("is as of the date it is asked at: the plan dated today is sung a day later", () => {
         seedChurch();
         const tomorrow = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
@@ -282,6 +311,7 @@ describe("getReports", () => {
             times: 1,
             lastSungOn: "2026-10-04",
         });
+        expect(reports.neverSung.map(({ title }) => title)).not.toContain("Never Sung");
     });
 
     test("says what the history holds and its latest sync run", () => {
