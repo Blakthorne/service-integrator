@@ -10,13 +10,14 @@ const HEADER_CELL =
 const WIDE_ONLY = "hidden sm:table-cell";
 
 /** The columns a table can have. */
-type Column = "place" | "song" | "numbers" | "times" | "lastSung" | "next";
+type Column = "place" | "song" | "numbers" | "times" | "lastSung" | "next" | "inPlanningCenter";
 
 /** Each report's columns, in order. */
 const COLUMNS: Readonly<Record<ReportKind, readonly Column[]>> = {
     "most-sung": ["place", "song", "numbers", "times", "lastSung"],
     "last-sung": ["song", "numbers", "lastSung", "times", "next"],
     "not-sung": ["song", "numbers", "lastSung"],
+    "never-sung": ["song", "numbers", "inPlanningCenter", "next"],
 };
 
 const HEADERS: Readonly<Record<Exclude<Column, "place">, string>> = {
@@ -25,6 +26,7 @@ const HEADERS: Readonly<Record<Exclude<Column, "place">, string>> = {
     times: "Times sung",
     lastSung: "Last sung",
     next: "Next scheduled",
+    inPlanningCenter: "In Planning Center",
 };
 
 /** The columns that a phone shows: the others are said under the title (`describeRowUse`). */
@@ -136,6 +138,19 @@ function NextCell({ row }: CellProps) {
     );
 }
 
+/** Whether a song is in Planning Center ("never sung" lists the catalog's songs that are not). */
+function InPlanningCenterCell({ row }: CellProps) {
+    return (
+        <td className={`${WIDE_ONLY} px-6 py-3 text-sm text-gray-700 dark:text-gray-300 align-top`}>
+            {row.inPlanningCenter === false ? (
+                <span className="text-gray-500 dark:text-gray-400">No</span>
+            ) : (
+                "Yes"
+            )}
+        </td>
+    );
+}
+
 /** The song's place in the report ("most sung" ranks its rows). */
 function PlaceCell({ place }: CellProps) {
     return (
@@ -152,6 +167,7 @@ const CELLS: Readonly<Record<Column, (props: CellProps) => React.JSX.Element>> =
     times: TimesCell,
     lastSung: LastSungCell,
     next: NextCell,
+    inPlanningCenter: InPlanningCenterCell,
 };
 
 interface ReportTableProps {
@@ -171,7 +187,8 @@ interface ReportTableProps {
  * when it is in the catalog; a song that is not says so), its numbers, and
  * the report's own columns (`COLUMNS`): the place and the times sung and the
  * last date for "most sung", the last date, the times and the next date for
- * "last sung", and the last date for "not sung since". On phones the
+ * "last sung", the last date for "not sung since", and whether it is in
+ * Planning Center and the next date for "never sung". On phones the
  * columns past the numbers are said under the title instead.
  */
 export default function ReportTable({ report, rows, caption, firstPlace, emptyMessage }: ReportTableProps) {

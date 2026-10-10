@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
 import type { HistoryCounts } from "./db/history";
 import type { LabelledEntry } from "./domain";
-import type { LastSungRow, MostSungRow, ReportSong } from "./reports";
+import type { LastSungRow, MostSungRow, NeverSungRow, ReportSong } from "./reports";
 import {
+    ANYWHERE,
     DEFAULT_PERIOD,
+    IN_PLANNING_CENTER,
     DEFAULT_REPORT,
     PERIOD_OPTIONS,
     REPORTS,
@@ -15,6 +17,10 @@ import {
     describeRowUse,
     lastSungRows,
     mostSungRows,
+    neverSungRows,
+    neverSungScope,
+    neverSungScopeName,
+    neverSungScopeOptions,
     notSinceDate,
     pageReportRows,
     parseReportsQuery,
@@ -24,6 +30,7 @@ import {
     selectReportRows,
     toReportData,
     toReportSongView,
+    type ReportBookOption,
     type ReportData,
     type ReportRow,
 } from "./reportsView";
@@ -39,7 +46,8 @@ function entry(label: string, variantNote: string | null = null): LabelledEntry 
         position: null,
         locationLabel: null,
         variantNote,
-        bookCode: "R",
+        // "G-12" is in book G; every other label is in book R.
+        bookCode: label.startsWith("G-") ? "G" : "R",
         label,
     };
 }
@@ -58,6 +66,7 @@ const amazingGrace = song(1, "Amazing Grace", "NEW BRITAIN", ["R-396", "G-317"])
 const blessedAssurance = song(2, "Blessed Assurance", "ASSURANCE", ["R-12"]);
 const holyHoly = song(3, "Holy, Holy, Holy", null);
 const neverSung = song(4, "Never Sung", "TUNE", ["R-40"]);
+const comeThouFount = song(5, "Come, Thou Fount", "NETTLETON", ["G-12", "G-13"], null);
 
 function mostSung(
     pcoSongId: string,
@@ -91,9 +100,31 @@ const reports = {
         ],
     },
     lastSung,
+    neverSung: [
+        {
+            song: null,
+            pcoSongId: "9002",
+            title: "Build My Life",
+            inPlanningCenter: true,
+            nextScheduledOn: "2026-10-11",
+        },
+        {
+            song: comeThouFount,
+            pcoSongId: null,
+            title: "Come, Thou Fount",
+            inPlanningCenter: false,
+            nextScheduledOn: null,
+        },
+        { song: neverSung, pcoSongId: "5004", title: "Never Sung", inPlanningCenter: true, nextScheduledOn: null },
+    ] satisfies NeverSungRow[],
 };
 
 const data: ReportData = toReportData(reports, " / ");
+
+const books: ReportBookOption[] = [
+    { code: "R", name: "Rejoice Hymns", shortName: "Rejoice" },
+    { code: "G", name: "Great Hymns", shortName: "Great" },
+];
 
 describe("parseReportsQuery", () => {
     const parse = (query: string) => parseReportsQuery(new URLSearchParams(query));
@@ -103,6 +134,7 @@ describe("parseReportsQuery", () => {
             report: "most-sung",
             period: "last-12-months",
             notSince: null,
+            scope: ANYWHERE,
             page: 1,
         });
         expect(DEFAULT_REPORT).toBe("most-sung");
@@ -114,6 +146,7 @@ describe("parseReportsQuery", () => {
             report: "not-sung",
             period: "this-year",
             notSince: "2025-10-04",
+            scope: ANYWHERE,
             page: 3,
         });
         expect(parse("report=last-sung").report).toBe("last-sung");
@@ -126,6 +159,17 @@ describe("parseReportsQuery", () => {
         expect(parse("period=year").period).toBe("last-12-months");
         expect(parse("page=0").page).toBe(1);
         expect(parse("page=abc").page).toBe(1);
+    });
+
+    test("reads where never sung looks: Planning Center, a book's code, or anywhere", () => {
+        expect(parse("report=never-sung").report).toBe("never-sung");
+        expect(parse("in=planning-center").scope).toBe(IN_PLANNING_CENTER);
+        expect(parse("in=R").scope).toBe("R");
+        expect(parse("in=r").scope).toBe("r");
+        expect(parse("in=").scope).toBe(ANYWHERE);
+        expect(parse("in=Planning-Center").scope).toBe(ANYWHERE);
+        expect(parse("in=1R").scope).toBe(ANYWHERE);
+        expect(parse("in=R%20G").scope).toBe(ANYWHERE);
     });
 
     test("takes only a real date written YYYY-MM-DD", () => {
@@ -141,6 +185,7 @@ describe("the picker's words", () => {
             "Most sung",
             "Last sung",
             "Not sung since",
+            "Never sung",
         ]);
         for (const report of REPORTS) {
             expect(REPORT_DESCRIPTIONS[report]).toMatch(/\.$/);
@@ -160,6 +205,35 @@ describe("notSinceDate", () => {
     test("is the date the URL has, or a year before today", () => {
         expect(notSinceDate("2026-01-01", TODAY)).toBe("2026-01-01");
         expect(notSinceDate(null, TODAY)).toBe("2025-10-04");
+    });
+});
+
+describe("where never sung looks", () => {
+    test("keeps anywhere and Planning Center, and spells a book's code as the books do", () => {
+        expect(neverSungScope(ANYWHERE, books)).toBe(ANYWHERE);
+        expect(neverSungScope(IN_PLANNING_CENTER, books)).toBe(IN_PLANNING_CENTER);
+        expect(neverSungScope("G", books)).toBe("G");
+        expect(neverSungScope("g", books)).toBe("G");
+    });
+
+    test("looks anywhere for a code that is not one of the books offered", () => {
+        expect(neverSungScope("X", books)).toBe(ANYWHERE);
+        expect(neverSungScope("R", [])).toBe(ANYWHERE);
+    });
+
+    test("names Planning Center or the book, and nothing for anywhere", () => {
+        expect(neverSungScopeName(ANYWHERE, books)).toBeNull();
+        expect(neverSungScopeName(IN_PLANNING_CENTER, books)).toBe("Planning Center");
+        expect(neverSungScopeName("R", books)).toBe("Rejoice Hymns");
+    });
+
+    test("offers anywhere, Planning Center, then each book by its short name", () => {
+        expect(neverSungScopeOptions(books)).toEqual([
+            { value: ANYWHERE, label: "Anywhere", title: "Planning Center and every book" },
+            { value: IN_PLANNING_CENTER, label: "Planning Center", title: "The songs in Planning Center" },
+            { value: "R", label: "Rejoice", title: "Rejoice Hymns" },
+            { value: "G", label: "Great", title: "Great Hymns" },
+        ]);
     });
 });
 
@@ -199,6 +273,35 @@ describe("toReportData", () => {
         expect(Object.keys(data.lastSung[0].song).sort()).toEqual(["id", "numbers", "title", "tuneName"]);
     });
 
+    test("sends each never sung song with its numbers and the codes of its books, once each", () => {
+        expect(data.neverSung).toEqual([
+            {
+                song: null,
+                pcoSongId: "9002",
+                title: "Build My Life",
+                inPlanningCenter: true,
+                nextScheduledOn: "2026-10-11",
+                books: [],
+            },
+            {
+                song: { id: 5, title: "Come, Thou Fount", tuneName: "NETTLETON", numbers: "G-12 / G-13" },
+                pcoSongId: null,
+                title: "Come, Thou Fount",
+                inPlanningCenter: false,
+                nextScheduledOn: null,
+                books: ["G"],
+            },
+            {
+                song: { id: 4, title: "Never Sung", tuneName: "TUNE", numbers: "R-40" },
+                pcoSongId: "5004",
+                title: "Never Sung",
+                inPlanningCenter: true,
+                nextScheduledOn: null,
+                books: ["R"],
+            },
+        ]);
+    });
+
     test("keeps a song sung that is in no catalog song, and its Planning Center title", () => {
         expect(data.mostSung["last-12-months"][1]).toEqual({
             pcoSongId: "9001",
@@ -232,6 +335,7 @@ describe("report rows", () => {
                 times: 11,
                 lastSungOn: "2026-09-27",
                 nextScheduledOn: null,
+                inPlanningCenter: null,
             },
             {
                 key: "pco-9001",
@@ -242,6 +346,7 @@ describe("report rows", () => {
                 times: 6,
                 lastSungOn: "2026-09-20",
                 nextScheduledOn: null,
+                inPlanningCenter: null,
             },
         ]);
     });
@@ -253,10 +358,57 @@ describe("report rows", () => {
         expect(rows[3]).toMatchObject({ songId: 4, times: 0, lastSungOn: null });
     });
 
+    test("never sung: a song of the catalog links to its page, one that is not has none, and none was sung", () => {
+        expect(neverSungRows(data.neverSung, ANYWHERE)).toEqual([
+            {
+                key: "pco-9002",
+                songId: null,
+                title: "Build My Life",
+                tuneName: null,
+                numbers: "",
+                times: 0,
+                lastSungOn: null,
+                nextScheduledOn: "2026-10-11",
+                inPlanningCenter: true,
+            },
+            {
+                key: "song-5",
+                songId: 5,
+                title: "Come, Thou Fount",
+                tuneName: "NETTLETON",
+                numbers: "G-12 / G-13",
+                times: 0,
+                lastSungOn: null,
+                nextScheduledOn: null,
+                inPlanningCenter: false,
+            },
+            {
+                key: "song-4",
+                songId: 4,
+                title: "Never Sung",
+                tuneName: "TUNE",
+                numbers: "R-40",
+                times: 0,
+                lastSungOn: null,
+                nextScheduledOn: null,
+                inPlanningCenter: true,
+            },
+        ]);
+    });
+
+    test("never sung: keeps the songs in Planning Center, or those in a book", () => {
+        const keys = (scope: string) => neverSungRows(data.neverSung, scope).map(({ key }) => key);
+        expect(keys(IN_PLANNING_CENTER)).toEqual(["pco-9002", "song-4"]);
+        expect(keys("R")).toEqual(["song-4"]);
+        expect(keys("G")).toEqual(["song-5"]);
+        expect(keys("X")).toEqual([]);
+    });
+
     test("every row of a report has its own key", () => {
         for (const rows of [
             ...Object.values(data.mostSung).map(mostSungRows),
             lastSungRows(data.lastSung),
+            neverSungRows(data.neverSung, ANYWHERE),
         ]) {
             expect(new Set(rows.map(({ key }) => key)).size).toBe(rows.length);
         }
@@ -305,6 +457,31 @@ describe("selectReportRows", () => {
     });
 });
 
+describe("selectReportRows: never sung", () => {
+    test("every song never sung, anywhere when no place is given, by title", () => {
+        expect(
+            selectReportRows(data, { report: "never-sung", period: "all-time" }, "2020-01-01").map(
+                ({ title }) => title
+            )
+        ).toEqual(["Build My Life", "Come, Thou Fount", "Never Sung"]);
+    });
+
+    test("the songs never sung in the place asked for, whatever the period or the date", () => {
+        expect(
+            selectReportRows(
+                data,
+                { report: "never-sung", period: "this-year", scope: IN_PLANNING_CENTER },
+                "2026-10-01"
+            ).map(({ title }) => title)
+        ).toEqual(["Build My Life", "Never Sung"]);
+        expect(
+            selectReportRows(data, { report: "never-sung", period: "all-time", scope: "G" }, "2020-01-01").map(
+                ({ title }) => title
+            )
+        ).toEqual(["Come, Thou Fount"]);
+    });
+});
+
 describe("pageReportRows", () => {
     const rows = (count: number): ReportRow[] =>
         Array.from({ length: count }, (_, index) => ({
@@ -316,6 +493,7 @@ describe("pageReportRows", () => {
             times: 1,
             lastSungOn: null,
             nextScheduledOn: null,
+            inPlanningCenter: null,
         }));
 
     test("gives the page asked for, with where it starts", () => {
@@ -376,6 +554,20 @@ describe("describeReport", () => {
         );
     });
 
+    test("never sung says how many, where it looked, and how many of them are scheduled", () => {
+        const rows = (scope: string) => neverSungRows(data.neverSung, scope);
+        expect(describeReport("never-sung", rows(ANYWHERE), options)).toBe(
+            "3 songs never sung, 1 of them scheduled"
+        );
+        expect(
+            describeReport("never-sung", rows(IN_PLANNING_CENTER), { ...options, scopeName: "Planning Center" })
+        ).toBe("2 songs in Planning Center never sung, 1 of them scheduled");
+        expect(describeReport("never-sung", rows("G"), { ...options, scopeName: "Great Hymns" })).toBe(
+            "1 song in Great Hymns never sung"
+        );
+        expect(describeReport("never-sung", [], options)).toBe("0 songs never sung");
+    });
+
     test("counts in thousands with a comma", () => {
         const many = Array.from({ length: 1247 }, (_, index) => ({ ...all[0], key: `song-${index}` }));
         expect(describeReport("last-sung", many, options)).toBe("1,247 songs linked to Planning Center");
@@ -392,6 +584,7 @@ describe("describeRowUse", () => {
         times: 14,
         lastSungOn: "2026-09-27",
         nextScheduledOn: null,
+        inPlanningCenter: null,
         ...overrides,
     });
 
@@ -414,6 +607,17 @@ describe("describeRowUse", () => {
     test("not sung since: when last, or that it never was", () => {
         expect(describeRowUse("not-sung", row({}))).toBe("Last sung 9/27/26");
         expect(describeRowUse("not-sung", row({ lastSungOn: null, times: 0 }))).toBe("Never sung");
+    });
+
+    test("never sung: that it never was, when it is next scheduled, or that it is not in Planning Center", () => {
+        const never = { lastSungOn: null, times: 0 };
+        expect(describeRowUse("never-sung", row({ ...never, inPlanningCenter: true }))).toBe("Never sung");
+        expect(
+            describeRowUse("never-sung", row({ ...never, inPlanningCenter: true, nextScheduledOn: "2026-10-11" }))
+        ).toBe("Never sung, next 10/11/26");
+        expect(describeRowUse("never-sung", row({ ...never, inPlanningCenter: false }))).toBe(
+            "Never sung, not in Planning Center"
+        );
     });
 });
 
@@ -452,7 +656,17 @@ describe("CSV", () => {
         "most-sung": mostSungRows(data.mostSung["last-12-months"]),
         "last-sung": lastSungRows(data.lastSung),
         "not-sung": lastSungRows(data.lastSung.slice(2)),
+        "never-sung": neverSungRows(data.neverSung, ANYWHERE),
     } as const;
+
+    test("never sung: whether the song is in Planning Center and in the catalog, and its next date", () => {
+        expect(reportCsvRecords("never-sung", rows["never-sung"])).toEqual([
+            ["Title", "Tune", "Numbers", "In Planning Center", "In catalog", "Next scheduled"],
+            ["Build My Life", "", "", "yes", "no", "2026-10-11"],
+            ["Come, Thou Fount", "NETTLETON", "G-12 / G-13", "no", "yes", ""],
+            ["Never Sung", "TUNE", "R-40", "yes", "yes", ""],
+        ]);
+    });
 
     test("most sung: the title, tune, numbers, times, last date and whether the song is in the catalog", () => {
         expect(reportCsvRecords("most-sung", rows["most-sung"])).toEqual([
@@ -514,6 +728,20 @@ describe("CSV", () => {
             );
             expect(reportCsvFilename("not-sung", { period: "all-time", since: "2025-06-30" }, now)).toBe(
                 "not-sung-since-2025-06-30.csv"
+            );
+        });
+
+        test("name where never sung looked, when it was not anywhere", () => {
+            const options = { period: "all-time", since: "2025-10-04" } as const;
+            expect(reportCsvFilename("never-sung", options, now)).toBe("never-sung-2026-10-04.csv");
+            expect(reportCsvFilename("never-sung", { ...options, scope: ANYWHERE }, now)).toBe(
+                "never-sung-2026-10-04.csv"
+            );
+            expect(reportCsvFilename("never-sung", { ...options, scope: IN_PLANNING_CENTER }, now)).toBe(
+                "never-sung-planning-center-2026-10-04.csv"
+            );
+            expect(reportCsvFilename("never-sung", { ...options, scope: "R" }, now)).toBe(
+                "never-sung-R-2026-10-04.csv"
             );
         });
     });
