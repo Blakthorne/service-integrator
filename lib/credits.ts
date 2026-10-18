@@ -134,12 +134,13 @@ function readConvention(author: string, roles: readonly string[]): Credit[] | nu
  *   music, and any more are dropped.
  *
  * Every part is trimmed, and an empty part is kept as "" (the line prints
- * it, or "Unknown", as it always did).
+ * it, or "Unknown", as it always did). `dropped` holds the parts the
+ * reading leaves out, which neither the line nor the credits name.
  */
-type LegacyReading =
-    | { kind: "three"; words: [string, string]; music: string }
+export type LegacyReading =
+    | { kind: "three"; words: [string, string]; music: string; dropped: string[] }
     | { kind: "one"; author: string }
-    | { kind: "two"; words: string; music: string };
+    | { kind: "two"; words: string; music: string; dropped: string[] };
 
 /**
  * Read an author with no labels as the copyright text always read it. The
@@ -148,13 +149,18 @@ type LegacyReading =
  * "A AND B" or "A & B"; three or more comma-separated parts win over
  * " and ", which is then not split.
  */
-function readLegacyAuthor(author: string): LegacyReading {
+export function readLegacyAuthor(author: string): LegacyReading {
     // First split by comma to check if there are three authors
     const commaAuthors = author.split(",").map((a) => a.trim());
 
     if (commaAuthors.length >= 3) {
         // If there are three or more authors separated by commas
-        return { kind: "three", words: [commaAuthors[0], commaAuthors[1]], music: commaAuthors[2] };
+        return {
+            kind: "three",
+            words: [commaAuthors[0], commaAuthors[1]],
+            music: commaAuthors[2],
+            dropped: commaAuthors.slice(3),
+        };
     }
     // If not three authors, split by "and"
     const authors = author.split(" and ").map((a) => a.trim());
@@ -163,7 +169,7 @@ function readLegacyAuthor(author: string): LegacyReading {
         return { kind: "one", author: authors[0] };
     }
     // Two authors case
-    return { kind: "two", words: authors[0], music: authors[1] };
+    return { kind: "two", words: authors[0], music: authors[1], dropped: authors.slice(2) };
 }
 
 /** The phrases the legacy line prints: the words' role's, the music's, and the two together. */
