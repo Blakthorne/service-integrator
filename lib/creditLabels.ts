@@ -6,7 +6,7 @@ import {
     renderCredits,
 } from "./credits";
 import type { CreditLabelOutcome } from "./domain";
-import type { CreditSettings } from "./settings";
+import type { AutoCreditLabelSettings, CreditSettings } from "./settings";
 
 /**
  * Credit labels: a song's author that is not in the labelled convention yet
@@ -163,6 +163,83 @@ export function isTrustedProposal(
         TRUSTED_CREDIT_LABEL_SHAPES.includes(proposal.shape) &&
         keepsCreditLine(proposal)
     );
+}
+
+// ---------------------------------------------------------------------------
+// New songs, labelled by the app itself
+// ---------------------------------------------------------------------------
+
+/** A mirrored song as labelling new songs reads it. */
+export interface NewCreditLabelSong {
+    pcoSongId: string;
+    title: string;
+    author: string | null;
+    /** When Planning Center created it; null when it did not say. */
+    createdAt: string | null;
+}
+
+/** Whether `song` was created in Planning Center at or after `since`, an instant. */
+function createdSince(song: NewCreditLabelSong, since: string): boolean {
+    const created = song.createdAt === null ? Number.NaN : Date.parse(song.createdAt);
+    return !Number.isNaN(created) && created >= Date.parse(since);
+}
+
+/**
+ * The labels the app asks for by itself, for new songs: with labelling new
+ * songs on (`creditAutoLabelSince`), each of `songs` (the songs still in
+ * Planning Center) created since it was turned on whose label the app is
+ * trusted with (`isTrustedProposal`) and that it has never asked to label
+ * by itself before (`autoAsked`), so a label a person undid is never
+ * written again. None while it is off.
+ */
+export function chooseAutoCreditLabels(
+    songs: readonly NewCreditLabelSong[],
+    settings: AutoCreditLabelSettings,
+    autoAsked: ReadonlySet<string>
+): CreditLabelAsked[] {
+    const since = settings.creditAutoLabelSince;
+    if (since === null) {
+        return [];
+    }
+    return songs.flatMap((song) => {
+        if (!createdSince(song, since) || autoAsked.has(song.pcoSongId)) {
+            return [];
+        }
+        const proposal = proposeCreditLabel(song.author, settings);
+        return isTrustedProposal(proposal)
+            ? [{ pcoSongId: song.pcoSongId, shownAuthor: song.author ?? "", author: proposal.author }]
+            : [];
+    });
+}
+
+/**
+ * The new songs whose authors need a person: with labelling new songs on,
+ * each of `songs` created since it was turned on whose author is not
+ * labelled, has no label waiting (`waiting`), and is not one the app is
+ * about to label by itself (trusted, and never asked for). They are what
+ * the app could not label, or a label of which did not go through. None
+ * while it is off.
+ */
+export function newSongsNeedingLabels(
+    songs: readonly NewCreditLabelSong[],
+    settings: AutoCreditLabelSettings,
+    autoAsked: ReadonlySet<string>,
+    waiting: ReadonlySet<string>
+): NewCreditLabelSong[] {
+    const since = settings.creditAutoLabelSince;
+    if (since === null) {
+        return [];
+    }
+    return songs.filter((song) => {
+        if (!createdSince(song, since) || waiting.has(song.pcoSongId)) {
+            return false;
+        }
+        const proposal = proposeCreditLabel(song.author, settings);
+        return (
+            proposal.kind !== "labelled" &&
+            !(isTrustedProposal(proposal) && !autoAsked.has(song.pcoSongId))
+        );
+    });
 }
 
 // ---------------------------------------------------------------------------

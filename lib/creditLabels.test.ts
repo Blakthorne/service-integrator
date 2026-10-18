@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
     buildCreditLabelReview,
+    chooseAutoCreditLabels,
     describeCancelledCreditLabels,
     describeCreditLabelReview,
     describeRequestedCreditLabels,
     isTrustedProposal,
+    newSongsNeedingLabels,
     proposeCreditLabel,
     toCreditLabelTierViews,
     type CreditLabelProposal,
@@ -332,5 +334,61 @@ describe("describeCreditLabelReview", () => {
         expect(describeCreditLabelReview(buildCreditLabelReview([], SETTINGS, new Set()))).toBe(
             "There are no Planning Center songs yet."
         );
+    });
+});
+
+describe("labelling new songs", () => {
+    const SINCE = "2026-10-18T12:00:00.000Z";
+    const ON = { ...SETTINGS, creditAutoLabelSince: SINCE };
+    const OFF = { ...SETTINGS, creditAutoLabelSince: null };
+    const song = (pcoSongId: string, author: string | null, createdAt: string | null = "2026-10-18T13:00:00Z") => ({
+        pcoSongId,
+        title: `Song ${pcoSongId}`,
+        author,
+        createdAt,
+    });
+
+    const SONGS = [
+        song("1", "Fanny Crosby"),
+        song("2", "Isaac Watts and Lowell Mason"),
+        song("3", "A, B, C"),
+        song("4", "Isaac Watts, Lowell Mason"),
+        song("5", "Words: John Newton"),
+        song("6", "John Newton Jr."),
+        song("7", "Fanny Crosby", "2026-10-18T11:59:59Z"),
+        song("8", "Fanny Crosby", null),
+        song("9", "Fanny Crosby", "2026-10-18T12:00:00Z"),
+    ];
+
+    test("asks for the trusted labels of songs created since it was turned on, once each", () => {
+        expect(chooseAutoCreditLabels(SONGS, ON, new Set())).toEqual([
+            { pcoSongId: "1", shownAuthor: "Fanny Crosby", author: "Words & Music: Fanny Crosby" },
+            {
+                pcoSongId: "2",
+                shownAuthor: "Isaac Watts and Lowell Mason",
+                author: "Words: Isaac Watts; Music: Lowell Mason",
+            },
+            { pcoSongId: "9", shownAuthor: "Fanny Crosby", author: "Words & Music: Fanny Crosby" },
+        ]);
+        expect(chooseAutoCreditLabels(SONGS, ON, new Set(["1", "2"])).map(({ pcoSongId }) => pcoSongId)).toEqual([
+            "9",
+        ]);
+    });
+
+    test("asks for nothing while it is off", () => {
+        expect(chooseAutoCreditLabels(SONGS, OFF, new Set())).toEqual([]);
+        expect(newSongsNeedingLabels(SONGS, OFF, new Set(), new Set())).toEqual([]);
+    });
+
+    test("lists the new songs a person has to label: not trusted, or asked for already and still not labelled", () => {
+        expect(newSongsNeedingLabels(SONGS, ON, new Set(), new Set()).map(({ pcoSongId }) => pcoSongId)).toEqual([
+            "3",
+            "4",
+            "6",
+        ]);
+        // The app asked for 1 already, and it is still not labelled; 2 waits to be written.
+        expect(
+            newSongsNeedingLabels(SONGS, ON, new Set(["1", "2"]), new Set(["2", "3"])).map(({ pcoSongId }) => pcoSongId)
+        ).toEqual(["1", "4", "6"]);
     });
 });

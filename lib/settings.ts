@@ -72,6 +72,14 @@ export interface AppSettings {
      * to `REPEAT_WARNING_WEEKS_MAX`, where 0 turns the warnings off.
      */
     repeatWarningWeeks: number;
+    /**
+     * When labelling new songs' authors automatically was turned on, as an
+     * ISO 8601 instant; null while it is off. When on, a song created in
+     * Planning Center since then whose author the app may label by itself
+     * (`isTrustedProposal`, lib/creditLabels.ts) is labelled after the song
+     * sync brings it.
+     */
+    creditAutoLabelSince: string | null;
 }
 
 export type SettingKey = keyof AppSettings;
@@ -94,6 +102,7 @@ export const DEFAULT_SETTINGS: Readonly<AppSettings> = Object.freeze({
     emailRecipients: Object.freeze([]),
     emailSubjectTemplate: "Songs for {date} · {service}",
     repeatWarningWeeks: 6,
+    creditAutoLabelSince: null,
 });
 
 /** What a parser made of a value: the setting's value, or why it is not one, fit to show. */
@@ -503,6 +512,23 @@ function parseRepeatWarningWeeks(value: unknown): SettingParse<number> {
     return { ok: true, value: weeks };
 }
 
+/**
+ * When labelling new songs automatically was turned on: an ISO 8601 instant
+ * exactly as `toISOString()` writes it (what is stored), or null for off.
+ */
+function parseCreditAutoLabelSince(value: unknown): SettingParse<string | null> {
+    if (value === null) {
+        return { ok: true, value: null };
+    }
+    if (typeof value === "string") {
+        const time = Date.parse(value);
+        if (!Number.isNaN(time) && new Date(time).toISOString() === value) {
+            return { ok: true, value };
+        }
+    }
+    return refuse("Labelling new songs automatically must be on since a time, or off.");
+}
+
 /** Every setting's default and parser, by key. */
 export const SETTINGS: { readonly [K in SettingKey]: SettingDefinition<AppSettings[K]> } = {
     ccliLicenseNumber: {
@@ -544,6 +570,10 @@ export const SETTINGS: { readonly [K in SettingKey]: SettingDefinition<AppSettin
     repeatWarningWeeks: {
         defaultValue: DEFAULT_SETTINGS.repeatWarningWeeks,
         parse: parseRepeatWarningWeeks,
+    },
+    creditAutoLabelSince: {
+        defaultValue: DEFAULT_SETTINGS.creditAutoLabelSince,
+        parse: parseCreditAutoLabelSince,
     },
 };
 
@@ -665,6 +695,9 @@ export type HymnNoteSettings = Pick<AppSettings, "numberSeparator" | "hymnNoteIn
 
 /** What reading and writing songs' credits follows of the settings. */
 export type CreditSettings = Pick<AppSettings, "creditRoles" | "creditPhrases">;
+
+/** What labelling new songs' authors automatically follows of the settings. */
+export type AutoCreditLabelSettings = CreditSettings & Pick<AppSettings, "creditAutoLabelSince">;
 
 /** What a plan's email follows of the settings. */
 export type EmailSettings = Pick<AppSettings, "emailRecipients" | "emailSubjectTemplate">;

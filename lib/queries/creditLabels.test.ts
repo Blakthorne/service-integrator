@@ -24,6 +24,7 @@ vi.mock("@/lib/db", async (importOriginal) => ({
 import {
     CREDIT_LABEL_MAX_ATTEMPTS,
     describeCreditLabelsRun,
+    hasCreditLabelWork,
     writeCreditLabels,
     type CreditLabelsRunCounts,
 } from "./creditLabels";
@@ -83,6 +84,7 @@ function ended() {
 }
 
 const NONE: CreditLabelsRunCounts = {
+    queued: 0,
     labelled: 0,
     unchanged: 0,
     changed: 0,
@@ -326,12 +328,61 @@ describe("writeCreditLabels", () => {
     });
 });
 
+describe("labelling new songs", () => {
+    const SINCE = "2026-10-18T12:00:00.000Z";
+    const NEW = "2026-10-18T13:00:00Z";
+
+    test("asks for the trusted labels of songs created since it was turned on, and writes them", async () => {
+        seedSetting(db, "creditAutoLabelSince", SINCE);
+        seedPcoSong(db, { id: "1001", title: "Song 1001", author: HEBER, createdAt: NEW });
+        seedPcoSong(db, { id: "1002", title: "Song 1002", author: CROSBY, createdAt: "2026-10-01T00:00:00Z" });
+        seedPcoSong(db, { id: "1003", title: "Song 1003", author: "A, B, C", createdAt: NEW });
+        seedPcoSong(db, { id: "1004", title: "Song 1004", author: CROSBY, createdAt: NEW, removedAt: NEW });
+        expect(hasCreditLabelWork(db)).toBe(true);
+        const fetchMock = stubFetchRoutes(songRoutes("1001", HEBER));
+
+        await expect(writeCreditLabels(db, () => T0)).resolves.toEqual({ ...NONE, queued: 1, labelled: 1 });
+        expect(writesSent(fetchMock).map(({ url, body }) => [url, body])).toEqual([
+            [songUrl("1001"), { data: { type: "Song", attributes: { author: HEBER_LABEL } } }],
+        ]);
+        expect(recentWrites(db, 1)[0].payload).toMatchObject({ labelledBy: "auto" });
+        expect(hasCreditLabelWork(db)).toBe(false);
+    });
+
+    test("labels a new song by itself once at most, so a label a person undid stays undone", async () => {
+        seedSetting(db, "creditAutoLabelSince", SINCE);
+        seedPcoSong(db, { id: "1001", title: "Song 1001", author: HEBER, createdAt: NEW });
+        stubFetchRoutes(songRoutes("1001", "Reginald Heber, John B. Dykes"));
+        await expect(writeCreditLabels(db, () => T0)).resolves.toMatchObject({ queued: 1, changed: 1 });
+        // A person put the author back as it was; the app does not label it again.
+        db.prepare("UPDATE pco_songs SET author = ? WHERE id = '1001'").run(HEBER);
+        expect(hasCreditLabelWork(db)).toBe(false);
+        const fetchMock = stubFetchRoutes({});
+        await expect(writeCreditLabels(db, () => T0)).resolves.toEqual(NONE);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("asks for nothing while it is off", async () => {
+        seedPcoSong(db, { id: "1001", title: "Song 1001", author: HEBER, createdAt: NEW });
+        expect(hasCreditLabelWork(db)).toBe(false);
+        const fetchMock = stubFetchRoutes({});
+        await expect(writeCreditLabels(db, () => T0)).resolves.toEqual(NONE);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    test("has work while a label waits, whether or not it is on", () => {
+        queued("1001", HEBER, HEBER_LABEL);
+        expect(hasCreditLabelWork(db)).toBe(true);
+    });
+});
+
 describe("describeCreditLabelsRun", () => {
     test("says how many it labelled, then what else happened, then how many wait", () => {
         expect(describeCreditLabelsRun({ ...NONE, labelled: 12 })).toBe("Labelled 12 songs");
         expect(describeCreditLabelsRun({ ...NONE, labelled: 1 })).toBe("Labelled 1 song");
         expect(
             describeCreditLabelsRun({
+                queued: 0,
                 labelled: 12,
                 unchanged: 1,
                 changed: 2,
@@ -345,6 +396,11 @@ describe("describeCreditLabelsRun", () => {
             "Labelled 12 songs: 1 already labelled, 2 changed since, 1 refused by Planning Center, 1 gone from Planning Center, 1 failed, 3 to try again; 40 wait"
         );
         expect(describeCreditLabelsRun({ ...NONE, changed: 1 })).toBe("Labelled 0 songs: 1 changed since");
+    });
+
+    test("says first how many new songs the app asked to label", () => {
+        expect(describeCreditLabelsRun({ ...NONE, queued: 2, labelled: 2 })).toBe("2 new songs to label. Labelled 2 songs");
+        expect(describeCreditLabelsRun({ ...NONE, queued: 1, labelled: 1 })).toBe("1 new song to label. Labelled 1 song");
     });
 
     test("says when there was nothing to do", () => {

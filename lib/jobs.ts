@@ -3,7 +3,6 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { backupDirectory, getDb } from "@/lib/db";
 import { backupDatabase, isBackupDue } from "@/lib/db/backup";
-import { listWaitingCreditLabels } from "@/lib/db/creditLabels";
 import { errorMessage } from "@/lib/db/errors";
 import {
     finishSyncRun,
@@ -15,7 +14,11 @@ import {
     type SyncRunOutcome,
 } from "@/lib/db/syncRuns";
 import { isHistorySyncDue } from "@/lib/historySync";
-import { describeCreditLabelsRun, writeCreditLabels } from "@/lib/queries/creditLabels";
+import {
+    describeCreditLabelsRun,
+    hasCreditLabelWork,
+    writeCreditLabels,
+} from "@/lib/queries/creditLabels";
 import { describePlanHistorySync, syncPlanHistory } from "@/lib/queries/history";
 import { describePcoSongsSync, syncPcoSongs } from "@/lib/queries/sync";
 import { describeTagsSync, syncTags } from "@/lib/queries/tags";
@@ -84,6 +87,10 @@ export const backupJob: Job = {
  * `syncPcoSongs`). Reading the library is about four paced requests, so a
  * song added in Planning Center reaches the app within a quarter of an hour
  * at that small cost. "Sync now" runs it on demand through `runJob`.
+ *
+ * Once the songs are mirrored, it starts the credit labels job when that
+ * has work (not awaited: it writes in the background), so that a new song
+ * the app labels by itself is labelled as soon as the sync brings it.
  */
 export const pcoSongsJob: Job = {
     kind: "pco-songs",
@@ -91,9 +98,25 @@ export const pcoSongsJob: Job = {
     atBoot: true,
     run: async (db) => {
         const counts = await syncPcoSongs(db);
+        startCreditLabelsIfDue(db);
         return { message: describePcoSongsSync(counts), counts };
     },
 };
+
+/**
+ * Start the credit labels job on `db` when it has work, without waiting for
+ * it. A failure to tell is logged, and the job's own scheduled check tries
+ * again.
+ */
+function startCreditLabelsIfDue(db: DatabaseSync): void {
+    try {
+        if (hasCreditLabelWork(db)) {
+            void runJob(creditLabelsJob, () => db);
+        }
+    } catch (error) {
+        console.error("Could not tell whether credit labels wait:", error);
+    }
+}
 
 /**
  * The Planning Center song tag sync, hourly and soon after boot: mirror the
@@ -143,19 +166,25 @@ export const historyJob: Job = {
 };
 
 /**
- * The credit labels job: write the labels of songs' authors that wait
- * (`credit_label_requests`), asked for on the Credits page, to Planning
- * Center, paced (see `writeCreditLabels`). It is checked every 15 minutes
- * and soon after boot, and runs when a label waits, so a run a restart cut
- * short picks up where it stopped. The Credits page starts it on demand
- * through `runJob` once a person asks for labels.
+ * The credit labels job: ask for the labels of new songs the app labels by
+ * itself, then write the labels of songs' authors that wait
+ * (`credit_label_requests`) to Planning Center, paced (see
+ * `writeCreditLabels`). It is checked every 15 minutes and soon after boot,
+ * and runs when it has work (`hasCreditLabelWork`), so a run a restart cut
+ * short picks up where it stopped. The Credits page starts it once a person
+ * asks for labels, and the song sync once it has mirrored the songs.
+ *
+ * A song sync in progress is waited for first, so that the new songs it
+ * brings are asked for in this run: the scheduler checks this job just
+ * after starting the song sync, and on demand one may be running too.
  */
 export const creditLabelsJob: Job = {
     kind: "credit-labels",
     everyMs: PCO_SONGS_SYNC_EVERY_MS,
     atBoot: true,
-    isDue: (db) => listWaitingCreditLabels(db).length > 0,
+    isDue: (db) => hasCreditLabelWork(db),
     run: async (db) => {
+        await runningJobs().get("pco-songs");
         const counts = await writeCreditLabels(db);
         return { message: describeCreditLabelsRun(counts), counts };
     },

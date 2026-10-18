@@ -132,6 +132,7 @@ describe("saveSettings", () => {
             emailRecipients: DEFAULT_SETTINGS.emailRecipients,
             emailSubjectTemplate: DEFAULT_SETTINGS.emailSubjectTemplate,
             repeatWarningWeeks: DEFAULT_SETTINGS.repeatWarningWeeks,
+            creditAutoLabelSince: DEFAULT_SETTINGS.creditAutoLabelSince,
         });
         expect(listStoredSettings(db)[0]).toMatchObject({ updatedAt: T0.toISOString() });
     });

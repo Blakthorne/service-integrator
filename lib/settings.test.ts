@@ -54,6 +54,7 @@ describe("the registry", () => {
             "emailRecipients",
             "emailSubjectTemplate",
             "repeatWarningWeeks",
+            "creditAutoLabelSince",
         ]);
         for (const key of SETTING_KEYS) {
             expect(SETTINGS[key].defaultValue).toEqual(DEFAULT_SETTINGS[key]);
@@ -78,6 +79,7 @@ describe("the registry", () => {
             emailRecipients: [],
             emailSubjectTemplate: "Songs for {date} · {service}",
             repeatWarningWeeks: 6,
+            creditAutoLabelSince: null,
         });
     });
 
@@ -477,6 +479,38 @@ describe("repeatWarningWeeks", () => {
             { weeks: 6 },
         ]) {
             expect([value, parsed("repeatWarningWeeks", value)]).toEqual([value, { message: MESSAGE }]);
+        }
+    });
+});
+
+describe("creditAutoLabelSince", () => {
+    const MESSAGE = "Labelling new songs automatically must be on since a time, or off.";
+
+    test("is off until it is turned on", () => {
+        expect(DEFAULT_SETTINGS.creditAutoLabelSince).toBeNull();
+    });
+
+    test("is when it was turned on, as an ISO instant written as toISOString writes it, or null", () => {
+        expect(parsed("creditAutoLabelSince", null)).toEqual({ value: null });
+        expect(parsed("creditAutoLabelSince", "2026-10-18T15:30:00.000Z")).toEqual({
+            value: "2026-10-18T15:30:00.000Z",
+        });
+    });
+
+    test("refuses anything else", () => {
+        for (const value of [
+            "",
+            "yes",
+            true,
+            0,
+            "2026-10-18",
+            "2026-10-18T15:30:00Z",
+            "2026-10-18T15:30:00.000+02:00",
+            "2026-02-30T00:00:00.000Z",
+            undefined,
+            {},
+        ]) {
+            expect([value, parsed("creditAutoLabelSince", value)]).toEqual([value, { message: MESSAGE }]);
         }
     });
 });

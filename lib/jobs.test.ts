@@ -12,7 +12,7 @@ import {
     recentSyncRuns,
     startSyncRun,
 } from "@/lib/db/syncRuns";
-import { openTestDb, seedHymn, seedPcoSong, seedSong } from "@/lib/db/testing";
+import { openTestDb, seedHymn, seedPcoSong, seedSetting, seedSong } from "@/lib/db/testing";
 import {
     PCO_BASE,
     calledUrls,
@@ -337,6 +337,37 @@ describe("pcoSongsJob", () => {
         });
     });
 
+    test("starts the credit labels job once it has mirrored a new song the app labels by itself", async () => {
+        stubPcoCredentials();
+        stubPcoPacer();
+        seedSetting(db, "creditAutoLabelSince", "2026-10-18T12:00:00.000Z");
+        const created = { title: "Blessed Assurance", created_at: "2026-10-18T13:00:00Z" };
+        stubFetchRoutes({
+            [LIBRARY]: listPage([songResource("1001", { ...created, author: "Fanny Crosby" })]),
+            [`${PCO_BASE}/songs/1001`]: { data: songResource("1001", { ...created, author: "Fanny Crosby" }) },
+            [`PATCH ${PCO_BASE}/songs/1001`]: () =>
+                json({ data: songResource("1001", { ...created, author: "Words & Music: Fanny Crosby" }) }),
+        });
+
+        await runJob(pcoSongsJob, openDb);
+        // The labels run the sync started is in progress: this joins it.
+        await runJob(creditLabelsJob, openDb);
+        expect(latestSyncRun(db, "credit-labels")).toMatchObject({
+            ok: true,
+            message: "1 new song to label. Labelled 1 song",
+        });
+        expect(recentSyncRuns(db, 10).filter(({ kind }) => kind === "credit-labels")).toHaveLength(1);
+    });
+
+    test("leaves the credit labels job alone when it has no work", async () => {
+        stubPcoCredentials();
+        stubPcoPacer();
+        stubFetchRoutes({ [LIBRARY]: listPage([songResource("1001", { author: "Fanny Crosby" })]) });
+
+        await runJob(pcoSongsJob, openDb);
+        expect(latestSyncRun(db, "credit-labels")).toBeNull();
+    });
+
     test("records a sync that failed", async () => {
         stubPcoCredentials();
         stubPcoPacer();
@@ -516,10 +547,49 @@ describe("creditLabelsJob", () => {
         expect(JOBS.indexOf(creditLabelsJob)).toBeGreaterThan(JOBS.indexOf(tagsJob));
     });
 
-    test("is due only while a label waits", () => {
+    test("is due only while a label waits, or a new song's label is to be asked for", () => {
         expect(creditLabelsJob.isDue?.(db, T0)).toBe(false);
         queueLabel();
         expect(creditLabelsJob.isDue?.(db, T0)).toBe(true);
+    });
+
+    test("is due when labelling new songs is on and a new song's label is to be asked for", () => {
+        seedPcoSong(db, { author: "Fanny Crosby", createdAt: "2026-10-18T13:00:00Z" });
+        expect(creditLabelsJob.isDue?.(db, T0)).toBe(false);
+        seedSetting(db, "creditAutoLabelSince", "2026-10-18T12:00:00.000Z");
+        expect(creditLabelsJob.isDue?.(db, T0)).toBe(true);
+    });
+
+    test("waits for a song sync in progress first, so it asks for the new songs that sync brings", async () => {
+        stubPcoCredentials();
+        stubPcoPacer();
+        seedSetting(db, "creditAutoLabelSince", "2026-10-18T12:00:00.000Z");
+        const created = { title: "Blessed Assurance", created_at: "2026-10-18T13:00:00Z" };
+        let listed!: () => void;
+        const listing = new Promise<void>((resolve) => {
+            listed = resolve;
+        });
+        stubFetchRoutes({
+            [`${PCO_BASE}/songs?per_page=100`]: async () => {
+                await listing;
+                return json({
+                    data: [songResource("1001", { ...created, author: "Fanny Crosby" })],
+                    meta: { total_count: 1 },
+                    links: {},
+                });
+            },
+            [SONG_URL]: { data: songResource("1001", { ...created, author: "Fanny Crosby" }) },
+            [`PATCH ${SONG_URL}`]: () =>
+                json({ data: songResource("1001", { ...created, author: "Words & Music: Fanny Crosby" }) }),
+        });
+
+        const sync = runJob(pcoSongsJob, openDb);
+        const labels = runJob(creditLabelsJob, openDb);
+        listed();
+        await sync;
+        await expect(labels).resolves.toMatchObject({
+            run: { ok: true, message: "1 new song to label. Labelled 1 song" },
+        });
     });
 
     test("writes the labels that wait and records what it did", async () => {

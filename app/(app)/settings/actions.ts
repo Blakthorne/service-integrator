@@ -31,6 +31,7 @@ import {
     readCreditsForm,
     readEmailForm,
     readHymnalNotesForm,
+    readNewSongCreditsForm,
     readRepeatWarningsForm,
     readScheduleTextForm,
     type SettingsFormRead,
@@ -345,6 +346,37 @@ export async function saveScheduleTextAction(formData: FormData): Promise<Settin
 export async function saveRepeatWarningsAction(formData: FormData): Promise<SettingsFormState> {
     await requireSession();
     return saveRead(readRepeatWarningsForm(formData), { revalidate: revalidateRepeatWarningPages });
+}
+
+/**
+ * The pages that show whether new songs are labelled automatically:
+ * Settings, and the Credits page, which says it of the shapes the app
+ * labels by itself. The dashboard's to-do of new songs to label follows it
+ * too.
+ */
+function revalidateNewSongCreditPages(): void {
+    revalidatePath(routes.settings());
+    revalidatePath(routes.catalogCredits());
+    revalidatePath(routes.home());
+}
+
+/**
+ * The New songs' credits card's action: turn labelling new songs' authors
+ * automatically on or off. On, the setting keeps when it was first turned
+ * on (`readNewSongCreditsForm`), which needs the stored value: when it
+ * cannot be read, nothing is saved rather than move it (`getSettings` has
+ * logged why). Songs created in Planning Center since then are labelled by
+ * the credit labels job after the song sync brings them.
+ */
+export async function saveNewSongCreditsAction(formData: FormData): Promise<SettingsFormState> {
+    await requireSession();
+    const { settings, error } = getSettings();
+    if (error !== null) {
+        return formError(FORM_FAILURE_MESSAGE);
+    }
+    return saveRead(readNewSongCreditsForm(formData, settings.creditAutoLabelSince, new Date()), {
+        revalidate: revalidateNewSongCreditPages,
+    });
 }
 
 /** The Hymnal notes card's action: save the item note category's name and whether a note names the tune. */

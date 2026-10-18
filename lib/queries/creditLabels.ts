@@ -1,16 +1,20 @@
 import "server-only";
 import type { DatabaseSync } from "node:sqlite";
+import { chooseAutoCreditLabels, type CreditLabelAsked } from "@/lib/creditLabels";
 import { checkCredits, parseCredits, renderCredits } from "@/lib/credits";
 import {
     finishCreditLabel,
+    listAutoRequestedSongIds,
     listWaitingCreditLabels,
     putOffCreditLabel,
+    queueCreditLabels,
 } from "@/lib/db/creditLabels";
 import { errorMessage } from "@/lib/db/errors";
+import { listPcoSongs } from "@/lib/db/pcoSongs";
 import { listStoredSettings } from "@/lib/db/settings";
 import type { Credit, CreditLabelOutcome, CreditLabelRequest } from "@/lib/domain";
 import { PcoError } from "@/lib/pco";
-import { resolveSettings } from "@/lib/settings";
+import { resolveSettings, type AutoCreditLabelSettings } from "@/lib/settings";
 import { saveSongCredits } from "./pcoSongs";
 
 /**
@@ -27,6 +31,8 @@ export const CREDIT_LABEL_FAILURES_IN_A_ROW = 3;
 
 /** What a run of the credit labels job did, as its `sync_runs` row records it. */
 export type CreditLabelsRunCounts = {
+    /** Labels the app asked for by itself, for new songs, this run. */
+    queued: number;
     /** Requests that ended with Planning Center's author the label. */
     labelled: number;
     /** Requests whose song had the label already, so nothing was sent. */
@@ -44,6 +50,35 @@ export type CreditLabelsRunCounts = {
     /** Requests still waiting when the run ended. */
     waiting: number;
 };
+
+/**
+ * The labels the app would ask for by itself now, for new songs (see
+ * `chooseAutoCreditLabels`): with labelling new songs on, the trusted labels
+ * of the songs still in Planning Center created since it was turned on,
+ * that it never asked for before. Three queries.
+ */
+function newSongCreditLabels(db: DatabaseSync, settings: AutoCreditLabelSettings): CreditLabelAsked[] {
+    if (settings.creditAutoLabelSince === null) {
+        return [];
+    }
+    const songs = listPcoSongs(db).filter(({ removedAt }) => removedAt === null);
+    return chooseAutoCreditLabels(
+        songs.map(({ id, title, author, createdAt }) => ({ pcoSongId: id, title, author, createdAt })),
+        settings,
+        listAutoRequestedSongIds(db)
+    );
+}
+
+/**
+ * Whether the credit labels job has work: a label waits, or a new song's
+ * the app would ask for by itself. Reads the database alone.
+ */
+export function hasCreditLabelWork(db: DatabaseSync): boolean {
+    if (listWaitingCreditLabels(db).length > 0) {
+        return true;
+    }
+    return newSongCreditLabels(db, resolveSettings(listStoredSettings(db)).settings).length > 0;
+}
 
 /**
  * The credits label `label` writes, when it reads back as itself with
@@ -121,8 +156,11 @@ async function labelSong(
 }
 
 /**
- * Write the labels that wait, oldest first: the work of the
- * `credit-labels` job. Each is written as the credit editor saves (see
+ * Ask for the labels of new songs (`newSongCreditLabels`), then write the
+ * labels that wait, oldest first: the work of the `credit-labels` job. The
+ * app's own labels are asked for with `source` "auto", with the author the
+ * mirror has, and are written like any other, held to that author.
+ * Each is written as the credit editor saves (see
  * `labelSong`), paced, so a batch of hundreds takes minutes and leaves a
  * fifth of Planning Center's rate to the pages. The waiting requests are
  * read again before each song, so one cancelled meanwhile is never tried,
@@ -143,8 +181,15 @@ export async function writeCreditLabels(
     db: DatabaseSync,
     now: () => Date = () => new Date()
 ): Promise<CreditLabelsRunCounts> {
-    const roles = resolveSettings(listStoredSettings(db)).settings.creditRoles;
+    const settings = resolveSettings(listStoredSettings(db)).settings;
+    const roles = settings.creditRoles;
+    const { queued } = queueCreditLabels(
+        db,
+        newSongCreditLabels(db, settings).map((label) => ({ ...label, source: "auto" as const })),
+        now()
+    );
     const counts: CreditLabelsRunCounts = {
+        queued: queued.length,
         labelled: 0,
         unchanged: 0,
         changed: 0,
@@ -198,9 +243,18 @@ function songCount(count: number): string {
 /**
  * A run's counts in words, for its run's message: "Labelled 12 songs: 1
  * already labelled, 2 changed since, 3 to try again; 40 wait", leaving out
- * what did not happen, or "Nothing to label".
+ * what did not happen, or "Nothing to label"; after "2 new songs to label."
+ * when the app asked for new songs' labels.
  */
 export function describeCreditLabelsRun(counts: CreditLabelsRunCounts): string {
+    const written = describeWritten(counts);
+    return counts.queued > 0
+        ? `${counts.queued} new ${counts.queued === 1 ? "song" : "songs"} to label. ${written}`
+        : written;
+}
+
+/** What a run wrote, in words (see `describeCreditLabelsRun`). */
+function describeWritten(counts: CreditLabelsRunCounts): string {
     const others = (
         [
             [counts.unchanged, "already labelled"],
