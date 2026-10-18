@@ -39,7 +39,7 @@ import { getSettings } from "./settings";
  * sync's latest run).
  */
 
-/** A song sync whose latest success is older than this is stale: it runs hourly. */
+/** A song sync whose latest success is older than this is stale: it runs every 15 minutes. */
 export const PCO_SONGS_SYNC_STALE_MS = 3 * 60 * 60 * 1000;
 
 /** How many years back the coverage of a book counts a song as sung lately. */

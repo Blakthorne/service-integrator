@@ -21,6 +21,9 @@ import { describeTagsSync, syncTags } from "@/lib/queries/tags";
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
 
+/** How often the song sync runs, so that a song added in Planning Center reaches the app soon. */
+export const PCO_SONGS_SYNC_EVERY_MS = 15 * MINUTE_MS;
+
 /** How long after boot the `atBoot` check waits, so it does not compete with the first requests. */
 export const BOOT_DELAY_MS = MINUTE_MS;
 
@@ -74,13 +77,15 @@ export const backupJob: Job = {
 };
 
 /**
- * The Planning Center song sync, hourly and soon after boot: mirror the song
- * library and make the auto-links it allows (see `syncPcoSongs`). "Sync now"
- * runs it on demand through `runJob`.
+ * The Planning Center song sync, every 15 minutes and soon after boot:
+ * mirror the song library and make the auto-links it allows (see
+ * `syncPcoSongs`). Reading the library is about four paced requests, so a
+ * song added in Planning Center reaches the app within a quarter of an hour
+ * at that small cost. "Sync now" runs it on demand through `runJob`.
  */
 export const pcoSongsJob: Job = {
     kind: "pco-songs",
-    everyMs: HOUR_MS,
+    everyMs: PCO_SONGS_SYNC_EVERY_MS,
     atBoot: true,
     run: async (db) => {
         const counts = await syncPcoSongs(db);
@@ -94,9 +99,9 @@ export const pcoSongsJob: Job = {
  *
  * It runs after the song sync, so that a song that sync adds gets its tags
  * at once rather than an hour later. The scheduler checks this job just
- * after `pcoSongsJob`, which comes before it in `JOBS`, so the song sync
- * that check started is still in progress: `runJob` joins it, and this job
- * waits for it to end. With none in progress (on demand), it runs one
+ * after `pcoSongsJob`, which comes before it in `JOBS` and runs every
+ * quarter of an hour, so the song sync that check started is still in
+ * progress: `runJob` joins it, and this job waits for it to end. With none in progress (on demand), it runs one
  * first. A song sync that fails does not stop the tags sync: the songs the
  * mirror lacks get their tags from a later one.
  */

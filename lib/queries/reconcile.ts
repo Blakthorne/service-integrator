@@ -208,7 +208,7 @@ export function unignorePcoSong(pcoSongId: string): IgnoreResult {
 
 /**
  * "Sync now": run the song sync through `runJob`, so that a run already in
- * progress (the hourly one) is joined rather than doubled, and give that
+ * progress (the scheduled one) is joined rather than doubled, and give that
  * run as recorded, with `ok` false and the reason when the sync failed; or
  * `run: null` and why, when no run could be recorded at all (the database
  * could not be opened or written). Never an older run, and never throws.

@@ -144,7 +144,7 @@ export function tagGroupHint(group: Pick<PcoTagGroup, "allowMultiple">): string 
 
 /** What the Tags card says when the mirror has no song tags at all. */
 export const NO_SONG_TAGS =
-    "No tags yet: the tags sync has not brought Planning Center's song tags into the app. It runs every hour, after the song sync.";
+    "No tags yet: the tags sync has not brought Planning Center's song tags into the app. It runs every hour, after a song sync.";
 
 /** What a save of the tags gave back. */
 export interface TagsSaved {

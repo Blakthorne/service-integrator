@@ -262,7 +262,7 @@ export function todoView(todo: DashboardTodo): TodoView {
                 : {
                       key: "sync-stale",
                       context: null,
-                      text: "The Planning Center song sync is overdue: it runs every hour.",
+                      text: "The Planning Center song sync is overdue: it runs every 15 minutes.",
                       time: {
                           label: "Last success",
                           iso: todo.run.finishedAt ?? todo.run.startedAt,

@@ -210,7 +210,7 @@ describe("todoView", () => {
     test("a stale sync gives its last success", () => {
         expect(todoView({ kind: "sync-stale", run: syncRun() })).toMatchObject({
             key: "sync-stale",
-            text: "The Planning Center song sync is overdue: it runs every hour.",
+            text: "The Planning Center song sync is overdue: it runs every 15 minutes.",
             time: { label: "Last success", iso: "2026-10-04T08:00:05.000Z" },
             action: { label: "Sync now on Settings", href: "/settings" },
         });

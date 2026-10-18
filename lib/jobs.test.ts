@@ -34,6 +34,7 @@ import {
     backupJob,
     historyJob,
     pcoSongsJob,
+    PCO_SONGS_SYNC_EVERY_MS,
     runIfDue,
     runJob,
     startJobs,
@@ -299,11 +300,12 @@ describe("backupJob", () => {
 describe("pcoSongsJob", () => {
     const LIBRARY = `${PCO_BASE}/songs?per_page=100`;
 
-    test("is scheduled: run every hour and soon after boot", () => {
+    test("is scheduled: run every 15 minutes and soon after boot", () => {
         expect(JOBS).toContain(pcoSongsJob);
+        expect(PCO_SONGS_SYNC_EVERY_MS).toBe(15 * 60 * 1000);
         expect(pcoSongsJob).toMatchObject({
             kind: "pco-songs",
-            everyMs: HOUR_MS,
+            everyMs: PCO_SONGS_SYNC_EVERY_MS,
             atBoot: true,
         });
         expect(pcoSongsJob.isDue).toBeUndefined();
