@@ -1,11 +1,8 @@
 import Link from "next/link";
 import { CREDIT_LABEL_MANUAL_WORDS, type ManualCreditLabelRow } from "@/lib/creditLabels";
 import { routes } from "@/lib/routes";
+import { LINK_CLASS } from "../CatalogCard";
 import PcoSongWebLink from "../Reconcile/PcoSongWebLink";
-
-/** A link inside a line of text: underlined, not just coloured (convention 20). */
-const TEXT_LINK_CLASS =
-    "text-blue-600 underline underline-offset-2 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300";
 
 interface ManualCreditLabelsProps {
     /** The songs left for a person, by title. */
@@ -40,13 +37,16 @@ export default function ManualCreditLabels({ rows }: ManualCreditLabelsProps) {
                             )}
                         </p>
                         <p className="text-gray-600 dark:text-gray-400">
-                            {CREDIT_LABEL_MANUAL_WORDS[row.reason]}{" "}
+                            {CREDIT_LABEL_MANUAL_WORDS[row.reason]}
+                        </p>
+                        {/* On a line of its own, so the link stands alone (convention 20). */}
+                        <p>
                             {row.catalogSongId !== null ? (
                                 // No prefetch: the list may run to hundreds of songs.
                                 <Link
                                     href={routes.catalogSong(row.catalogSongId)}
                                     prefetch={false}
-                                    className={TEXT_LINK_CLASS}
+                                    className={LINK_CLASS}
                                 >
                                     Edit its credits<span className="sr-only"> ({row.title})</span>
                                 </Link>

@@ -108,7 +108,7 @@ export default function CreditLabelsView({ tiers }: CreditLabelsViewProps) {
 
     return (
         <div className="space-y-8">
-            <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white/95 px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800/95">
+            <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                 <button
                     ref={labelButtonRef}
                     type="button"
