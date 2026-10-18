@@ -26,8 +26,8 @@ export default function PcoSyncCard({ status }: PcoSyncCardProps) {
                 Planning Center sync
             </h2>
             <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
-                The app keeps a copy of the Planning Center song library, read every hour and
-                a minute after the server starts. Each sync links the songs whose titles
+                The app keeps a copy of the Planning Center song library, read every 15
+                minutes and a minute after the server starts. Each sync links the songs whose titles
                 match one catalog song;{" "}
                 <Link
                     href={routes.catalogReconcile()}

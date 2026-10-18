@@ -373,6 +373,14 @@ describe("getDashboard", () => {
         // plan history's figures.
         expect(prepare).toHaveBeenCalledTimes(14);
     });
+
+    test("asks three more with labelling new songs on, for the new songs that need a person", async () => {
+        seedSetting(db, "creditAutoLabelSince", "2026-10-01T00:00:00.000Z");
+        stubFetchRoutes(routes());
+        const prepare = vi.spyOn(db, "prepare");
+        await getDashboard(NOW);
+        expect(prepare).toHaveBeenCalledTimes(17);
+    });
 });
 
 describe("getDashboard's history figures", () => {
@@ -505,6 +513,33 @@ describe("getDashboard's to-dos for the catalog and the song sync", () => {
         const dashboard = await getDashboard(NOW);
         expect(dashboard.todos).toEqual([{ kind: "sync-stale", run: null }]);
         expect(dashboard.lastSync).toBeNull();
+    });
+
+    test("with labelling new songs on, the new songs whose authors need a person", async () => {
+        seedSetting(db, "creditAutoLabelSince", "2026-10-01T00:00:00.000Z");
+        const created = "2026-10-02T00:00:00Z";
+        seedPcoSong(db, { id: "7001", title: "In Christ Alone", author: "Keith Getty, Stuart Townend", createdAt: created });
+        seedPcoSong(db, { id: "7002", title: "Before the Throne", author: "A, B, C", createdAt: created });
+        // Labelled already, about to be labelled by the app, created before, and gone.
+        seedPcoSong(db, { id: "7003", title: "Labelled", author: "Words: X", createdAt: created });
+        seedPcoSong(db, { id: "7004", title: "Trusted", author: "Fanny Crosby", createdAt: created });
+        seedPcoSong(db, { id: "7005", title: "Old", author: "A, B", createdAt: "2026-09-01T00:00:00Z" });
+        seedPcoSong(db, { id: "7006", title: "Gone", author: "A, B", createdAt: created, removedAt: created });
+        stubFetchRoutes(quietRoutes());
+        expect((await getDashboard(NOW)).todos).toEqual([
+            {
+                kind: "new-songs-to-label",
+                songs: [
+                    { pcoSongId: "7002", title: "Before the Throne" },
+                    { pcoSongId: "7001", title: "In Christ Alone" },
+                ],
+            },
+        ]);
+    });
+
+    test("nothing for new songs while labelling them is off", async () => {
+        seedPcoSong(db, { title: "In Christ Alone", author: "Keith Getty, Stuart Townend", createdAt: "2026-10-02T00:00:00Z" });
+        await expect(todoKinds()).resolves.toEqual([]);
     });
 
     test("nothing for a sync in progress", async () => {

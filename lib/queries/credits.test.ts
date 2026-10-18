@@ -1,22 +1,44 @@
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { listWaitingCreditLabels, recentCreditLabels } from "@/lib/db/creditLabels";
 import { findSongCredits } from "@/lib/db/credits";
-import { openTestDb, seedPcoSong, seedPcoSongCredits, seedSetting } from "@/lib/db/testing";
+import { linkSong } from "@/lib/db/links";
+import { finishSyncRun, startSyncRun } from "@/lib/db/syncRuns";
+import {
+    openTestDb,
+    seedCreditLabelRequest,
+    seedPcoSong,
+    seedPcoSongCredits,
+    seedSetting,
+    seedSong,
+} from "@/lib/db/testing";
 import { stubFetchRoutes } from "@/lib/pco/testing";
 
-const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
+const { getDb, runJob } = vi.hoisted(() => ({ getDb: vi.fn(), runJob: vi.fn() }));
 vi.mock("@/lib/db", async (importOriginal) => ({
     ...(await importOriginal<typeof import("@/lib/db")>()),
     getDb,
 }));
+vi.mock("@/lib/jobs", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/jobs")>()),
+    runJob,
+}));
 
-import { getCreditLabelSets, rederiveAllCredits } from "./credits";
+import { creditLabelsJob } from "@/lib/jobs";
+import {
+    cancelCreditLabels,
+    getCreditLabelSets,
+    getCreditLabelsPage,
+    rederiveAllCredits,
+    requestCreditLabels,
+} from "./credits";
 
 let db: DatabaseSync;
 
 beforeEach(() => {
     db = openTestDb();
     getDb.mockReturnValue(db);
+    runJob.mockResolvedValue({ run: null, error: "not run in tests" });
 });
 
 afterEach(() => {
@@ -192,5 +214,145 @@ describe("getCreditLabelSets", () => {
             "Failed to read the labels of the songs' credits:",
             cause
         );
+    });
+});
+
+describe("getCreditLabelsPage", () => {
+    const T0 = new Date("2026-10-04T12:00:00.000Z");
+
+    test("sorts the songs still in Planning Center by their labels, with what waits and the latest runs", () => {
+        const heber = seedPcoSong(db, { title: "Holy, Holy, Holy", author: "Reginald Heber and John B. Dykes" });
+        seedPcoSong(db, { title: "Amazing Grace", author: "Words: John Newton" });
+        seedPcoSong(db, { title: "Gone", author: "Fanny Crosby", removedAt: T0.toISOString() });
+        const crosby = seedPcoSong(db, { title: "Blessed Assurance", author: "Fanny Crosby" });
+        const song = seedSong(db);
+        linkSong(db, song, crosby, "manual", T0);
+        seedCreditLabelRequest(db, heber, {
+            shownAuthor: "Reginald Heber and John B. Dykes",
+            author: "Words: Reginald Heber; Music: John B. Dykes",
+        });
+        const run = startSyncRun(db, "credit-labels", T0);
+        finishSyncRun(db, run, { ok: true, message: "Labelled 3 songs" }, T0);
+
+        const page = getCreditLabelsPage();
+        expect(page.review.labelled).toBe(1);
+        expect(page.review.tiers.map(({ rows }) => rows.map(({ title, queued, catalogSongId }) => [title, queued, catalogSongId]))).toEqual([
+            [["Blessed Assurance", false, song]],
+            [["Holy, Holy, Holy", true, null]],
+            [],
+        ]);
+        expect(page.waiting).toBe(1);
+        expect(page.lastRun).toMatchObject({ kind: "credit-labels", message: "Labelled 3 songs" });
+        expect(page.lastSync).toBeNull();
+        expect(page.problems).toEqual([]);
+    });
+
+    test("labels with the stored credit roles", () => {
+        seedPcoSong(db, { title: "O God, Our Help", author: "Isaac Watts and William Croft" });
+        seedSetting(db, "creditRoles", ["Text", "Tune"]);
+        expect(getCreditLabelsPage().review.tiers[1].rows[0].proposal.author).toBe(
+            "Text: Isaac Watts; Tune: William Croft"
+        );
+    });
+
+    test("lists the latest labels that did not go through, newest first, with their songs' titles", () => {
+        const a = seedPcoSong(db, { title: "Abide with Me", author: "Henry F. Lyte and William H. Monk" });
+        seedCreditLabelRequest(db, a, { finishedAt: "2026-10-04T12:01:00.000Z", outcome: "labelled" });
+        seedCreditLabelRequest(db, a, {
+            finishedAt: "2026-10-04T12:02:00.000Z",
+            outcome: "refused",
+            message: "author: is too long",
+        });
+        seedCreditLabelRequest(db, a, { finishedAt: "2026-10-04T12:03:00.000Z", outcome: "cancelled" });
+        seedCreditLabelRequest(db, a, {
+            source: "auto",
+            finishedAt: "2026-10-04T12:04:00.000Z",
+            outcome: "changed",
+            message: "Its author is \"X\" now",
+        });
+        expect(getCreditLabelsPage().problems).toEqual([
+            {
+                id: expect.any(Number),
+                pcoSongId: a,
+                title: "Abide with Me",
+                source: "auto",
+                outcome: "changed",
+                message: 'Its author is "X" now',
+                finishedAt: "2026-10-04T12:04:00.000Z",
+            },
+            expect.objectContaining({ outcome: "refused", message: "author: is too long", source: "review" }),
+        ]);
+    });
+});
+
+describe("requestCreditLabels", () => {
+    const T0 = new Date("2026-10-04T12:00:00.000Z");
+    const HEBER = "Reginald Heber and John B. Dykes";
+    const HEBER_LABEL = "Words: Reginald Heber; Music: John B. Dykes";
+
+    test("queues each label as the page showed it, and starts the job", () => {
+        const heber = seedPcoSong(db, { author: HEBER });
+        const crosby = seedPcoSong(db, { author: "Fanny Crosby" });
+        expect(
+            requestCreditLabels(
+                [
+                    { pcoSongId: heber, shownAuthor: HEBER, author: HEBER_LABEL },
+                    { pcoSongId: crosby, shownAuthor: "Fanny Crosby", author: "Words & Music: Fanny Crosby" },
+                ],
+                T0
+            )
+        ).toEqual({ queued: 2, waiting: 0, changed: 0 });
+        expect(listWaitingCreditLabels(db).map(({ pcoSongId, source, shownAuthor, author }) => [pcoSongId, source, shownAuthor, author])).toEqual([
+            [heber, "review", HEBER, HEBER_LABEL],
+            [crosby, "review", "Fanny Crosby", "Words & Music: Fanny Crosby"],
+        ]);
+        expect(runJob).toHaveBeenCalledOnce();
+        expect(runJob).toHaveBeenCalledWith(creditLabelsJob);
+    });
+
+    test("leaves out a song that is no longer as the page showed it", () => {
+        const changed = seedPcoSong(db, { author: "Reginald Heber, John B. Dykes" });
+        const gone = seedPcoSong(db, { author: HEBER, removedAt: T0.toISOString() });
+        const relabelled = seedPcoSong(db, { author: HEBER });
+        const labelled = seedPcoSong(db, { author: HEBER_LABEL });
+        expect(
+            requestCreditLabels(
+                [
+                    // Planning Center has another author since the page loaded.
+                    { pcoSongId: changed, shownAuthor: HEBER, author: HEBER_LABEL },
+                    // Planning Center no longer has the song, or never had it.
+                    { pcoSongId: gone, shownAuthor: HEBER, author: HEBER_LABEL },
+                    { pcoSongId: "999", shownAuthor: HEBER, author: HEBER_LABEL },
+                    // The app makes another label of the author now.
+                    { pcoSongId: relabelled, shownAuthor: HEBER, author: "Words & Music: Reginald Heber" },
+                    // The author is labelled already: there is nothing to make of it.
+                    { pcoSongId: labelled, shownAuthor: HEBER_LABEL, author: HEBER_LABEL },
+                ],
+                T0
+            )
+        ).toEqual({ queued: 0, waiting: 0, changed: 5 });
+        expect(listWaitingCreditLabels(db)).toEqual([]);
+        expect(runJob).not.toHaveBeenCalled();
+    });
+
+    test("leaves a song whose label waits already as it is, and starts the job for it", () => {
+        const heber = seedPcoSong(db, { author: HEBER });
+        seedCreditLabelRequest(db, heber, { shownAuthor: HEBER, author: HEBER_LABEL });
+        expect(requestCreditLabels([{ pcoSongId: heber, shownAuthor: HEBER, author: HEBER_LABEL }], T0)).toEqual({
+            queued: 0,
+            waiting: 1,
+            changed: 0,
+        });
+        expect(runJob).toHaveBeenCalledWith(creditLabelsJob);
+    });
+});
+
+describe("cancelCreditLabels", () => {
+    test("ends every label that waits as cancelled", () => {
+        seedCreditLabelRequest(db, seedPcoSong(db));
+        seedCreditLabelRequest(db, seedPcoSong(db));
+        expect(cancelCreditLabels(new Date("2026-10-04T12:00:00.000Z"))).toBe(2);
+        expect(listWaitingCreditLabels(db)).toEqual([]);
+        expect(recentCreditLabels(db, 10).map(({ outcome }) => outcome)).toEqual(["cancelled", "cancelled"]);
     });
 });

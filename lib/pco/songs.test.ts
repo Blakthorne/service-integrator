@@ -137,6 +137,15 @@ describe("fetchSong", () => {
         expect(acquire).not.toHaveBeenCalled();
     });
 
+    test("waits its turn at the pacer when asked", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        const song = songResource("1001");
+        stubFetchRoutes({ [`${PCO_BASE}/songs/1001`]: { data: song } });
+
+        await expect(fetchSong("1001", { paced: true })).resolves.toEqual(toPcoLibrarySong(song));
+        expect(acquire).toHaveBeenCalledOnce();
+    });
+
     test("refuses an id that is not a Planning Center id before fetching", async () => {
         const fetchMock = stubFetchRoutes({});
         await expect(fetchSong("1001?x=1")).rejects.toBeInstanceOf(InvalidPcoIdError);

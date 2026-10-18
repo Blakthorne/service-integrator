@@ -73,6 +73,13 @@ export const EMAIL_SUBJECT_FIELD = "emailSubjectTemplate" satisfies SettingKey;
 /** The Repeat warnings form's field, named for the setting it holds. */
 export const REPEAT_WARNING_WEEKS_FIELD = "repeatWarningWeeks" satisfies SettingKey;
 
+/**
+ * The New songs' credits form's field, named for the setting it holds: a
+ * checkbox that posts yes or no, which `readNewSongCreditsForm` turns into
+ * when labelling new songs was turned on, or null.
+ */
+export const CREDIT_AUTO_LABEL_FIELD = "creditAutoLabelSince" satisfies SettingKey;
+
 /** What a yes-or-no field posts: a checkbox is posted through a hidden field, since an unchecked box posts nothing. */
 export const YES = "yes";
 export const NO = "no";
@@ -240,6 +247,33 @@ export function readHymnalNotesForm(formData: FormData): SettingsFormRead {
         INCLUDES_TUNE_FIELD,
         includesTune === YES ? true : includesTune === NO ? false : includesTune
     );
+    return finish(into, posted);
+}
+
+/**
+ * The New songs' credits form: whether to label new songs' authors
+ * automatically, posted as yes or no. The setting keeps when it was turned
+ * on: `current`, the stored value, when it is on already, so saving it on
+ * again never moves that; else `now`. Off is null. Anything but yes or no
+ * is refused on the field.
+ */
+export function readNewSongCreditsForm(
+    formData: FormData,
+    current: string | null,
+    now: Date
+): SettingsFormRead {
+    const posted = readValues(formData, [CREDIT_AUTO_LABEL_FIELD]);
+    const into = emptyCollected();
+    const on = posted[CREDIT_AUTO_LABEL_FIELD];
+    if (on !== YES && on !== NO) {
+        into.fieldErrors[CREDIT_AUTO_LABEL_FIELD] = {
+            message: "Labelling new songs automatically must be on or off.",
+        };
+        return finish(into, posted);
+    }
+    const since = on === YES ? (current ?? now.toISOString()) : null;
+    take(into, "creditAutoLabelSince", CREDIT_AUTO_LABEL_FIELD, since);
+    into.shown[CREDIT_AUTO_LABEL_FIELD] = on;
     return finish(into, posted);
 }
 

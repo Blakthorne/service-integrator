@@ -64,6 +64,8 @@ export const routes = {
             : (`/catalog?${search}` as const);
     },
     catalogReconcile: () => "/catalog/reconcile" as const,
+    /** The Credits page: label the songs' authors in Planning Center. */
+    catalogCredits: () => "/catalog/credits" as const,
     /**
      * The new-song form. With a Planning Center song it is prefilled from
      * that song and links it on create; `returnTo` (a path that
@@ -208,6 +210,7 @@ export const CATALOG_SECTIONS: readonly CatalogSection[] = [
     { segments: ["tunes"], label: "Tunes", href: routes.catalogTunes() },
     { segments: ["books"], label: "Books", href: routes.catalogBooks() },
     { segments: ["reconcile"], label: "Reconcile", href: routes.catalogReconcile() },
+    { segments: ["credits"], label: "Credits", href: routes.catalogCredits() },
     { segments: ["import"], label: "Import", href: routes.catalogImport() },
 ];
 

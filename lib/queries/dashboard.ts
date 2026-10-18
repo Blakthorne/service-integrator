@@ -1,7 +1,10 @@
 import "server-only";
 import { getDb } from "@/lib/db";
+import { newSongsNeedingLabels } from "@/lib/creditLabels";
 import { countCatalog } from "@/lib/db/catalog";
+import { listAutoRequestedSongIds, listWaitingCreditLabels } from "@/lib/db/creditLabels";
 import { errorMessage } from "@/lib/db/errors";
+import { listPcoSongs } from "@/lib/db/pcoSongs";
 import { bookCoverage, countSongsSung, type BookCoverage } from "@/lib/db/history";
 import { latestSyncRun, type SyncRun } from "@/lib/db/syncRuns";
 import type { Plan, PlanItemWithSong, ServiceType } from "@/lib/domain";
@@ -36,10 +39,12 @@ import { getSettings } from "./settings";
  * which of all their notes the app wrote, one each for the settings, the
  * song sync's latest run and the catalog's size, and three for the history's
  * figures (the books' coverage, the songs sung this year and the history
- * sync's latest run).
+ * sync's latest run); and, with labelling new songs on, three more for the
+ * new songs whose credits need a person (the mirror, the app's own labels
+ * and the labels waiting).
  */
 
-/** A song sync whose latest success is older than this is stale: it runs hourly. */
+/** A song sync whose latest success is older than this is stale: it runs every 15 minutes. */
 export const PCO_SONGS_SYNC_STALE_MS = 3 * 60 * 60 * 1000;
 
 /** How many years back the coverage of a book counts a song as sung lately. */
@@ -141,7 +146,12 @@ export type DashboardTodo =
           plan: DashboardPlanRef;
           /** How many song items' notes. */
           count: number;
-      };
+      }
+    /**
+     * With labelling new songs on, the songs created since whose authors need
+     * a person (`newSongsNeedingLabels`), by title.
+     */
+    | { kind: "new-songs-to-label"; songs: { pcoSongId: string; title: string }[] };
 
 /** What the dashboard shows. */
 export interface Dashboard {
@@ -207,13 +217,38 @@ function readCatalogLinks(items: readonly PlanItemWithSong[]): ScheduleCatalogSt
     }
 }
 
-/** The song sync's latest run and how many songs the catalog has, or why they cannot be read. Never throws. */
-function readCatalogState():
-    | { ok: true; lastSync: SyncRun | null; songs: number }
+/**
+ * The song sync's latest run, how many songs the catalog has and, with
+ * labelling new songs on (`settings`), the new songs whose authors need a
+ * person, or why they cannot be read. Never throws.
+ */
+function readCatalogState(settings: AppSettings):
+    | {
+          ok: true;
+          lastSync: SyncRun | null;
+          songs: number;
+          newSongsToLabel: { pcoSongId: string; title: string }[];
+      }
     | { ok: false; error: string } {
     try {
         const db = getDb();
-        return { ok: true, lastSync: latestSyncRun(db, "pco-songs"), songs: countCatalog(db).songs };
+        const newSongsToLabel =
+            settings.creditAutoLabelSince === null
+                ? []
+                : newSongsNeedingLabels(
+                      listPcoSongs(db)
+                          .filter(({ removedAt }) => removedAt === null)
+                          .map(({ id, title, author, createdAt }) => ({ pcoSongId: id, title, author, createdAt })),
+                      settings,
+                      listAutoRequestedSongIds(db),
+                      new Set(listWaitingCreditLabels(db).map(({ pcoSongId }) => pcoSongId))
+                  ).map(({ pcoSongId, title }) => ({ pcoSongId, title }));
+        return {
+            ok: true,
+            lastSync: latestSyncRun(db, "pco-songs"),
+            songs: countCatalog(db).songs,
+            newSongsToLabel,
+        };
     } catch (error) {
         console.error("Failed to read the song sync and the catalog's size:", error);
         return { ok: false, error: errorMessage(error) };
@@ -302,8 +337,15 @@ function planTodos(entry: Extract<DashboardServiceType, { status: "plan" }>): Da
     return todos;
 }
 
-/** The to-dos of the catalog and the song sync, at `now`. */
-function catalogTodos(state: { lastSync: SyncRun | null; songs: number }, now: Date): DashboardTodo[] {
+/** The to-dos of the catalog, the song sync and new songs' credits, at `now`. */
+function catalogTodos(
+    state: {
+        lastSync: SyncRun | null;
+        songs: number;
+        newSongsToLabel: { pcoSongId: string; title: string }[];
+    },
+    now: Date
+): DashboardTodo[] {
     const todos: DashboardTodo[] = [];
     if (state.songs === 0) {
         todos.push({ kind: "empty-catalog" });
@@ -317,6 +359,9 @@ function catalogTodos(state: { lastSync: SyncRun | null; songs: number }, now: D
             now.getTime() - Date.parse(run.finishedAt ?? run.startedAt) > PCO_SONGS_SYNC_STALE_MS)
     ) {
         todos.push({ kind: "sync-stale", run });
+    }
+    if (state.newSongsToLabel.length > 0) {
+        todos.push({ kind: "new-songs-to-label", songs: state.newSongsToLabel });
     }
     return todos;
 }
@@ -342,7 +387,7 @@ export async function getDashboard(now: Date = new Date()): Promise<Dashboard> {
     const links = readCatalogLinks(items);
     const ownedNoteIds = readAppWrittenNoteIds(items);
     const { settings, error: settingsError } = getSettings();
-    const state = readCatalogState();
+    const state = readCatalogState(settings);
 
     const entries: DashboardServiceType[] = reads.map((read) => {
         if (!read.ok) {

@@ -247,22 +247,20 @@ function describeSong(ok: boolean, payload: unknown): Described | null {
     const title = asText(record.title);
     switch (record.action) {
         case "credits": {
+            if (title === null) {
+                return null;
+            }
             const author = asText(record.author);
             const previous = asText(record.previous);
-            return title === null
-                ? null
-                : {
-                      what: headline(
-                          ok,
-                          `Credits saved for ${quote(title)}`,
-                          `Saving the credits of ${quote(title)} failed`
-                      ),
-                      detail:
-                          author === null
-                              ? null
-                              : changeText(ok, previous === null ? null : quote(previous), quote(author)),
-                      place: null,
-                  };
+            const [made, failed] = creditsHeadlines(quote(title), record.labelledBy);
+            return {
+                what: headline(ok, made, failed),
+                detail:
+                    author === null
+                        ? null
+                        : changeText(ok, previous === null ? null : quote(previous), quote(author)),
+                place: null,
+            };
         }
         case "create": {
             const author = asText(record.author);
@@ -351,6 +349,25 @@ function describeSong(ok: boolean, payload: unknown): Described | null {
         }
         default:
             return null;
+    }
+}
+
+/**
+ * A credits write's headline when it was made and when it failed: saved
+ * from the credit editor, or labelled, by a person on the Credits page
+ * (`labelledBy` "review") or by the app for a new song ("auto").
+ */
+function creditsHeadlines(title: string, labelledBy: unknown): [string, string] {
+    switch (labelledBy) {
+        case "auto":
+            return [
+                `Credits labelled automatically for ${title}`,
+                `Labelling the credits of ${title} automatically failed`,
+            ];
+        case "review":
+            return [`Credits labelled for ${title}`, `Labelling the credits of ${title} failed`];
+        default:
+            return [`Credits saved for ${title}`, `Saving the credits of ${title} failed`];
     }
 }
 

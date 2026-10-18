@@ -207,10 +207,31 @@ describe("todoView", () => {
         expect(text(null)).toBe("The Planning Center song sync failed.");
     });
 
+    test("new songs whose credits need a person link to the Credits page", () => {
+        expect(
+            todoView({ kind: "new-songs-to-label", songs: [{ pcoSongId: "7001", title: "In Christ Alone" }] })
+        ).toEqual({
+            key: "new-songs-to-label",
+            context: null,
+            text: 'New song "In Christ Alone" needs its credits labelled.',
+            time: null,
+            action: { label: "Label it on Credits", href: "/catalog/credits" },
+        });
+        expect(
+            todoView({
+                kind: "new-songs-to-label",
+                songs: ["A", "B", "C", "D"].map((title, i) => ({ pcoSongId: String(7001 + i), title })),
+            })
+        ).toMatchObject({
+            text: '4 new songs need their credits labelled: "A", "B", "C" and 1 more.',
+            action: { label: "Label them on Credits", href: "/catalog/credits" },
+        });
+    });
+
     test("a stale sync gives its last success", () => {
         expect(todoView({ kind: "sync-stale", run: syncRun() })).toMatchObject({
             key: "sync-stale",
-            text: "The Planning Center song sync is overdue: it runs every hour.",
+            text: "The Planning Center song sync is overdue: it runs every 15 minutes.",
             time: { label: "Last success", iso: "2026-10-04T08:00:05.000Z" },
             action: { label: "Sync now on Settings", href: "/settings" },
         });

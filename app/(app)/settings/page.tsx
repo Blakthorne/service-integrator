@@ -9,6 +9,7 @@ import HistorySyncCard from "@/app/components/Settings/HistorySyncCard";
 import HymnalNotesCard from "@/app/components/Settings/HymnalNotesCard";
 import PcoSyncCard from "@/app/components/Settings/PcoSyncCard";
 import RecentWritesCard from "@/app/components/Settings/RecentWritesCard";
+import NewSongCreditsCard from "@/app/components/Settings/NewSongCreditsCard";
 import RepeatWarningsCard from "@/app/components/Settings/RepeatWarningsCard";
 import ScheduleTextCard, {
     ScheduleTextCardFallback,
@@ -31,9 +32,9 @@ export const metadata: Metadata = { title: "Settings" };
 
 /**
  * The Settings page. The everyday settings come first, a card and a form
- * each (Copyright, Credits, Schedule text, Hymnal notes, Repeat warnings,
- * Email), then what the app has written to Planning Center, then the song
- * sync, the plan history sync and the database.
+ * each (Copyright, Credits, New songs' credits, Schedule text, Hymnal notes,
+ * Repeat warnings, Email), then what the app has written to Planning Center,
+ * then the song sync, the plan history sync and the database.
  *
  * The Data card, last, exports the catalog as a JSON file. Everything
  * else reads the local database (and, for the Email card, the server's
@@ -81,6 +82,7 @@ export default function SettingsPage() {
                     creditPhrases={settings.creditPhrases}
                     labelSets={labelSets.error === null ? labelSets.sets : null}
                 />
+                <NewSongCreditsCard since={settings.creditAutoLabelSince} />
                 <Suspense fallback={<ScheduleTextCardFallback />}>
                     <ScheduleTextCard settings={settings} categories={categories} />
                 </Suspense>

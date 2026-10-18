@@ -36,6 +36,7 @@ export const SETTINGS_CARD_TITLES = {
     credits: "Credits",
     email: "Email",
     repeatWarnings: "Repeat warnings",
+    newSongCredits: "New songs' credits",
 } as const;
 
 /** What each setting is called on the page, and the card that edits it. */
@@ -61,6 +62,10 @@ export const SETTING_DESCRIPTIONS: Readonly<
     emailRecipients: { label: "Email recipients", card: SETTINGS_CARD_TITLES.email },
     emailSubjectTemplate: { label: "Email subject", card: SETTINGS_CARD_TITLES.email },
     repeatWarningWeeks: { label: "Repeat warning window", card: SETTINGS_CARD_TITLES.repeatWarnings },
+    creditAutoLabelSince: {
+        label: "Label new songs automatically",
+        card: SETTINGS_CARD_TITLES.newSongCredits,
+    },
 };
 
 /** The longest stored value an issue shows. */
@@ -83,6 +88,8 @@ function defaultInWords(key: SettingKey): string {
             return "no recipients";
         case "repeatWarningWeeks":
             return `${DEFAULT_SETTINGS.repeatWarningWeeks} weeks`;
+        case "creditAutoLabelSince":
+            return "off";
         default:
             return JSON.stringify(DEFAULT_SETTINGS[key]);
     }

@@ -26,6 +26,7 @@ import {
     readCreditsForm,
     readEmailForm,
     readHymnalNotesForm,
+    readNewSongCreditsForm,
     readRepeatWarningsForm,
     readScheduleTextForm,
     sameValues,
@@ -350,6 +351,44 @@ describe("readScheduleTextForm", () => {
             ok: true,
             values: { scheduleHeaderLabels: { [MORNING]: "Sunday AM" } },
         });
+    });
+});
+
+describe("readNewSongCreditsForm", () => {
+    const NOW = new Date("2026-10-18T15:30:00.000Z");
+    const BEFORE = "2026-10-01T09:00:00.000Z";
+
+    test("turned on, keeps when it was turned on, or takes now when it was off", () => {
+        expect(readNewSongCreditsForm(formWith({ creditAutoLabelSince: "yes" }), null, NOW)).toEqual({
+            ok: true,
+            values: { creditAutoLabelSince: NOW.toISOString() },
+            shown: { creditAutoLabelSince: "yes" },
+            posted: { creditAutoLabelSince: "yes" },
+        });
+        expect(readNewSongCreditsForm(formWith({ creditAutoLabelSince: "yes" }), BEFORE, NOW)).toMatchObject({
+            ok: true,
+            values: { creditAutoLabelSince: BEFORE },
+        });
+    });
+
+    test("turned off, is null", () => {
+        expect(readNewSongCreditsForm(formWith({ creditAutoLabelSince: "no" }), BEFORE, NOW)).toEqual({
+            ok: true,
+            values: { creditAutoLabelSince: null },
+            shown: { creditAutoLabelSince: "no" },
+            posted: { creditAutoLabelSince: "no" },
+        });
+    });
+
+    test("refuses anything but yes or no, on its field", () => {
+        for (const posted of [{}, { creditAutoLabelSince: "" }, { creditAutoLabelSince: BEFORE }] as Record<string, string>[]) {
+            expect(readNewSongCreditsForm(formWith(posted), null, NOW)).toMatchObject({
+                ok: false,
+                fieldErrors: {
+                    creditAutoLabelSince: { message: "Labelling new songs automatically must be on or off." },
+                },
+            });
+        }
     });
 });
 

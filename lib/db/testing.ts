@@ -606,6 +606,49 @@ export function seedWriteLog(db: DatabaseSync, fields: SeedWriteLogFields = {}):
 }
 
 /**
+ * The fields of a request to label a song's author; `seedCreditLabelRequest`
+ * fills in the rest. Source and outcome are plain text, so a test can store
+ * what a newer build might.
+ */
+export interface SeedCreditLabelRequestFields {
+    source?: string;
+    shownAuthor?: string;
+    author?: string;
+    requestedAt?: string;
+    attempts?: number;
+    finishedAt?: string | null;
+    outcome?: string | null;
+    message?: string | null;
+}
+
+/**
+ * Insert a request to label mirrored song `pcoSongId`'s author and return
+ * its id. By default a person asked, at 2026-10-04 12:00 UTC, for "Fanny
+ * Crosby" to become "Words & Music: Fanny Crosby", and it waits.
+ */
+export function seedCreditLabelRequest(
+    db: DatabaseSync,
+    pcoSongId: string,
+    fields: SeedCreditLabelRequestFields = {}
+): number {
+    return insert(
+        db,
+        `INSERT INTO credit_label_requests (pco_song_id, source, shown_author, author, requested_at,
+             attempts, finished_at, outcome, message)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        pcoSongId,
+        fields.source ?? "review",
+        fields.shownAuthor ?? "Fanny Crosby",
+        fields.author ?? "Words & Music: Fanny Crosby",
+        fields.requestedAt ?? "2026-10-04T12:00:00.000Z",
+        fields.attempts ?? 0,
+        fields.finishedAt ?? null,
+        fields.outcome ?? null,
+        fields.message ?? null
+    );
+}
+
+/**
  * Store a setting's value as JSON, as saving it does, at `updatedAt`
  * (2026-10-04 12:00 UTC by default). Any key and any JSON value, so a test
  * can store what a newer build might, or a value that no longer parses.

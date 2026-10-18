@@ -376,6 +376,26 @@ describe("describeWrite: a song's credits saved", () => {
         });
     });
 
+    test("says the credits were labelled, by a person on the Credits page or by the app", () => {
+        expect(describeWrite(credits({ payload: { ...CREDITS, labelledBy: "review" } }))).toMatchObject({
+            what: 'Credits labelled for "O God, Our Help"',
+            detail: 'Was "Isaac Watts"; now "Words: Isaac Watts; Music: William Croft".',
+        });
+        expect(describeWrite(credits({ payload: { ...CREDITS, labelledBy: "auto" } })).what).toBe(
+            'Credits labelled automatically for "O God, Our Help"'
+        );
+        expect(
+            describeWrite(credits({ ok: false, payload: { ...CREDITS, labelledBy: "auto" }, result: REFUSED })).what
+        ).toBe('Labelling the credits of "O God, Our Help" automatically failed');
+        expect(
+            describeWrite(credits({ ok: false, payload: { ...CREDITS, labelledBy: "review" }, result: REFUSED })).what
+        ).toBe('Labelling the credits of "O God, Our Help" failed');
+        // Who a newer build says asked is a save like any other.
+        expect(describeWrite(credits({ payload: { ...CREDITS, labelledBy: "robot" } })).what).toBe(
+            'Credits saved for "O God, Our Help"'
+        );
+    });
+
     test("says only what they say now for a song that had no author", () => {
         expect(describeWrite(credits({ payload: { ...CREDITS, previous: null } })).detail).toBe(
             'Now "Words: Isaac Watts; Music: William Croft".'

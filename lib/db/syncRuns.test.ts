@@ -36,7 +36,7 @@ function insertFutureRun(): void {
 
 describe("isSyncRunKind", () => {
     test("accepts the known kinds only", () => {
-        for (const kind of ["backup", "pco-songs", "tags", "history"]) {
+        for (const kind of ["backup", "pco-songs", "tags", "history", "credit-labels"]) {
             expect(isSyncRunKind(kind)).toBe(true);
         }
         expect(isSyncRunKind("newer-kind")).toBe(false);

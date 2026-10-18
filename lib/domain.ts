@@ -743,6 +743,53 @@ export interface SongCredits {
     credits: Credit[];
 }
 
+/**
+ * Who asked for a song's author to be labelled: a person, on the Credits
+ * page ("review"), or the app itself, for a new song ("auto").
+ */
+export type CreditLabelSource = "review" | "auto";
+
+/**
+ * How a request to label a song's author ended:
+ *
+ * - "labelled": Planning Center's author is the label now;
+ * - "unchanged": it was the label already, so nothing was sent;
+ * - "changed": the author is not the one the request was made from any more,
+ *   or the credit roles changed since, so nothing was sent;
+ * - "refused": Planning Center refused the write (a 422);
+ * - "failed": the write failed every time it was tried;
+ * - "gone": Planning Center has no such song any more;
+ * - "cancelled": a person stopped it before it was tried.
+ */
+export type CreditLabelOutcome =
+    | "labelled"
+    | "unchanged"
+    | "changed"
+    | "refused"
+    | "failed"
+    | "gone"
+    | "cancelled";
+
+/** A request to label a Planning Center song's author (`credit_label_requests`). */
+export interface CreditLabelRequest {
+    id: number;
+    pcoSongId: string;
+    source: CreditLabelSource;
+    /** The author the label was made from, as the request saw it; "" for none. */
+    shownAuthor: string;
+    /** The label to write, in the convention. */
+    author: string;
+    requestedAt: string;
+    /** How many times its write failed and was put off to try again. */
+    attempts: number;
+    /** When it ended; null while it waits. */
+    finishedAt: string | null;
+    /** How it ended; null while it waits. */
+    outcome: CreditLabelOutcome | null;
+    /** Why it ended as it did, or why its last try failed. */
+    message: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Song tags
 //

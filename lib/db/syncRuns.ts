@@ -6,7 +6,7 @@ import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
  * checked here rather than by a CHECK in the schema, so a new kind needs no
  * migration. Only `backup` runs so far; the Planning Center syncs come later.
  */
-export const SYNC_RUN_KINDS = ["backup", "pco-songs", "tags", "history"] as const;
+export const SYNC_RUN_KINDS = ["backup", "pco-songs", "tags", "history", "credit-labels"] as const;
 
 export type SyncRunKind = (typeof SYNC_RUN_KINDS)[number];
 

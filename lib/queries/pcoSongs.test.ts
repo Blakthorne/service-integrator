@@ -177,6 +177,33 @@ describe("saveSongCredits", () => {
         expect(findSongCredits(db, SONG)).toEqual({ status: "ok", credits: OUR_HELP });
     });
 
+    test("is unpaced for a page; the credit labels job sends it paced, and the log says who asked", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        const routes = {
+            [urls.song()]: { data: songResource(SONG, { title: "O God, Our Help", author: "Isaac Watts" }) },
+            [`PATCH ${urls.song()}`]: () =>
+                json({ data: songResource(SONG, { title: "O God, Our Help", author: AUTHOR }) }),
+        };
+        stubFetchRoutes(routes);
+        await saveSongCredits(SONG, "Isaac Watts", OUR_HELP, T0);
+        expect(acquire).not.toHaveBeenCalled();
+        expect(writes()[0].payload).not.toHaveProperty("labelledBy");
+
+        stubFetchRoutes(routes);
+        await expect(
+            saveSongCredits(SONG, "Isaac Watts", OUR_HELP, T0, { paced: true, labelledBy: "auto" })
+        ).resolves.toMatchObject({ ok: true, changed: true });
+        // The fresh read and the write each waited their turn.
+        expect(acquire).toHaveBeenCalledTimes(2);
+        expect(writes()[1].payload).toEqual({
+            action: "credits",
+            title: "O God, Our Help",
+            previous: "Isaac Watts",
+            author: AUTHOR,
+            labelledBy: "auto",
+        });
+    });
+
     test("cleans what was typed first: names trimmed, roles in the settings' order and spelling", async () => {
         const fetchMock = stubFetchRoutes({
             [urls.song()]: { data: songResource(SONG, { author: "Isaac Watts" }) },

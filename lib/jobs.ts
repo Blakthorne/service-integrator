@@ -14,12 +14,20 @@ import {
     type SyncRunOutcome,
 } from "@/lib/db/syncRuns";
 import { isHistorySyncDue } from "@/lib/historySync";
+import {
+    describeCreditLabelsRun,
+    hasCreditLabelWork,
+    writeCreditLabels,
+} from "@/lib/queries/creditLabels";
 import { describePlanHistorySync, syncPlanHistory } from "@/lib/queries/history";
 import { describePcoSongsSync, syncPcoSongs } from "@/lib/queries/sync";
 import { describeTagsSync, syncTags } from "@/lib/queries/tags";
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
+
+/** How often the song sync runs, so that a song added in Planning Center reaches the app soon. */
+export const PCO_SONGS_SYNC_EVERY_MS = 15 * MINUTE_MS;
 
 /** How long after boot the `atBoot` check waits, so it does not compete with the first requests. */
 export const BOOT_DELAY_MS = MINUTE_MS;
@@ -74,19 +82,41 @@ export const backupJob: Job = {
 };
 
 /**
- * The Planning Center song sync, hourly and soon after boot: mirror the song
- * library and make the auto-links it allows (see `syncPcoSongs`). "Sync now"
- * runs it on demand through `runJob`.
+ * The Planning Center song sync, every 15 minutes and soon after boot:
+ * mirror the song library and make the auto-links it allows (see
+ * `syncPcoSongs`). Reading the library is about four paced requests, so a
+ * song added in Planning Center reaches the app within a quarter of an hour
+ * at that small cost. "Sync now" runs it on demand through `runJob`.
+ *
+ * Once the songs are mirrored, it starts the credit labels job when that
+ * has work (not awaited: it writes in the background), so that a new song
+ * the app labels by itself is labelled as soon as the sync brings it.
  */
 export const pcoSongsJob: Job = {
     kind: "pco-songs",
-    everyMs: HOUR_MS,
+    everyMs: PCO_SONGS_SYNC_EVERY_MS,
     atBoot: true,
     run: async (db) => {
         const counts = await syncPcoSongs(db);
+        startCreditLabelsIfDue(db);
         return { message: describePcoSongsSync(counts), counts };
     },
 };
+
+/**
+ * Start the credit labels job on `db` when it has work, without waiting for
+ * it. A failure to tell is logged, and the job's own scheduled check tries
+ * again.
+ */
+function startCreditLabelsIfDue(db: DatabaseSync): void {
+    try {
+        if (hasCreditLabelWork(db)) {
+            void runJob(creditLabelsJob, () => db);
+        }
+    } catch (error) {
+        console.error("Could not tell whether credit labels wait:", error);
+    }
+}
 
 /**
  * The Planning Center song tag sync, hourly and soon after boot: mirror the
@@ -94,9 +124,9 @@ export const pcoSongsJob: Job = {
  *
  * It runs after the song sync, so that a song that sync adds gets its tags
  * at once rather than an hour later. The scheduler checks this job just
- * after `pcoSongsJob`, which comes before it in `JOBS`, so the song sync
- * that check started is still in progress: `runJob` joins it, and this job
- * waits for it to end. With none in progress (on demand), it runs one
+ * after `pcoSongsJob`, which comes before it in `JOBS` and runs every
+ * quarter of an hour, so the song sync that check started is still in
+ * progress: `runJob` joins it, and this job waits for it to end. With none in progress (on demand), it runs one
  * first. A song sync that fails does not stop the tags sync: the songs the
  * mirror lacks get their tags from a later one.
  */
@@ -136,10 +166,35 @@ export const historyJob: Job = {
 };
 
 /**
+ * The credit labels job: ask for the labels of new songs the app labels by
+ * itself, then write the labels of songs' authors that wait
+ * (`credit_label_requests`) to Planning Center, paced (see
+ * `writeCreditLabels`). It is checked every 15 minutes and soon after boot,
+ * and runs when it has work (`hasCreditLabelWork`), so a run a restart cut
+ * short picks up where it stopped. The Credits page starts it once a person
+ * asks for labels, and the song sync once it has mirrored the songs.
+ *
+ * A song sync in progress is waited for first, so that the new songs it
+ * brings are asked for in this run: the scheduler checks this job just
+ * after starting the song sync, and on demand one may be running too.
+ */
+export const creditLabelsJob: Job = {
+    kind: "credit-labels",
+    everyMs: PCO_SONGS_SYNC_EVERY_MS,
+    atBoot: true,
+    isDue: (db) => hasCreditLabelWork(db),
+    run: async (db) => {
+        await runningJobs().get("pco-songs");
+        const counts = await writeCreditLabels(db);
+        return { message: describeCreditLabelsRun(counts), counts };
+    },
+};
+
+/**
  * The jobs `startJobs()` schedules, checked in this order. A new job is one
  * entry here, as the song sync is.
  */
-export const JOBS: readonly Job[] = [backupJob, pcoSongsJob, tagsJob, historyJob];
+export const JOBS: readonly Job[] = [backupJob, pcoSongsJob, tagsJob, creditLabelsJob, historyJob];
 
 /**
  * What `runJob` resolves to: the run it started or joined, as recorded

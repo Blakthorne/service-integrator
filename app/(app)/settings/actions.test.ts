@@ -39,6 +39,7 @@ import {
     saveCreditsAction,
     saveEmailAction,
     saveHymnalNotesAction,
+    saveNewSongCreditsAction,
     saveRepeatWarningsAction,
     saveScheduleTextAction,
     syncPcoSongsAction,
@@ -286,6 +287,9 @@ const CREDIT_PAGES = [["/settings"], ["/plans", "layout"], ["/catalog", "layout"
 /** What saving the repeat warning window revalidates: Settings and the plan pages, whose Schedule tabs warn. */
 const REPEAT_WARNING_PAGES = [["/settings"], ["/plans", "layout"]];
 
+/** What saving whether new songs are labelled revalidates: Settings, the Credits page and the dashboard. */
+const NEW_SONG_CREDIT_PAGES = [["/settings"], ["/catalog/credits"], ["/"]];
+
 /** What saving the email settings revalidates: Settings alone. */
 const EMAIL_PAGES = [["/settings"]];
 
@@ -335,6 +339,12 @@ const FORM_ACTIONS = [
         EMAIL_PAGES,
     ],
     ["saveRepeatWarningsAction", saveRepeatWarningsAction, { repeatWarningWeeks: "6" }, REPEAT_WARNING_PAGES],
+    [
+        "saveNewSongCreditsAction",
+        saveNewSongCreditsAction,
+        { creditAutoLabelSince: "no" },
+        NEW_SONG_CREDIT_PAGES,
+    ],
 ] as const;
 
 describe.each(FORM_ACTIONS)("%s", (_name, action, fields, pages) => {
@@ -479,6 +489,47 @@ describe("saveRepeatWarningsAction", () => {
             expect(revalidatePath).not.toHaveBeenCalled();
         }
     );
+});
+
+describe("saveNewSongCreditsAction", () => {
+    const NOW = new Date("2026-10-18T15:30:00.000Z");
+    const BEFORE = "2026-10-01T09:00:00.000Z";
+
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    test("turned on, saves now as when it was turned on", async () => {
+        const state = await saveNewSongCreditsAction(formWith({ creditAutoLabelSince: "yes" }));
+        expect(saveSettings).toHaveBeenCalledWith({ creditAutoLabelSince: NOW.toISOString() });
+        expect(state).toEqual({ status: "success", message: "Saved.", values: { creditAutoLabelSince: "yes" } });
+    });
+
+    test("saved on again, keeps when it was first turned on", async () => {
+        getSettings.mockReturnValue({ settings: { ...DEFAULT_SETTINGS, creditAutoLabelSince: BEFORE }, error: null });
+        await saveNewSongCreditsAction(formWith({ creditAutoLabelSince: "yes" }));
+        expect(saveSettings).toHaveBeenCalledWith({ creditAutoLabelSince: BEFORE });
+    });
+
+    test("turned off, saves null", async () => {
+        getSettings.mockReturnValue({ settings: { ...DEFAULT_SETTINGS, creditAutoLabelSince: BEFORE }, error: null });
+        await saveNewSongCreditsAction(formWith({ creditAutoLabelSince: "no" }));
+        expect(saveSettings).toHaveBeenCalledWith({ creditAutoLabelSince: null });
+    });
+
+    test("saves nothing when the stored settings cannot be read", async () => {
+        getSettings.mockReturnValue({ settings: DEFAULT_SETTINGS, error: "database is locked" });
+        await expect(saveNewSongCreditsAction(formWith({ creditAutoLabelSince: "yes" }))).resolves.toMatchObject({
+            status: "error",
+            message: FORM_FAILURE_MESSAGE,
+        });
+        expect(saveSettings).not.toHaveBeenCalled();
+    });
 });
 
 describe("saveScheduleTextAction", () => {

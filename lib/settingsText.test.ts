@@ -51,6 +51,22 @@ describe("SETTING_DESCRIPTIONS", () => {
     });
 });
 
+describe("the setting that labels new songs automatically", () => {
+    test("is named, and edited by the New songs' credits card", () => {
+        expect(SETTING_DESCRIPTIONS.creditAutoLabelSince).toEqual({
+            label: "Label new songs automatically",
+            card: "New songs' credits",
+        });
+        expect(SETTINGS_CARD_TITLES.newSongCredits).toBe("New songs' credits");
+    });
+
+    test("says it is off when its stored value no longer parses", () => {
+        expect(describeSettingIssue(issue("creditAutoLabelSince", '"soon"', "No.")).usingDefault).toBe(
+            "The default is in use: off."
+        );
+    });
+});
+
 describe("the repeat warning setting", () => {
     test("is named, and edited by the Repeat warnings card", () => {
         expect(SETTING_DESCRIPTIONS.repeatWarningWeeks).toEqual({

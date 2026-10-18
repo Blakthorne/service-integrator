@@ -30,7 +30,8 @@ export type PcoSongsSyncCounts = {
 
 /**
  * Mirror the Planning Center song library and make the links it allows: the
- * work of the `pco-songs` job (lib/jobs.ts), hourly, at boot and on demand.
+ * work of the `pco-songs` job (lib/jobs.ts), every 15 minutes, at boot and on
+ * demand.
  *
  * It first reads the whole library, paced (about 4 requests), and only then
  * writes, in one transaction at `now()`: every song is upserted and its

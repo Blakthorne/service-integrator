@@ -33,7 +33,8 @@ export type DashboardHref =
     | ReturnType<typeof routes.plan>
     | ReturnType<typeof routes.planSchedule>
     | ReturnType<typeof routes.settings>
-    | ReturnType<typeof routes.catalogImport>;
+    | ReturnType<typeof routes.catalogImport>
+    | ReturnType<typeof routes.catalogCredits>;
 
 /** A link that fixes something, with what it does. */
 export interface DashboardLink {
@@ -262,7 +263,7 @@ export function todoView(todo: DashboardTodo): TodoView {
                 : {
                       key: "sync-stale",
                       context: null,
-                      text: "The Planning Center song sync is overdue: it runs every hour.",
+                      text: "The Planning Center song sync is overdue: it runs every 15 minutes.",
                       time: {
                           label: "Last success",
                           iso: todo.run.finishedAt ?? todo.run.startedAt,
@@ -293,6 +294,22 @@ export function todoView(todo: DashboardTodo): TodoView {
                             ? "Link it on the Schedule tab"
                             : "Link them on the Schedule tab",
                     href: routes.planSchedule(todo.serviceType.id, todo.plan.id),
+                },
+            };
+        }
+        case "new-songs-to-label": {
+            const titles = todo.songs.map((song) => song.title);
+            return {
+                key: "new-songs-to-label",
+                context: null,
+                text:
+                    titles.length === 1
+                        ? `New song ${quotedList(titles)} needs its credits labelled.`
+                        : `${titles.length} new songs need their credits labelled: ${quotedList(titles)}.`,
+                time: null,
+                action: {
+                    label: titles.length === 1 ? "Label it on Credits" : "Label them on Credits",
+                    href: routes.catalogCredits(),
                 },
             };
         }
