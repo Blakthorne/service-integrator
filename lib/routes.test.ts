@@ -22,6 +22,7 @@ describe("routes", () => {
         expect(routes.catalogTunes()).toBe("/catalog/tunes");
         expect(routes.catalogBooks()).toBe("/catalog/books");
         expect(routes.catalogImport()).toBe("/catalog/import");
+        expect(routes.catalogCredits()).toBe("/catalog/credits");
     });
 
     test("catalogFiltered puts the songs list's filters in the query", () => {
@@ -270,12 +271,13 @@ describe("NAV_UTILITY_ITEMS", () => {
 });
 
 describe("CATALOG_SECTIONS", () => {
-    test("lists Songs, Tunes, Books, Reconcile and Import, linked by the builders", () => {
+    test("lists Songs, Tunes, Books, Reconcile, Credits and Import, linked by the builders", () => {
         expect(CATALOG_SECTIONS.map((section) => section.label)).toEqual([
             "Songs",
             "Tunes",
             "Books",
             "Reconcile",
+            "Credits",
             "Import",
         ]);
         expect(CATALOG_SECTIONS.map((section) => section.href)).toEqual([
@@ -283,6 +285,7 @@ describe("CATALOG_SECTIONS", () => {
             routes.catalogTunes(),
             routes.catalogBooks(),
             routes.catalogReconcile(),
+            routes.catalogCredits(),
             routes.catalogImport(),
         ]);
     });
@@ -294,6 +297,7 @@ describe("CATALOG_SECTIONS", () => {
         ["books", "Books"],
         ["import", "Import"],
         ["reconcile", "Reconcile"],
+        ["credits", "Credits"],
         ["(group)", undefined],
     ])("segment %j belongs to %s", (segment, label) => {
         expect(catalogSectionFor(segment)?.label).toBe(label);

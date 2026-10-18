@@ -4,6 +4,7 @@ import {
     cancelWaitingCreditLabels,
     finishCreditLabel,
     listAutoRequestedSongIds,
+    listCreditLabelSongs,
     listWaitingCreditLabels,
     nextWaitingCreditLabel,
     putOffCreditLabel,
@@ -11,7 +12,8 @@ import {
     recentCreditLabels,
     type NewCreditLabelRequest,
 } from "./creditLabels";
-import { openTestDb, seedCreditLabelRequest, seedPcoSong } from "./testing";
+import { linkSong } from "./links";
+import { openTestDb, seedCreditLabelRequest, seedPcoSong, seedSong } from "./testing";
 
 let db: DatabaseSync;
 
@@ -204,5 +206,24 @@ describe("recentCreditLabels", () => {
         expect(recentCreditLabels(db, 10).map(({ id }) => id)).toEqual([last, middle, first]);
         // The outcome a newer build wrote counts towards the limit, and is left out.
         expect(recentCreditLabels(db, 2).map(({ id }) => id)).toEqual([last]);
+    });
+});
+
+describe("listCreditLabelSongs", () => {
+    test("gives the songs still in Planning Center with their authors and catalog songs, by title", () => {
+        const linked = seedPcoSong(db, { title: "Holy, Holy, Holy", author: "Reginald Heber and John B. Dykes" });
+        const plain = seedPcoSong(db, { title: "Abide with Me", author: null });
+        seedPcoSong(db, { title: "Gone", author: "X", removedAt: T0.toISOString() });
+        const song = seedSong(db);
+        expect(linkSong(db, song, linked, "manual", T0)).toMatchObject({ ok: true });
+        expect(listCreditLabelSongs(db)).toEqual([
+            { pcoSongId: plain, title: "Abide with Me", author: null, catalogSongId: null },
+            {
+                pcoSongId: linked,
+                title: "Holy, Holy, Holy",
+                author: "Reginald Heber and John B. Dykes",
+                catalogSongId: song,
+            },
+        ]);
     });
 });

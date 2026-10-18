@@ -1,5 +1,6 @@
 import "server-only";
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
+import type { CreditLabelSong } from "@/lib/creditLabels";
 import type { CreditLabelOutcome, CreditLabelRequest, CreditLabelSource } from "@/lib/domain";
 import { withTransaction } from "./transaction";
 
@@ -216,4 +217,26 @@ export function recentCreditLabels(db: DatabaseSync, limit: number): CreditLabel
             )
             .all(limit)
     );
+}
+
+/**
+ * The mirrored songs still in Planning Center, as the Credits page reads
+ * them: each one's title, its author, and the catalog song linked to it,
+ * by title. One query.
+ */
+export function listCreditLabelSongs(db: DatabaseSync): CreditLabelSong[] {
+    return db
+        .prepare(
+            `SELECT p.id, p.title, p.author, s.id AS catalog_song_id
+             FROM pco_songs p LEFT JOIN songs s ON s.pco_song_id = p.id
+             WHERE p.removed_at IS NULL
+             ORDER BY p.title, p.id`
+        )
+        .all()
+        .map((row) => ({
+            pcoSongId: String(row.id),
+            title: String(row.title),
+            author: row.author === null ? null : String(row.author),
+            catalogSongId: row.catalog_song_id === null ? null : Number(row.catalog_song_id),
+        }));
 }

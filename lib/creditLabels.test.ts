@@ -1,8 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
     buildCreditLabelReview,
+    describeCancelledCreditLabels,
+    describeCreditLabelReview,
+    describeRequestedCreditLabels,
     isTrustedProposal,
     proposeCreditLabel,
+    toCreditLabelTierViews,
     type CreditLabelProposal,
     type CreditLabelSong,
 } from "./creditLabels";
@@ -242,5 +246,91 @@ describe("buildCreditLabelReview", () => {
             ],
             manual: [],
         });
+    });
+});
+
+describe("describeRequestedCreditLabels", () => {
+    test("says how many will be written, were waiting and changed", () => {
+        expect(describeRequestedCreditLabels({ queued: 23, waiting: 0, changed: 0 })).toBe(
+            "23 labels will be written to Planning Center, a few a second. This page shows how it goes."
+        );
+        expect(describeRequestedCreditLabels({ queued: 1, waiting: 1, changed: 1 })).toBe(
+            "1 label will be written to Planning Center, a few a second. This page shows how it goes. 1 song was waiting to be written already. 1 song changed since this page loaded, so it was left out: it shows as it is now."
+        );
+        expect(describeRequestedCreditLabels({ queued: 0, waiting: 2, changed: 3 })).toBe(
+            "2 songs were waiting to be written already. 3 songs changed since this page loaded, so they were left out: they show as they are now."
+        );
+        expect(describeRequestedCreditLabels({ queued: 0, waiting: 0, changed: 0 })).toBe("Nothing was chosen.");
+    });
+});
+
+describe("describeCancelledCreditLabels", () => {
+    test("says how many were stopped", () => {
+        expect(describeCancelledCreditLabels(12)).toBe("Stopped 12 labels: they were not written.");
+        expect(describeCancelledCreditLabels(1)).toBe("Stopped 1 label: it was not written.");
+        expect(describeCancelledCreditLabels(0)).toBe("No labels were waiting.");
+    });
+});
+
+describe("toCreditLabelTierViews", () => {
+    test("trims each row to what the browser needs, with the credit line only when it changes", () => {
+        const review = buildCreditLabelReview(
+            [
+                { pcoSongId: "1", title: "Blessed Assurance", author: "Fanny Crosby", catalogSongId: 7 },
+                { pcoSongId: "2", title: "Junior", author: "John Newton Jr.", catalogSongId: null },
+            ],
+            SETTINGS,
+            new Set(["2"])
+        );
+        expect(toCreditLabelTierViews(review)).toEqual([
+            {
+                shape: "one",
+                rows: [
+                    {
+                        pcoSongId: "1",
+                        title: "Blessed Assurance",
+                        author: "Fanny Crosby",
+                        label: "Words & Music: Fanny Crosby",
+                        lineAfter: null,
+                        lineBefore: "Words and Music by Fanny Crosby.",
+                        queued: false,
+                        catalogSongId: 7,
+                    },
+                    {
+                        pcoSongId: "2",
+                        title: "Junior",
+                        author: "John Newton Jr.",
+                        label: "Words & Music: John Newton Jr.",
+                        lineAfter: "Words and Music by John Newton Jr.",
+                        lineBefore: "Words and Music by John Newton Jr..",
+                        queued: true,
+                        catalogSongId: null,
+                    },
+                ],
+            },
+            { shape: "two", rows: [] },
+            { shape: "three", rows: [] },
+        ]);
+    });
+});
+
+describe("describeCreditLabelReview", () => {
+    test("says how many are labelled, how many the app can label and how many need a person", () => {
+        const review = buildCreditLabelReview(
+            [
+                { pcoSongId: "1", title: "A", author: "Words: X", catalogSongId: null },
+                { pcoSongId: "2", title: "B", author: "Fanny Crosby", catalogSongId: null },
+                { pcoSongId: "3", title: "C", author: "Isaac Watts and Lowell Mason", catalogSongId: null },
+                { pcoSongId: "4", title: "D", author: null, catalogSongId: null },
+            ],
+            SETTINGS,
+            new Set()
+        );
+        expect(describeCreditLabelReview(review)).toBe(
+            "1 of 4 songs is labelled. The app can label 2 more; 1 needs a person."
+        );
+        expect(describeCreditLabelReview(buildCreditLabelReview([], SETTINGS, new Set()))).toBe(
+            "There are no Planning Center songs yet."
+        );
     });
 });

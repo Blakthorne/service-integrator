@@ -6,7 +6,8 @@ import { catalogLayoutSegment } from "@/lib/catalog/sections";
 import { CATALOG_SECTIONS, catalogSectionFor } from "@/lib/routes";
 
 /**
- * The catalog's sections (Songs · Tunes · Books · Import), one link per entry
+ * The catalog's sections (Songs · Tunes · Books · Reconcile · Credits ·
+ * Import), one link per entry
  * of `CATALOG_SECTIONS`. The section of the page shown is highlighted, and
  * gets `aria-current` as the top bar's links do: "page" on the section's own
  * page, and "true" on a page inside it (a song's page is in Songs), whose

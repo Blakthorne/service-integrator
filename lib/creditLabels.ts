@@ -5,6 +5,7 @@ import {
     readLegacyAuthor,
     renderCredits,
 } from "./credits";
+import type { CreditLabelOutcome } from "./domain";
 import type { CreditSettings } from "./settings";
 
 /**
@@ -250,6 +251,112 @@ export function buildCreditLabelReview(
     };
 }
 
+/** A song the app can label, trimmed to what the Credits page's browser side needs. */
+export interface CreditLabelRowView {
+    pcoSongId: string;
+    title: string;
+    /** As Planning Center has it; "" for none. */
+    author: string;
+    /** The label it would get. */
+    label: string;
+    /** The copyright text's credit line once labelled, when it differs from the one now; null when it stays. */
+    lineAfter: string | null;
+    /** The credit line now. */
+    lineBefore: string;
+    /** Whether it waits to be written. */
+    queued: boolean;
+    catalogSongId: number | null;
+}
+
+/** A shape's songs, as the Credits page's browser side lists them. */
+export interface CreditLabelTierView {
+    shape: CreditLabelShape;
+    rows: CreditLabelRowView[];
+}
+
+/** The review's shapes, each row trimmed to what the browser needs, for the Credits page. */
+export function toCreditLabelTierViews(review: CreditLabelReview): CreditLabelTierView[] {
+    return review.tiers.map(({ shape, rows }) => ({
+        shape,
+        rows: rows.map((row) => ({
+            pcoSongId: row.pcoSongId,
+            title: row.title,
+            author: row.author ?? "",
+            label: row.proposal.author,
+            lineAfter: keepsCreditLine(row.proposal) ? null : row.proposal.lineAfter,
+            lineBefore: row.proposal.lineBefore,
+            queued: row.queued,
+            catalogSongId: row.catalogSongId,
+        })),
+    }));
+}
+
+/** How the songs stand, in a sentence, for the top of the Credits page. */
+export function describeCreditLabelReview(review: CreditLabelReview): string {
+    const proposed = review.tiers.reduce((sum, { rows }) => sum + rows.length, 0);
+    const total = review.labelled + proposed + review.manual.length;
+    if (total === 0) {
+        return "There are no Planning Center songs yet.";
+    }
+    return `${review.labelled} of ${songCount(total)} ${review.labelled === 1 ? "is" : "are"} labelled. The app can label ${proposed} more; ${review.manual.length} ${review.manual.length === 1 ? "needs" : "need"} a person.`;
+}
+
+/** A label a person asked for on the Credits page, as the page showed it. */
+export interface CreditLabelAsked {
+    pcoSongId: string;
+    /** The author the page showed; "" for none. */
+    shownAuthor: string;
+    /** The label the page showed for it. */
+    author: string;
+}
+
+/** What asking for labels did (`requestCreditLabels`). */
+export interface RequestedCreditLabels {
+    /** Labels queued to be written. */
+    queued: number;
+    /** Songs whose label waited already, left as they were. */
+    waiting: number;
+    /**
+     * Songs left out because they are no longer as the page showed them:
+     * gone from Planning Center, another author since, or another label
+     * now (the credit roles changed).
+     */
+    changed: number;
+}
+
+/** "1 label" or "23 labels". */
+function labelCount(count: number): string {
+    return `${count} ${count === 1 ? "label" : "labels"}`;
+}
+
+/** "1 song" or "23 songs". */
+function songCount(count: number): string {
+    return `${count} ${count === 1 ? "song" : "songs"}`;
+}
+
+/** What the Credits page says once labels were asked for. */
+export function describeRequestedCreditLabels({ queued, waiting, changed }: RequestedCreditLabels): string {
+    const sentences = [
+        queued > 0
+            ? `${labelCount(queued)} will be written to Planning Center, a few a second. This page shows how it goes.`
+            : null,
+        waiting > 0
+            ? `${songCount(waiting)} ${waiting === 1 ? "was" : "were"} waiting to be written already.`
+            : null,
+        changed > 0
+            ? `${songCount(changed)} changed since this page loaded, so ${changed === 1 ? "it was" : "they were"} left out: ${changed === 1 ? "it shows" : "they show"} as ${changed === 1 ? "it is" : "they are"} now.`
+            : null,
+    ].filter((sentence) => sentence !== null);
+    return sentences.length > 0 ? sentences.join(" ") : "Nothing was chosen.";
+}
+
+/** What the Credits page says once the labels that waited were stopped. */
+export function describeCancelledCreditLabels(cancelled: number): string {
+    return cancelled > 0
+        ? `Stopped ${labelCount(cancelled)}: ${cancelled === 1 ? "it was" : "they were"} not written.`
+        : "No labels were waiting.";
+}
+
 /** Each shape's heading and what it means, for the Credits page. */
 export const CREDIT_LABEL_SHAPE_WORDS: Readonly<
     Record<CreditLabelShape, { heading: string; description: string }>
@@ -279,4 +386,15 @@ export const CREDIT_LABEL_MANUAL_WORDS: Readonly<Record<CreditLabelManualReason,
     "missing-part": "A part of it is empty, so the app cannot tell who wrote what.",
     "comma-name": "Its names are separated by a comma, which does not say who wrote the words and who the music.",
     unwritable: "A name in it is too long, or holds a semicolon or a line break.",
+};
+
+/** How a request ended, in words, for the Credits page's list of labels that did not go through. */
+export const CREDIT_LABEL_OUTCOME_WORDS: Readonly<Record<CreditLabelOutcome, string>> = {
+    labelled: "Labelled.",
+    unchanged: "It was labelled already.",
+    changed: "Not written: it changed since the label was asked for.",
+    refused: "Not written: Planning Center refused it.",
+    failed: "Not written: every try failed.",
+    gone: "Not written: Planning Center no longer has the song.",
+    cancelled: "Stopped before it was written.",
 };
