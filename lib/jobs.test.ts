@@ -4,6 +4,7 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { backupFileName } from "@/lib/db/backup";
+import { listWaitingCreditLabels, queueCreditLabels } from "@/lib/db/creditLabels";
 import {
     finishInterruptedRuns,
     finishSyncRun,
@@ -28,10 +29,18 @@ import {
     tagResource,
     planListingUrl,
 } from "@/lib/pco/testing";
+// The credit labels job writes as a page's save does, through getDb().
+const { getDb } = vi.hoisted(() => ({ getDb: vi.fn() }));
+vi.mock("@/lib/db", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/db")>()),
+    getDb,
+}));
+
 import {
     BOOT_DELAY_MS,
     JOBS,
     backupJob,
+    creditLabelsJob,
     historyJob,
     pcoSongsJob,
     PCO_SONGS_SYNC_EVERY_MS,
@@ -58,6 +67,7 @@ const openDb = () => db;
 
 beforeEach(() => {
     db = openTestDb();
+    getDb.mockReturnValue(db);
     dir = mkdtempSync(path.join(tmpdir(), "si-jobs-"));
     vi.stubEnv("DATABASE_BACKUP_DIR", dir);
     vi.spyOn(console, "log").mockImplementation(() => {});
@@ -474,6 +484,67 @@ describe("tagsJob", () => {
             ["pco-songs", true],
         ]);
         expect(songTagRows()).toHaveLength(2);
+    });
+});
+
+describe("creditLabelsJob", () => {
+    const SONG_URL = `${PCO_BASE}/songs/1001`;
+
+    function queueLabel() {
+        seedPcoSong(db, { id: "1001", title: "Blessed Assurance", author: "Fanny Crosby" });
+        queueCreditLabels(
+            db,
+            [
+                {
+                    pcoSongId: "1001",
+                    source: "review",
+                    shownAuthor: "Fanny Crosby",
+                    author: "Words & Music: Fanny Crosby",
+                },
+            ],
+            T0
+        );
+    }
+
+    test("is scheduled: checked every 15 minutes and soon after boot, after the song and tags syncs", () => {
+        expect(JOBS).toContain(creditLabelsJob);
+        expect(creditLabelsJob).toMatchObject({
+            kind: "credit-labels",
+            everyMs: PCO_SONGS_SYNC_EVERY_MS,
+            atBoot: true,
+        });
+        expect(JOBS.indexOf(creditLabelsJob)).toBeGreaterThan(JOBS.indexOf(tagsJob));
+    });
+
+    test("is due only while a label waits", () => {
+        expect(creditLabelsJob.isDue?.(db, T0)).toBe(false);
+        queueLabel();
+        expect(creditLabelsJob.isDue?.(db, T0)).toBe(true);
+    });
+
+    test("writes the labels that wait and records what it did", async () => {
+        stubPcoCredentials();
+        stubPcoPacer();
+        stubFetchRoutes({
+            [SONG_URL]: { data: songResource("1001", { title: "Blessed Assurance", author: "Fanny Crosby" }) },
+            [`PATCH ${SONG_URL}`]: () =>
+                json({
+                    data: songResource("1001", {
+                        title: "Blessed Assurance",
+                        author: "Words & Music: Fanny Crosby",
+                    }),
+                }),
+        });
+        queueLabel();
+
+        await runJob(creditLabelsJob, openDb);
+
+        expect(latestSyncRun(db, "credit-labels")).toMatchObject({
+            ok: true,
+            message: "Labelled 1 song",
+            counts: { labelled: 1, waiting: 0 },
+        });
+        expect(listWaitingCreditLabels(db)).toEqual([]);
     });
 });
 

@@ -299,6 +299,15 @@ describe("updateSong", () => {
         stubFetchRoutes({ [`PATCH ${songUrl}`]: () => json({ errors: [] }, { status: 404 }) });
         await expect(updateSong(SONG, { title: "T" })).rejects.toMatchObject({ name: "PcoError", status: 404 });
     });
+
+    test("is unpaced, unless asked to wait its turn at the pacer", async () => {
+        const acquire = vi.spyOn(stubPcoPacer(), "acquire");
+        stubFetchRoutes({ [`PATCH ${songUrl}`]: () => json({ data: songResource(SONG) }) });
+        await updateSong(SONG, { title: "T" });
+        expect(acquire).not.toHaveBeenCalled();
+        await updateSong(SONG, { title: "T" }, { paced: true });
+        expect(acquire).toHaveBeenCalledOnce();
+    });
 });
 
 describe("createSongItem", () => {

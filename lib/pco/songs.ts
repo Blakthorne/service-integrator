@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import type { PcoLibrarySong, SongArrangement } from "../domain";
-import { pcoFetch, pcoFetchAll } from "./client";
+import { pcoFetch, pcoFetchAll, type PcoRequestOptions } from "./client";
 import { assertPcoId } from "./ids";
 import { toPcoLibrarySong, toSongArrangement } from "./mappers";
 import type { PcoArrangementResource, PcoSingleResponse, PcoSongResource } from "./resources";
@@ -44,15 +44,20 @@ export async function fetchSongLibrary(): Promise<PcoLibrarySong[]> {
 /**
  * One song of the library with every field the mirror keeps, read afresh
  * every time: for a write that must start from what Planning Center has now
- * (refresh-before-write), or read a song again after one. Not paced:
- * someone is waiting. Throws InvalidPcoIdError before fetching, or PcoError
- * (404 when there is no such song).
+ * (refresh-before-write), or read a song again after one. Unpaced unless
+ * asked: someone is waiting (the credit labels job passes `paced: true`).
+ * Throws InvalidPcoIdError before fetching, or PcoError (404 when there is
+ * no such song).
  */
-export async function fetchSong(songId: string): Promise<PcoLibrarySong> {
+export async function fetchSong(
+    songId: string,
+    { paced = false }: PcoRequestOptions = {}
+): Promise<PcoLibrarySong> {
     const id = assertPcoId(songId);
     const { data } = await pcoFetch<PcoSingleResponse<PcoSongResource>>(
         `/songs/${id}`,
-        "songs"
+        "songs",
+        { paced }
     );
     return toPcoLibrarySong(data);
 }
@@ -63,7 +68,7 @@ export async function fetchSong(songId: string): Promise<PcoLibrarySong> {
  * request. Not paced: someone is waiting. Throws InvalidPcoIdError before
  * fetching, or PcoError (404 when there is no such song).
  */
-export const getSong = cache(fetchSong);
+export const getSong = cache((songId: string) => fetchSong(songId));
 
 /**
  * Song `songId`'s arrangements, in Planning Center's order, archived ones

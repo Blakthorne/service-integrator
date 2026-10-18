@@ -1,6 +1,6 @@
 import "server-only";
 import type { ItemNote, PcoLibrarySong, PlanItem } from "../domain";
-import { jsonApi, pcoMutate, toMany } from "./client";
+import { jsonApi, pcoMutate, toMany, type PcoRequestOptions } from "./client";
 import { assertPcoId } from "./ids";
 import { toItemNote, toPcoLibrarySong, toPlanItem } from "./mappers";
 import type {
@@ -14,8 +14,9 @@ import type {
  * The writes to Planning Center: the only module that sends a POST, PATCH
  * or DELETE (convention 18), each through `pcoMutate` with a body from
  * `jsonApi`. Every function checks every id it is given with `assertPcoId`
- * before it sends anything, makes one write, unpaced (someone is waiting),
- * and returns what changed. A 422 throws `PcoValidationError`, whose
+ * before it sends anything, makes one write, unpaced (someone is waiting;
+ * `updateSong` is paced when the credit labels job asks), and returns what
+ * changed. A 422 throws `PcoValidationError`, whose
  * `details` say what Planning Center refused ("category: must exist"); any
  * other failure throws `PcoError`, or the timeout's error.
  *
@@ -189,9 +190,14 @@ export async function createSong(song: NewPcoSong): Promise<PcoLibrarySong> {
  * Change song `songId`'s fields given in `changes` (a PATCH with no
  * `data.id`, which the spike found Planning Center takes), and return the
  * song as Planning Center has it now. Throws, sending nothing, when
- * `changes` changes nothing.
+ * `changes` changes nothing. Unpaced unless asked: the credit labels job,
+ * which nobody waits on, passes `paced: true`.
  */
-export async function updateSong(songId: string, changes: PcoSongChanges): Promise<PcoLibrarySong> {
+export async function updateSong(
+    songId: string,
+    changes: PcoSongChanges,
+    { paced = false }: PcoRequestOptions = {}
+): Promise<PcoLibrarySong> {
     const path = `/songs/${assertPcoId(songId)}`;
     const attributes = songAttributes(changes);
     if (Object.keys(attributes).length === 0) {
@@ -200,7 +206,8 @@ export async function updateSong(songId: string, changes: PcoSongChanges): Promi
     const response = await pcoMutate<PcoSingleResponse<PcoSongResource>>(
         "PATCH",
         path,
-        jsonApi("Song", attributes)
+        jsonApi("Song", attributes),
+        { paced }
     );
     return songFrom(response, path);
 }

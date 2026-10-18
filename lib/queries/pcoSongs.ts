@@ -11,6 +11,7 @@ import { listSongTagGroups, replaceSongTags } from "@/lib/db/tags";
 import { recordWrite, type NewWriteLogEntry } from "@/lib/db/writeLog";
 import type {
     Credit,
+    CreditLabelSource,
     PcoLibrarySong,
     PcoTag,
     Plan,
@@ -226,6 +227,21 @@ function sameAuthor(a: string | null, b: string | null): boolean {
     return (a ?? "") === (b ?? "");
 }
 
+/** How `saveSongCredits` sends its write, for a caller nobody waits on. */
+export interface SaveSongCreditsOptions {
+    /**
+     * Wait for a turn at the pacer before each request: the credit labels
+     * job passes true, a page's save never does.
+     */
+    paced?: boolean;
+    /**
+     * Who asked for the label the credits write, when it was not the credit
+     * editor: a person on the Credits page ("review") or the app, for a new
+     * song ("auto"). The write log keeps it.
+     */
+    labelledBy?: CreditLabelSource;
+}
+
 /**
  * Save Planning Center song `pcoSongId`'s credits from the credit editor:
  * one song, only when someone saves, never a mass rewrite. `shownAuthor`
@@ -251,12 +267,16 @@ function sameAuthor(a: string | null, b: string | null): boolean {
  * when the credits do not check, when the author changed since the page
  * loaded, or when Planning Center refuses the write. Throws when Planning
  * Center or the database fails.
+ *
+ * The credit labels job saves a label the same way, paced, with who asked
+ * for it (`options`), and `shownAuthor` the author the label was made from.
  */
 export async function saveSongCredits(
     pcoSongId: string,
     shownAuthor: string | null,
     credits: readonly Credit[],
-    now: Date = new Date()
+    now: Date = new Date(),
+    { paced = false, labelledBy }: SaveSongCreditsOptions = {}
 ): Promise<SaveSongCreditsResult> {
     const id = parsePcoId(pcoSongId);
     if (id === null) {
@@ -271,7 +291,7 @@ export async function saveSongCredits(
         return refusal("invalid", "Enter at least one name: the credits would be empty.");
     }
     const db = getDb();
-    const song = await unlessMissing(fetchSong(id));
+    const song = await unlessMissing(fetchSong(id, { paced }));
     if (song === null) {
         return refusal("not-found", NO_SUCH_PCO_SONG);
     }
@@ -297,9 +317,15 @@ export async function saveSongCredits(
     let saved = song;
     if (changed) {
         const target = `song ${id}`;
-        const payload = { action: "credits", title: song.title, previous: song.author, author };
+        const payload = {
+            action: "credits",
+            title: song.title,
+            previous: song.author,
+            author,
+            ...(labelledBy === undefined ? {} : { labelledBy }),
+        };
         try {
-            saved = await updateSong(id, { author });
+            saved = await updateSong(id, { author }, { paced });
         } catch (error) {
             logWrite(db, { kind: "song", target, ok: false, payload, result: writeError(error) }, now);
             const refused = refusedByPco(error, `the credits of "${song.title}"`);

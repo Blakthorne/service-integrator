@@ -3,6 +3,7 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { backupDirectory, getDb } from "@/lib/db";
 import { backupDatabase, isBackupDue } from "@/lib/db/backup";
+import { listWaitingCreditLabels } from "@/lib/db/creditLabels";
 import { errorMessage } from "@/lib/db/errors";
 import {
     finishSyncRun,
@@ -14,6 +15,7 @@ import {
     type SyncRunOutcome,
 } from "@/lib/db/syncRuns";
 import { isHistorySyncDue } from "@/lib/historySync";
+import { describeCreditLabelsRun, writeCreditLabels } from "@/lib/queries/creditLabels";
 import { describePlanHistorySync, syncPlanHistory } from "@/lib/queries/history";
 import { describePcoSongsSync, syncPcoSongs } from "@/lib/queries/sync";
 import { describeTagsSync, syncTags } from "@/lib/queries/tags";
@@ -141,10 +143,29 @@ export const historyJob: Job = {
 };
 
 /**
+ * The credit labels job: write the labels of songs' authors that wait
+ * (`credit_label_requests`), asked for on the Credits page, to Planning
+ * Center, paced (see `writeCreditLabels`). It is checked every 15 minutes
+ * and soon after boot, and runs when a label waits, so a run a restart cut
+ * short picks up where it stopped. The Credits page starts it on demand
+ * through `runJob` once a person asks for labels.
+ */
+export const creditLabelsJob: Job = {
+    kind: "credit-labels",
+    everyMs: PCO_SONGS_SYNC_EVERY_MS,
+    atBoot: true,
+    isDue: (db) => listWaitingCreditLabels(db).length > 0,
+    run: async (db) => {
+        const counts = await writeCreditLabels(db);
+        return { message: describeCreditLabelsRun(counts), counts };
+    },
+};
+
+/**
  * The jobs `startJobs()` schedules, checked in this order. A new job is one
  * entry here, as the song sync is.
  */
-export const JOBS: readonly Job[] = [backupJob, pcoSongsJob, tagsJob, historyJob];
+export const JOBS: readonly Job[] = [backupJob, pcoSongsJob, tagsJob, creditLabelsJob, historyJob];
 
 /**
  * What `runJob` resolves to: the run it started or joined, as recorded
