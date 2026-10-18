@@ -129,8 +129,8 @@ export interface CreditLabelsPageData {
  * by what the app would label its author as, with the stored credit roles
  * and phrases (their defaults when they do not parse); how many labels
  * wait; the job's and the song sync's latest runs; and the labels that
- * lately did not go through. It reads the local database alone, in six
- * queries. Throws when the database cannot be opened, for the error
+ * lately did not go through. It reads the local database alone, in seven
+ * queries at most. Throws when the database cannot be opened, for the error
  * boundary.
  */
 export function getCreditLabelsPage(): CreditLabelsPageData {
